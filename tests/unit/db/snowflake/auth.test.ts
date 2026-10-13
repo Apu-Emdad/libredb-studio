@@ -179,8 +179,6 @@ describe("SR8 the KDF ceiling, read before decryption", () => {
     ["scrypt N 65,536", () => pbes2ScryptOuter(65_536, 8, 1)],
     ["scrypt r 16 at N 16,384", () => pbes2ScryptOuter(16_384, 16, 1)],
     ["scrypt p 2 at N 16,384", () => pbes2ScryptOuter(16_384, 8, 2)],
-    ["PBES1", () => outerOnlyPem("1.2.840.113549.1.5.3")],
-    ["PKCS#12 PBE", () => outerOnlyPem("1.2.840.113549.1.12.1.3")],
     [
       "PBKDF2 at 2,000,000 iterations armoured as PRIVATE KEY",
       () => pbes2Pbkdf2Outer(2_000_000).replace(/ENCRYPTED PRIVATE KEY/g, "PRIVATE KEY"),
@@ -193,6 +191,17 @@ describe("SR8 the KDF ceiling, read before decryption", () => {
     const pem = build();
     const spies = [spyOn(crypto, "createPrivateKey"), spyOn(crypto, "pbkdf2Sync"), spyOn(crypto, "scryptSync")];
     expectRefused(pem, KEY_TEST_PASSPHRASE, S.kdfCost);
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["PBES1 (openssl pkcs8 -topk8 -v1 PBE-SHA1-3DES writes PKCS#12's 1.2.840.113549.1.12.1.3)", "1.2.840.113549.1.5.3"],
+    ["PKCS#12 PBE", "1.2.840.113549.1.12.1.3"],
+  ])("%s: the scheme sentence, not the cost one, with nothing derived (SF-026)", (_name, algorithm) => {
+    const spies = [spyOn(crypto, "createPrivateKey"), spyOn(crypto, "pbkdf2Sync"), spyOn(crypto, "scryptSync")];
+    // A low count, so the refusal is the scheme's whatever its cost.
+    const pem = outerOnlyPem(algorithm, derSequence(derOctets(crypto.randomBytes(8)), derInteger(2_048)));
+    expectRefused(pem, KEY_TEST_PASSPHRASE, S.scheme);
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
 
@@ -214,10 +223,10 @@ describe("SR8 the KDF ceiling, read before decryption", () => {
           aes256,
         ),
     ],
-  ])("%s: the cost sentence", (_name, build) => {
+  ])("%s: the scheme sentence", (_name, build) => {
     const pem = build();
     const createPrivateKey = spyOn(crypto, "createPrivateKey");
-    expectRefused(pem, KEY_TEST_PASSPHRASE, S.kdfCost);
+    expectRefused(pem, KEY_TEST_PASSPHRASE, S.scheme);
     expect(createPrivateKey).not.toHaveBeenCalled();
   });
 
@@ -260,10 +269,19 @@ describe("SR8 the KDF ceiling, read before decryption", () => {
     expect(createPrivateKey).toHaveBeenCalledTimes(1);
   });
 
-  test("a certificate and an EC PRIVATE KEY block are not PEM keys", () => {
-    expectRefused(pemOf("CERTIFICATE", crypto.randomBytes(300)), undefined, S.notPem);
+  test("a block of another kind is named by its label (SF-026)", () => {
+    for (const label of ["CERTIFICATE", "TRUSTED CERTIFICATE", "X509 CERTIFICATE"]) {
+      expectRefused(pemOf(label, crypto.randomBytes(300)), undefined, S.certificate);
+    }
     const ec = crypto.generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey;
-    expectRefused(ec.export({ type: "sec1", format: "pem" }), undefined, S.notPem);
+    expectRefused(ec.export({ type: "sec1", format: "pem" }), undefined, S.notRsa("ec"));
+    expectRefused(pemOf("DSA PRIVATE KEY", crypto.randomBytes(300)), undefined, S.notRsa("dsa"));
+    expectRefused(pemOf("OPENSSH PRIVATE KEY", crypto.randomBytes(300)), undefined, S.otherBlock);
+  });
+
+  test("a key cut before its END line is the truncated sentence, whatever the body holds (SF-026)", () => {
+    expectRefused(pkcs8.slice(0, Math.floor(pkcs8.length / 2)), undefined, S.truncated);
+    expectRefused(pkcs8.split("-----END")[0], undefined, S.truncated);
   });
 
   test("a truncated DER could not be read", () => {
@@ -367,14 +385,18 @@ describe("SR11 no path, and every pasted form", () => {
   test.each([
     ["two PEM blocks in one paste", () => `${pemOf("CERTIFICATE", crypto.randomBytes(64))}${pkcs8}`],
     ["two key blocks", () => `${pkcs8}${pkcs8}`],
-    ["a BEGIN with no END", () => pkcs8.split("-----END")[0]],
+  ])("%s is the one-block sentence", (_name, build) => {
+    expectRefused(build(), undefined, S.manyBlocks);
+  });
+
+  test.each([
     ["an END before its BEGIN", () => `${pemArmour("END")}\n${pemArmour("BEGIN")}\n`],
     ["labels that do not match", () => pkcs8.replace("END PRIVATE KEY", "END RSA PRIVATE KEY")],
     ["a body that is not base64", () => pkcs8.replace(/\n[A-Za-z0-9+/]{10}/, "\n!!!!!!!!!!")],
     ["an empty body", () => `${pemArmour("BEGIN")}\n${pemArmour("END")}\n`],
     ["a header the form does not have", () => pkcs8.replace("-----\n", "-----\nComment: x\n")],
-  ])("%s is not a PEM key", (_name, build) => {
-    expectRefused(build(), undefined, S.notPem);
+  ])("%s could not be read: the armour is there, the block is broken", (_name, build) => {
+    expectRefused(build(), undefined, S.unreadable);
   });
 });
 

@@ -143,11 +143,16 @@ Each refusal is one of these sentences:
 - `The private key is larger than Studio accepts (16 KiB). Nothing was sent.`
 - `This is the public key. Paste the private key; the public key is what you register on the Snowflake user. Nothing was sent.`
 - `The private key is not a PEM key. Paste the key's contents, starting with -----BEGIN. Nothing was sent.`
+- `The private key field holds more than one PEM block. Paste the private key's block alone, from -----BEGIN to -----END. Nothing was sent.`
+- `The private key ends before its -----END line. Paste the whole key. Nothing was sent.`
+- `This is a certificate, not a private key. Paste the private key whose public key is registered on the Snowflake user. Nothing was sent.`
+- `This PEM block is not a private key Studio reads. Paste an RSA private key armoured as PRIVATE KEY, ENCRYPTED PRIVATE KEY or RSA PRIVATE KEY. Nothing was sent.`
 - `This key's encryption is set to cost more work than Studio allows. Re-encrypt it with openssl pkcs8 -topk8 -v2 aes-256-cbc. Nothing was sent.`
+- `This key is encrypted with a scheme Studio does not read, such as PBES1 or a PKCS#12 one; Studio reads PBES2 with PBKDF2 or scrypt and AES-CBC. Re-encrypt it with openssl pkcs8 -topk8 -v2 aes-256-cbc. Nothing was sent.`
 - `This key is encrypted; enter its passphrase. Nothing was sent.`
 - `The passphrase does not open this key. Nothing was sent.`
 - `Studio could not read this private key. Nothing was sent.`
-- `Studio signs with RSA keys only; this is an EC key. Nothing was sent.`
+- `Studio signs with RSA keys only; this is an EC key. Nothing was sent.`, also for an `EC PRIVATE KEY` or `DSA PRIVATE KEY` block, read from its label
 - `Snowflake needs an RSA key of at least 2048 bits. Nothing was sent.`
 - `Studio accepts RSA keys up to 4096 bits; this key is <bits> bits. Nothing was sent.`
 
