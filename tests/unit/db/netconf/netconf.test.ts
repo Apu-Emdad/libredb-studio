@@ -310,8 +310,17 @@ test("every server side refusal reads the same sentence and carries no detail", 
   expectBe(mayShowDetail(refused), false);
 });
 
-test("a host key refusal is its own kind, so it is never retried another way", () => {
+/**
+ * The name used to say "so it is never retried another way", and the body held only the first half:
+ * one message classifying to one kind. The no-second-path fact is held where it happens, in
+ * `dial.test.ts`, so the name here now claims what this test proves and no more. The cases are the
+ * two sentences ssh2 raises for this cause, and one that must NOT be taken for it, because a kind
+ * that swallowed every failure would pass a test made of positives alone.
+ */
+test("both of ssh2's host key sentences classify to the host-key kind, and an unrelated one does not", () => {
   expectBe(classifyLoginFailure(new Error("Host denied (verification failed)")).kind, "host-key");
+  expectBe(classifyLoginFailure(new Error("verification failed")).kind, "host-key");
+  expectBe(classifyLoginFailure(new Error("connect ECONNREFUSED 198.51.100.7:830")).kind, "transport");
 });
 
 test("a pasted fingerprint is read, and the three wrong shapes each say what to paste", () => {

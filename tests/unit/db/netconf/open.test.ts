@@ -115,10 +115,24 @@ test("a connection and a credential become a reader, and the device's facts come
   expectEqual(reader.facts.modules, ["ietf-interfaces"]);
 });
 
-test("the port the connection names is the port dialled", async () => {
-  const { ports: p, seen } = ports();
-  await openNetconfReader({ ...connection, port: 2830 } as DatabaseConnection, credential, p);
-  expectBe(seen.dialled[0]?.port, 2830);
+/**
+ * Three cases, because one would not separate the two behaviours: a dial that always took
+ * `config.port` and never defaulted would pass a test that only names a port, and a dial that
+ * always defaulted would pass one that only omits it. The third is the case a connection form can
+ * really produce, a port of 0, which must read as "not named" rather than as port zero.
+ */
+test("the port dialled is the one the connection names, and 830 when it names none", async () => {
+  const named = ports();
+  await openNetconfReader({ ...connection, port: 2830 } as DatabaseConnection, credential, named.ports);
+  expectBe(named.seen.dialled[0]?.port, 2830);
+
+  const unnamed = ports();
+  await openNetconfReader(connection, credential, unnamed.ports);
+  expectBe(unnamed.seen.dialled[0]?.port, 830);
+
+  const zero = ports();
+  await openNetconfReader({ ...connection, port: 0 } as DatabaseConnection, credential, zero.ports);
+  expectBe(zero.seen.dialled[0]?.port, 830, "a port of zero is no port, not port zero");
 });
 
 test("the published session limits are what the dial and the session run under", async () => {
