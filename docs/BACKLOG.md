@@ -31,7 +31,7 @@ None of it is a GitHub issue.
 - [Drivers and connections](#drivers-and-connections) — D1-D348, U17 · 248
 - [Value interpolation](#value-interpolation) — V1
 - [Row editing](#row-editing) — R1–R3 · 3
-- [Studio UI and query execution](#studio-ui-and-query-execution) — X2-X27, U2-U139 · 128
+- [Studio UI and query execution](#studio-ui-and-query-execution) — X2-X27, U2-U139 · 127
 - [Dependencies](#dependencies) — P1-P9 · 7
 - [Documentation](#documentation) — DOC3-DOC25 · 22
 - [Release pipeline](#release-pipeline) — REL1-REL8 · 8
@@ -5111,15 +5111,6 @@ Folders and objects are paged by the Keys panel, and the Keys panel's top level 
 Found 2026-10-09 while designing the S3 provider.
 
 **Done when:** a tree folder can declare that it pages, the tree loads it a page at a time with a Load more row, and an S3 connection with more buckets than one page shows the first page and the control, measured with a server that holds more buckets than one page.
-
-### U110. Databend declares a User placeholder the dialog never draws
-
-`DB_UI_CONFIG.databend.fieldPlaceholders.user` (`src/lib/db-ui-config.ts`) is declared and never drawn: only the Database and Region boxes read declared placeholders (`src/components/ConnectionModal.tsx`), so the User box shows the dialog's default `user`.
-The S3 provider declares no `fieldPlaceholders.user` for that reason, since widening the dialog would change Databend's drawn placeholder in an S3 PR.
-
-Found 2026-10-09 while designing the S3 provider.
-
-**Done when:** the User box draws a declared `fieldPlaceholders.user`, or the Databend declaration is removed, with a test that renders the dialog for Databend and asserts the User placeholder it shows.
 
 ### U111. Kubernetes objects share one common view
 

@@ -273,10 +273,20 @@ describe("the Snowflake Schema, Database and User boxes", () => {
     expect(field("user").placeholder).toBe("user");
   });
 
-  test("read an engine's declared User example: Databend's root, declared before the box read one", () => {
+  test("give BigQuery's credential box an example that fits it, and say what an empty box means beneath it (SF-039)", () => {
+    render(<ConnectionModal isOpen onClose={() => {}} onConnect={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "BigQuery" }));
+    expect(field("password").placeholder).toBe("key JSON, a ya29… token, or empty");
+    expect(screen.getByTestId("password-hint").textContent).toBe(
+      "The whole key file's JSON, or a bearer token. Empty uses the server's own credentials, where the deployment enables them.",
+    );
+  });
+
+  test("leave Databend's User box with the dialog's own example, never the root its warning advises against", () => {
     render(<ConnectionModal isOpen onClose={() => {}} onConnect={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Databend" }));
-    expect(field("user").placeholder).toBe("root");
+    expect(field("user").placeholder).toBe("user");
+    expect(field("database").placeholder).toBe("default");
   });
 });
 

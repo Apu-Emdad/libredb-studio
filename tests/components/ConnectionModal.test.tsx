@@ -478,7 +478,7 @@ const MOCK_FIELD_COPY: Record<string, MockFieldCopy> = {
   // Mirrored from the real entry (Databend design 6.1); tests/unit/lib/db-ui-config.test.ts pins the real one.
   databend: {
     fieldLabels: { warehouse: "Warehouse" },
-    fieldPlaceholders: { user: "root", database: "default" },
+    fieldPlaceholders: { database: "default" },
     fieldHints: {
       host: "A host name or address, or a pasted https:// address, which is split into Host and Port. Databend Cloud: the host from Connect in the Cloud console, on port 443 with SSL mode verify-system. Self-hosted: the query node, port 8000 unless http_handler_port was changed.",
       user: "A SQL user. On Databend Cloud: cloudapp, or a user created with CREATE USER; the email you sign in to the Cloud console with is not a SQL user.",

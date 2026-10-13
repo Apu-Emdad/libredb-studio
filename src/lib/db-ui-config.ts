@@ -929,7 +929,9 @@ export const DB_UI_CONFIG: Record<DatabaseType, DatabaseUIConfig> = {
     // drawn while SSL Mode is disable.
     connectionFields: ["host", "port", "user", "password", "database", "warehouse", "allowInsecureAuth"],
     fieldLabels: { warehouse: "Warehouse" },
-    fieldPlaceholders: { user: "root", database: "default" },
+    // No User example: `root` contradicted the dialog's own warning against signing in as root with no password, and
+    // the hint under the box names the users to choose (SF-039), so the box shows the dialog's own `user`.
+    fieldPlaceholders: { database: "default" },
     fieldHints: DATABEND_FIELD_HINTS,
     fieldRules: DATABEND_FIELD_RULES,
     hostAcceptsUri: ["http", "https"],
@@ -954,7 +956,13 @@ export const DB_UI_CONFIG: Record<DatabaseType, DatabaseUIConfig> = {
     fieldPlaceholders: {
       database: "my-gcp-project",
       location: "detected (e.g. EU, US, europe-west3)",
-      password: "key JSON, a ya29… token, or empty for server credentials (if enabled)",
+      // Short enough for the box at phone width; the full text measured 446 px in a 448 px box at 1440 px (SF-039),
+      // so what an empty box means is said in the hint below it.
+      password: "key JSON, a ya29… token, or empty",
+    },
+    fieldHints: {
+      password:
+        "The whole key file's JSON, or a bearer token. Empty uses the server's own credentials, where the deployment enables them.",
     },
   },
   snowflake: {

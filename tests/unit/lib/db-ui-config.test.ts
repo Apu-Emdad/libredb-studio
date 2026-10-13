@@ -823,7 +823,9 @@ describe("declared connection-field copy (#1085)", () => {
     expect(takesConnectionField("databend", "warehouse")).toBe(true);
     expect(takesConnectionField("postgres", "warehouse")).toBe(false);
     expect(databend.fieldLabels).toEqual({ warehouse: "Warehouse" });
-    expect(databend.fieldPlaceholders).toEqual({ user: "root", database: "default" });
+    // No User example: the dialog warns against root, so its placeholder may not suggest it (SF-039).
+    expect(databend.fieldPlaceholders).toEqual({ database: "default" });
+    expect(connectionFieldPlaceholder(databend, "user", "user")).toBe("user");
     expect(connectionFieldPlaceholder(databend, "database", "db")).toBe("default");
     expect(databend.fieldHints).toBe(DATABEND_FIELD_HINTS);
     expect(DATABEND_FIELD_HINTS).toEqual({
