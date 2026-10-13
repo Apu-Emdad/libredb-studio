@@ -554,6 +554,18 @@ describe("every other number and sentence the doc states is the code's", () => {
     );
   });
 
+  test("the statement slots, and the queue wait that no longer counts against a statement's timeout (SF-007)", () => {
+    expect(FLAT_DOC).toContain(
+      `Studio keeps at most ${SNOWFLAKE_LIMITER_OPTIONS.perProvider} statements of one connection, and ${SNOWFLAKE_LIMITER_OPTIONS.perEngine} across every Snowflake connection of the server, in flight at once`,
+    );
+    expect(FLAT_DOC).toContain(
+      "Its deadline starts only when it is sent, so a statement that waited still gets its whole `timeout` on Snowflake.",
+    );
+    expect(FLAT_DOC).toContain(
+      `The wait has its own bound of the same length (\`timeout\` plus ${seconds(SNOWFLAKE_DEADLINE_GRACE_MS)})`,
+    );
+  });
+
   test("the resend ladder, the partition size and the User-Agent", () => {
     expect(FLAT_DOC).toContain(
       `after a backoff from ${SNOWFLAKE_RETRY_BASE_MS} ms doubling to ${seconds(SNOWFLAKE_RETRY_MAX_MS)}, at most ${SNOWFLAKE_RETRY_ATTEMPTS} sends`,

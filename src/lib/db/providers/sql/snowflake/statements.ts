@@ -10,9 +10,10 @@
  * partition 0; a 429 sets the next wait to the jittered maximum.
  *
  * Every run, a user statement or one Studio sends on its own, begins in the run registry (with or without a
- * `queryId`) under its deadline, joins the lifetime signal, and holds one permit of the Snowflake engine limiter from
- * its submit until its result is built. The submit itself runs under the deadline alone: a cancel that arrives during
- * it waits for the handle the submit answers, so the statement can be cancelled by it.
+ * `queryId`), joins the lifetime signal, and holds one permit of the Snowflake engine limiter from its submit until its
+ * result is built. Its deadline starts once the permit is held; the wait for the permit has a bound of its own. The
+ * submit itself runs under the deadline alone: a cancel that arrives during it waits for the handle the submit
+ * answers, so the statement can be cancelled by it.
  *
  * The wire envelope (`statementHandle`, `resultSetMetaData`, `rowType`, `partitionInfo`) stays in this module,
  * `rows.ts` and `decode.ts`; everything above reads `SnowflakeResult`.
@@ -585,7 +586,13 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
     }
   }
 
-  /** One run: registered, joined to the lifetime, and under one permit from its submit to its result. */
+  /**
+   * One run: registered, joined to the lifetime, and under one permit from its submit to its result.
+   *
+   * Two bounds of the same length follow each other. While the run waits for a permit, the wait's own bound runs, and
+   * passing it is the slots sentence with nothing sent. The statement's deadline starts only once the permit is held,
+   * so a statement that queued behind others still gets its whole `timeout` and grace on Snowflake.
+   */
   async function runStatement(input: {
     readonly queryId: string | undefined;
     readonly sql: string;
@@ -594,18 +601,18 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
     readonly deadlineBound: SnowflakeDeadlineBound;
     readonly keyword: string | null;
   }): Promise<SnowflakeResult> {
-    const deadline = deps.deadline(deadlineMsFor(input.timeoutS));
-    const registered = runs.begin(input.queryId, deadline);
-    const signal = AbortSignal.any([registered.signal, lifetime.signal]);
-    const run: Run = {
-      sql: input.sql,
-      tag: input.tag,
-      timeoutS: input.timeoutS,
-      deadlineBound: input.deadlineBound,
-      keyword: input.keyword,
-      signal,
-      deadline,
+    const boundMs = deadlineMsFor(input.timeoutS);
+    /** The run's deadline as the registry sees it: the wait's bound until admission, then the statement's. */
+    const bound = new AbortController();
+    let admitted = false;
+    const follow = (timer: AbortSignal, whileAdmitted: boolean): void => {
+      timer.addEventListener("abort", () => {
+        if (admitted === whileAdmitted) bound.abort(timer.reason);
+      });
     };
+    follow(deps.deadline(boundMs), false);
+    const registered = runs.begin(input.queryId, bound.signal);
+    const signal = AbortSignal.any([registered.signal, lifetime.signal]);
     let finish: (cancelled: boolean) => void = () => {};
     const ended = new Promise<boolean>((resolve) => {
       finish = resolve;
@@ -620,11 +627,20 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
       } catch (error) {
         if (!signal.aborted) throw error;
         if (!isDeadline(signal.reason)) throw cancelledError();
-        throw new SnowflakeError(
-          "unavailable",
-          SNOWFLAKE_ERROR_SENTENCES.slotsBusy(deadlineMsFor(input.timeoutS) / 1000),
-        );
+        throw new SnowflakeError("unavailable", SNOWFLAKE_ERROR_SENTENCES.slotsBusy(boundMs / 1000));
       }
+      admitted = true;
+      const deadline = deps.deadline(boundMs);
+      follow(deadline, true);
+      const run: Run = {
+        sql: input.sql,
+        tag: input.tag,
+        timeoutS: input.timeoutS,
+        deadlineBound: input.deadlineBound,
+        keyword: input.keyword,
+        signal,
+        deadline,
+      };
       try {
         return await execute(run);
       } finally {

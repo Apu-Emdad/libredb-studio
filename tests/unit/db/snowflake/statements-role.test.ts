@@ -51,7 +51,8 @@ describe("what the check sends", () => {
       schema: "PUBLIC",
       parameters: { query_tag: SNOWFLAKE_QUERY_TAGS.roleCheck },
     });
-    expect(harness.deps.deadlines.requested).toEqual([35_000]);
+    // The permit wait's bound, then the statement's own deadline once it is sent.
+    expect(harness.deps.deadlines.requested).toEqual([35_000, 35_000]);
   });
 
   test("with no Warehouse, the check carries no warehouse field", async () => {

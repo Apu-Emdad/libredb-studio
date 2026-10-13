@@ -177,12 +177,13 @@ describe("the request body", () => {
       const harness = setup({ queryTimeoutMs });
       harness.transports.answer(SUBMIT, one(), one());
       await harness.statements.runUser("SHOW TABLES", undefined);
-      expect(harness.deps.deadlines.requested[0]).toBe(deadline);
+      // Each run asks for its permit wait's bound, then its own deadline: the same length.
+      expect(harness.deps.deadlines.requested.slice(0, 2)).toEqual([deadline, deadline]);
       await harness.statements.runSurface("SHOW TABLES", SNOWFLAKE_QUERY_TAGS.health);
       const [user, read] = submits(harness).map(bodyOf);
       expect(user.timeout).toBe(userTimeout);
       expect(read.timeout).toBe(surface);
-      expect(harness.deps.deadlines.requested[1]).toBe(surface * 1000 + 5_000);
+      expect(harness.deps.deadlines.requested.slice(2)).toEqual([surface * 1000 + 5_000, surface * 1000 + 5_000]);
     });
   }
 });

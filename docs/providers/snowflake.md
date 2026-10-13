@@ -364,6 +364,10 @@ Every request carries a fixed tag for its kind of work, with no user identity, s
 
 A statement's `timeout` is the connection's Query Timeout in whole seconds, from 1 to Snowflake's maximum of 604,800; a statement Studio sends on its own takes the smaller of 30 s and that value.
 Studio polls the statement from 250 ms, doubling to 2 s, and cancels it at its deadline, 5 s past its `timeout`, so Snowflake's own timeout fires first.
+Studio keeps at most 4 statements of one connection, and 8 across every Snowflake connection of the server, in flight at once; a further statement waits in line, with nothing sent.
+Its deadline starts only when it is sent, so a statement that waited still gets its whole `timeout` on Snowflake.
+The wait has its own bound of the same length (`timeout` plus 5 s); a statement still waiting when it passes is not sent and reads the slots sentence of [section 11](#11-errors), never the timeout sentence.
+Every request takes a slot, Studio's own included: the background explain estimate beside a `SELECT` holds one while its `EXPLAIN` compiles, which needs no warehouse and usually answers within a second, so it can delay a run by that much but no longer shortens its timeout.
 Snowflake then answers HTTP 408, and its message, which names the timeout that fired, is not read, so the sentence names every bound that can end the statement:
 
 `Snowflake ended this statement at a timeout and cancelled it: the connection's query timeout of <n> s, or a lower STATEMENT_TIMEOUT_IN_SECONDS on the warehouse, the user or the account. Snowflake applies the lowest of these, so raising Query Timeout (ms) on the connection cannot lengthen a statement past the others.`
