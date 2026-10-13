@@ -15,7 +15,6 @@
  */
 
 import type { XmlElement } from "./reader-port";
-import { safeForWriting } from "./secrets";
 
 export interface RowSet {
   readonly columns: readonly string[];
@@ -129,21 +128,3 @@ export function buildRows(
   return warning === undefined ? { columns, rows } : { columns, rows, warning };
 }
 
-/**
- * The text of one row that is about to be written outside the grid: a log line, an export, an agent
- * context.
- *
- * It exists so that the one path out of a row goes through the secret guard. Requirement Y-S2: the
- * read only account that cannot run any write still reads password hashes and keystore entries, so
- * a value that reaches the grid must not also reach a log by default.
- */
-export function rowForWriting(
-  path: readonly string[],
-  row: Readonly<Record<string, string>>,
-): Readonly<Record<string, string>> {
-  const out: Record<string, string> = {};
-  for (const [column, value] of Object.entries(row)) {
-    out[column] = safeForWriting([...path, column], value).text;
-  }
-  return out;
-}

@@ -41,11 +41,32 @@ export interface SessionLimits extends FrameLimits {
   readonly requestMs: number;
 }
 
+/**
+ * Why a session ended, and the four protocol-ish endings are NOT one reason.
+ *
+ * MEASURED: `protocol` was produced at nine places with seven different sentences, and three of
+ * them are answered differently by whoever reads them. A deadline asks for patience or a longer
+ * one. A device that offers no base version this client speaks cannot be used at all, which is a
+ * fact about compatibility rather than about behaviour. And "a request is already in flight" is
+ * THIS PROVIDER'S OWN defect, which has no business wearing the same word as a device's protocol
+ * fault: the fourth scope of section 11.2 says a defect of ours is never dressed as a fact about
+ * the device, and that rule was being broken by a reason code while every sentence stayed correct.
+ *
+ * The sentences already differed, which serves a person reading one and serves nothing that
+ * branches on the field. Two states separated only by their sentence are not separated for code.
+ */
 export type SessionEnd =
   | { readonly reason: "closed-by-us" }
   | { readonly reason: "closed-by-peer" }
   | { readonly reason: "framing"; readonly fault: FrameFault }
-  | { readonly reason: "protocol"; readonly detail: string };
+  /** The device answered in a way NETCONF does not allow. */
+  | { readonly reason: "protocol"; readonly detail: string }
+  /** Nothing arrived in time. The device may be slow, busy or unreachable. */
+  | { readonly reason: "deadline"; readonly detail: string }
+  /** The device works and this client cannot speak to it. */
+  | { readonly reason: "incompatible"; readonly detail: string }
+  /** Our own defect. Never a claim about the device. */
+  | { readonly reason: "internal"; readonly detail: string };
 
 export class NetconfSessionError extends Error {
   readonly end: SessionEnd;
@@ -63,7 +84,14 @@ function describeEnd(end: SessionEnd): string {
       return "the device closed this session";
     case "framing":
       return `the device broke the NETCONF framing rules (${end.fault.kind}), so the session was ended`;
+    // The four below carry their own sentence for the same reason: it is written where the fault is
+    // found, which is the only place that knows what happened. They are listed separately rather
+    // than defaulted so that adding a reason to the union cannot compile until somebody has said
+    // what a reader should be told.
     case "protocol":
+    case "deadline":
+    case "incompatible":
+    case "internal":
       return end.detail;
   }
 }
@@ -90,8 +118,19 @@ const CLIENT_BASES = ["urn:ietf:params:netconf:base:1.0", "urn:ietf:params:netco
  * The prefix is not VALIDATED against its binding here, and that limit is deliberate: resolving a
  * prefix to a namespace is the reader port's work, and this file parses no XML. What it does is
  * stop a legal spelling from reading as an absent element.
+ *
+ * A start tag may also carry ATTRIBUTES and whitespace, and a closing tag may carry whitespace, so
+ * the two halves are built rather than written out. MEASURED after the prefix fix, which did not
+ * cover these: `<session-id xmlns="...">`, `<session-id >` and `</session-id >` each produced the
+ * same refusal, "the device's hello carried no session-id, which RFC 6241 8.1 requires", and
+ * `<capability xmlns="...">` answered zero capabilities, which leaves no common base version and
+ * ends the session. Three legal spellings and one of them is what a server writing its namespaces
+ * inline produces.
  */
 const PREFIX = "(?:[A-Za-z_][A-Za-z0-9_.-]*:)?";
+/** `<name>` with any attributes, and `</name>` with any trailing space. */
+const opening = (name: string): string => `<${PREFIX}${name}(?:\\s[^>]*)?\\s*>`;
+const closing = (name: string): string => `</${PREFIX}${name}\\s*>`;
 
 /** The local name of an element start tag, prefix removed. */
 function localNameOf(tag: string | null): string | null {
@@ -182,7 +221,7 @@ export function clientHello(): string {
  * else: the session id and the capability URIs.
  */
 export function readHello(message: string): Hello {
-  const id = new RegExp(`<${PREFIX}session-id>\\s*(\\d+)\\s*</${PREFIX}session-id>`).exec(message);
+  const id = new RegExp(`${opening("session-id")}\\s*(\\d+)\\s*${closing("session-id")}`).exec(message);
   if (!id?.[1]) {
     throw new NetconfSessionError({
       reason: "protocol",
@@ -190,7 +229,7 @@ export function readHello(message: string): Hello {
     });
   }
   const capabilities = [
-    ...message.matchAll(new RegExp(`<${PREFIX}capability>\\s*([^<\\s]+)\\s*</${PREFIX}capability>`, "g")),
+    ...message.matchAll(new RegExp(`${opening("capability")}\\s*([^<\\s]+)\\s*${closing("capability")}`, "g")),
   ].map((m) => m[1] ?? "");
   const bases = capabilities.filter((cap) => cap.startsWith("urn:ietf:params:netconf:base:"));
   return { sessionId: id[1], capabilities, bases };
@@ -207,7 +246,7 @@ export function framingFor(hello: Hello): Framing {
   if (hello.bases.includes("urn:ietf:params:netconf:base:1.1")) return "chunked";
   if (hello.bases.includes("urn:ietf:params:netconf:base:1.0")) return "eom";
   throw new NetconfSessionError({
-    reason: "protocol",
+    reason: "incompatible",
     detail: "this device offered no NETCONF base version this client speaks",
   });
 }
@@ -254,8 +293,8 @@ export class NetconfSession {
   private awaitHello(): Promise<string> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.end({ reason: "protocol", detail: "the device sent no hello within the deadline" });
-        reject(new NetconfSessionError({ reason: "protocol", detail: "the device sent no hello within the deadline" }));
+        this.end({ reason: "deadline", detail: "the device sent no hello within the deadline" });
+        reject(new NetconfSessionError({ reason: "deadline", detail: "the device sent no hello within the deadline" }));
       }, this.limits.helloMs);
       this.helloWaiter = (message) => {
         clearTimeout(timer);
@@ -272,7 +311,7 @@ export class NetconfSession {
       // One request at a time. Netopeer2 answers pipelined requests in order, measured, but a
       // single outstanding request is what makes the message-id rule enforceable rather than
       // advisory.
-      return Promise.reject(new NetconfSessionError({ reason: "protocol", detail: "a request is already in flight" }));
+      return Promise.reject(new NetconfSessionError({ reason: "internal", detail: "a request is already in flight" }));
     }
     const messageId = this.nextId++;
     const text = buildRpc(request, messageId);
@@ -280,7 +319,7 @@ export class NetconfSession {
       const timer = setTimeout(() => {
         this.pending = null;
         reject(
-          new NetconfSessionError({ reason: "protocol", detail: "the device did not answer within the deadline" }),
+          new NetconfSessionError({ reason: "deadline", detail: "the device did not answer within the deadline" }),
         );
       }, this.limits.requestMs);
       this.pending = { messageId, resolve, reject, timer };

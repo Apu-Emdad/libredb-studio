@@ -13,6 +13,7 @@ import { NetconfProvider, parseReadRequest, type DeviceReader } from "@/lib/db/p
 import type { DatabaseConnection } from "@/lib/db/types";
 import { QueryError, TimeoutError } from "@/lib/db/errors";
 import { NETCONF_KEY_SCAN, NETCONF_OBJECT_KINDS } from "@/lib/db/providers/network/netconf/objectkinds";
+import { NETCONF_LABELS } from "@/lib/db/providers/network/netconf/labels";
 import { encodeSegment } from "@/lib/db/providers/network/netconf/keypath";
 import { buildRpc } from "@/lib/db/providers/network/netconf/requests";
 
@@ -380,4 +381,27 @@ test("a path of the wrong shape is refused with what was expected, not read wron
   await expectRejects(provider.readObjectSource(["running"], "node"), /three names/);
   await expectRejects(provider.readObjectSource(["running", "a", "b"], "key"), /two names/);
   await expectRejects(provider.readObjectSource(["running", "x", "y"], "folder"), /no source text for the kind folder/);
+});
+
+/**
+ * The labels are user-visible text and nothing asserted them, nor that the provider publishes the
+ * declared record rather than building one inline, which is the same seam the capabilities needed.
+ *
+ * What is held is what this engine IS: a device has nodes and not tables, a read is a read and not
+ * a query, and the three actions this provider cannot perform say so in the words the panel will
+ * print. An engine that answered "Table" here would be describing a different product.
+ */
+test("the provider publishes the declared labels, and they name what this engine actually has", () => {
+  const labels = new NetconfProvider(connection).getLabels();
+  // Equal, not identical: this provider answers `{ ...NETCONF_LABELS }`, a copy, which is what
+  // three of the four neighbours measured do (etcd, MQTT and RabbitMQ copy; OPC UA returns the
+  // record itself). The first version of this test asserted identity and failed, and the code was
+  // right: the claim was wrong. What matters is that the published text is the declared text, so
+  // that a second set written inline could not drift away from the one every other reader sees.
+  expectEqual(labels, NETCONF_LABELS);
+  expectBe(labels.entityName, "Node");
+  expectBe(labels.selectAction, "Read");
+  for (const unavailable of [labels.generateAction, labels.analyzeAction, labels.vacuumAction]) {
+    expectBe(unavailable, "Not available", "an action this provider cannot perform says so");
+  }
 });

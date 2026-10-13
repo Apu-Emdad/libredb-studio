@@ -704,3 +704,39 @@ test("a prefixed reply's message-id is read, and a prefixed notification is stil
   expectBe(messageIdOf('<nc:rpc-reply nc:x="1" message-id="7"><nc:data/></nc:rpc-reply>'), "7");
   expectBe(messageIdOf('<nc:notification xmlns:nc="x"><nc:eventTime/></nc:notification>'), null);
 });
+
+/**
+ * The four spellings of one hello, and the sentence they used to produce.
+ *
+ * The sentence is "the device's hello carried no session-id, which RFC 6241 8.1 requires", and a
+ * citation makes it the most convincing sentence this provider can write: an operator reading it
+ * goes to the device's firmware, perhaps to its vendor. It is only honest while the reading is
+ * complete, and after the prefix fix it was not: MEASURED, a session-id carrying an attribute, one
+ * with a space before its closing bracket, and one whose closing tag carried a space each still
+ * produced it, and a capability carrying an attribute answered zero capabilities, which leaves no
+ * common base version and ends the session.
+ *
+ * A standard cited in an error message describes the other side's behaviour or it describes our
+ * reading. This one now only describes the first.
+ */
+test("a hello is read whether its tags carry prefixes, attributes or spaces", () => {
+  const forms = [
+    ["<session-id>4</session-id>", "<capability>urn:ietf:params:netconf:base:1.1</capability>"],
+    ['<session-id xmlns="urn:x">4</session-id>', '<capability xmlns="urn:y">urn:ietf:params:netconf:base:1.1</capability>'],
+    ["<session-id >4</session-id >", "<capability >urn:ietf:params:netconf:base:1.1</capability >"],
+    ['<n:session-id n:a="1">4</n:session-id>', '<n:capability n:a="1">urn:ietf:params:netconf:base:1.1</n:capability>'],
+  ] as const;
+  for (const [sid, cap] of forms) {
+    const hello = readHello(`<hello xmlns="urn:x"><capabilities>${cap}</capabilities>${sid}</hello>`);
+    expectBe(hello.sessionId, "4");
+    expectEqual(hello.capabilities, ["urn:ietf:params:netconf:base:1.1"]);
+    expectBe(hello.bases.length, 1, "a capability that cannot be read leaves no common base version");
+  }
+});
+
+test("a hello that really carries no session-id is still refused, and that is the device's fault", () => {
+  expectThrows(
+    () => readHello('<hello xmlns="urn:x"><capabilities><capability>urn:ietf:params:netconf:base:1.1</capability></capabilities></hello>'),
+    /no session-id/,
+  );
+});

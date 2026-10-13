@@ -200,3 +200,61 @@ test("the reader port refuses a DOCTYPE, which RFC 6241 3.2 forbids in NETCONF c
   expectThrows(() => fake.parse('<!DOCTYPE x [<!ENTITY a "b">]><data/>', READER_LIMITS), XmlReaderError);
   expectBe(fake.parse("<data/>", READER_LIMITS).name, "data");
 });
+
+/**
+ * Four endings that a reader answers four different ways, held apart by their REASON.
+ *
+ * MEASURED: all four answered `protocol`, with seven different sentences across nine places. The
+ * sentences serve a person reading one and serve nothing that branches on the field, so the four
+ * were separated only by prose. They are answered differently: a deadline asks for patience or a
+ * longer one; a device offering no base version this client speaks cannot be used at all, which is
+ * compatibility rather than misbehaviour; a request already in flight is THIS PROVIDER'S defect and
+ * has no business wearing a word that describes the device; and a reply NETCONF does not allow is
+ * the device.
+ *
+ * The last of those is the fourth scope of the error rules: our own defect is never dressed as a
+ * fact about the device. A reason code was breaking that rule while every sentence stayed true.
+ */
+test("a deadline, an incompatibility, our own defect and a device fault end with four reasons", async () => {
+  const deadline = new FakeTransport();
+  const timedOut = await NetconfSession.open(deadline, { ...limits, helloMs: 20 }).catch((e: unknown) => e);
+  expectTruthy(timedOut instanceof NetconfSessionError);
+  expectBe(timedOut.end.reason, "deadline");
+
+  const mismatch = new FakeTransport();
+  const opening = NetconfSession.open(mismatch, limits);
+  mismatch.send(helloWith(["urn:ietf:params:netconf:base:0.9"]));
+  const refused = await opening.catch((e: unknown) => e);
+  expectTruthy(refused instanceof NetconfSessionError);
+  expectBe(refused.end.reason, "incompatible");
+
+  const busy = new FakeTransport();
+  const opened = NetconfSession.open(busy, limits);
+  busy.send(helloWith([BASE10]));
+  const { session } = await opened;
+  void session.request({ operation: "get" });
+  const second = await session.request({ operation: "get" }).catch((e: unknown) => e);
+  expectTruthy(second instanceof NetconfSessionError);
+  expectBe(second.end.reason, "internal", "our own defect must not wear a word about the device");
+
+  // The REQUEST deadline as well as the hello one: they are two paths with one meaning, and a test
+  // that held only the first left the second free to drift back. A planted mutation did exactly
+  // that and survived until this case existed.
+  const slow = new FakeTransport();
+  const slowOpen = NetconfSession.open(slow, { ...limits, requestMs: 20 });
+  slow.send(helloWith([BASE10]));
+  const { session: waiting } = await slowOpen;
+  const late = await waiting.request({ operation: "get" }).catch((e: unknown) => e);
+  expectTruthy(late instanceof NetconfSessionError);
+  expectBe(late.end.reason, "deadline");
+
+  const bad = new FakeTransport();
+  const third = NetconfSession.open(bad, limits);
+  bad.send(helloWith([BASE10]));
+  const { session: live } = await third;
+  const reply = live.request({ operation: "get" });
+  bad.send(`<rpc-reply><data/></rpc-reply>${EOM}`);
+  const broken = await reply.catch((e: unknown) => e);
+  expectTruthy(broken instanceof NetconfSessionError);
+  expectBe(broken.end.reason, "protocol");
+});

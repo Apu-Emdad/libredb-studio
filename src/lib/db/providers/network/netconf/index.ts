@@ -51,7 +51,6 @@ import { NETCONF_PORT } from "./dial";
 import { buildKeyPath, levelPage, parseKeyPath, type LevelEntry, type PathNode } from "./keypath";
 import { NETCONF_KEY_SCAN, NETCONF_OBJECT_KINDS, assertDeclarationIsSound } from "./objectkinds";
 import { NETCONF_LABELS } from "./labels";
-import { safeForWriting } from "./secrets";
 
 /** What the provider learns from the device when the session opens. */
 export interface DeviceFacts {
@@ -254,12 +253,14 @@ export class NetconfProvider extends BaseDatabaseProvider {
   public async describeObject(path: readonly string[], kind: string): Promise<ObjectDetail> {
     this.open();
     if (kind !== "node" && kind !== "key") throw new QueryError(`This engine has no object kind named ${kind}.`);
-    const name = path.at(-1) ?? "";
-    const moduleName = path.at(-2) ?? "";
-    const withheld = safeForWriting([moduleName, name], "");
+    // No columns, and not because a guard withheld them: a description is built from names and
+    // never from what the device returned, so there is nothing here to withhold. This read used to
+    // call the secret guard and branch on its answer with `withheld ? [] : []`, both arms identical
+    // and the call's result discarded. It did nothing while looking like a check, which is worse
+    // than no check: a reader auditing this file saw the guard's name and stopped there.
     return {
       path: [...path],
-      columns: withheld.withheld ? [] : [],
+      columns: [],
       indexes: [],
       foreignKeys: [],
     };

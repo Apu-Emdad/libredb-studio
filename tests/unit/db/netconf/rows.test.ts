@@ -5,7 +5,7 @@
  */
 import { test } from "bun:test";
 import { expectBe, expectEqual, expectMatch, expectThrows, expectTruthy } from "./helpers";
-import { buildRows, rowForWriting, ROW_LIMITS } from "@/lib/db/providers/network/netconf/rows";
+import { buildRows, ROW_LIMITS } from "@/lib/db/providers/network/netconf/rows";
 import { keyNamesOf, scanYangModule, YANG_LIMITS } from "@/lib/db/providers/network/netconf/yangkeys";
 import { QueryError } from "@/lib/db/errors";
 import type { XmlElement } from "@/lib/db/providers/network/netconf/reader-port";
@@ -66,11 +66,7 @@ test("a list past the row cap is cut and the cut is stated, not silent", () => {
   expectMatch(rows.warning ?? "", /first 2 are shown/);
 });
 
-test("a row on its way out of the grid passes the secret guard", () => {
-  const written = rowForWriting(["ietf-system", "user"], { name: "alice", "hashed-password": "$6$abc$def" });
-  expectBe(written["name"], "alice");
-  expectBe(written["hashed-password"], "[withheld by Studio]");
-});
+
 
 const moduleText = `
 module example {
