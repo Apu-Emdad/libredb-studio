@@ -9,6 +9,7 @@ import { KeyObject } from "node:crypto";
 import { enumerateContainers, scopeGroundingContainers } from "@/lib/db/container-walk";
 import { AuthenticationError, DatabaseConfigError, QueryCancelledError, QueryError } from "@/lib/db/errors";
 import { SNOWFLAKE_FIELD_SENTENCES } from "@/lib/db/providers/sql/snowflake/account-host";
+import { SNOWFLAKE_TOKEN_SENTENCES } from "@/lib/db/providers/sql/snowflake/auth";
 import { SNOWFLAKE, SNOWFLAKE_ERROR_SENTENCES } from "@/lib/db/providers/sql/snowflake/errors";
 import {
   SNOWFLAKE_OBJECT_KINDS,
@@ -49,6 +50,11 @@ const warehouses = (...rows: (string | null)[][]): ScriptedAnswer => resultAnswe
 const RUNNING = warehouses(["STUDIO_WH", "STARTED", "X-Small", "true"]);
 /** The role check answered with the configured role and no secondary roles. */
 const ROLE_OK = roleAnswer("STUDIO_RO");
+/** An unsigned JWT in a key-pair JWT's shape: its `iss` names the key's fingerprint. */
+const KEY_PAIR_JWT = [{ alg: "RS256" }, { iss: "MYORG-MYACCT.STUDIO_SVC.SHA256:abc=", sub: "MYORG-MYACCT.STUDIO_SVC" }]
+  .map((part) => Buffer.from(JSON.stringify(part)).toString("base64url"))
+  .concat("c2ln")
+  .join(".");
 
 function connection(overrides: Record<string, unknown> = {}): DatabaseConnection {
   return {
@@ -173,6 +179,11 @@ describe("connect() validates the configuration before any socket", () => {
     ["an unknown sign-in method", { authMethod: "password" }, SNOWFLAKE_FIELD_SENTENCES.method],
     ["no key under keypair", { privateKey: "" }, SNOWFLAKE_FIELD_SENTENCES.keyEmpty],
     ["no token under pat", { authMethod: "pat", password: "" }, SNOWFLAKE_FIELD_SENTENCES.tokenEmpty],
+    [
+      "a key-pair JWT as the token",
+      { authMethod: "pat", password: KEY_PAIR_JWT },
+      SNOWFLAKE_TOKEN_SENTENCES.keyPairJwt,
+    ],
     ["an empty role", { role: "" }, SNOWFLAKE_FIELD_SENTENCES.roleEmpty],
     ["no role", { role: undefined }, SNOWFLAKE_FIELD_SENTENCES.roleEmpty],
   ];

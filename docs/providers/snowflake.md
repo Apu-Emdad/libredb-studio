@@ -164,6 +164,9 @@ Key pair avoids that requirement, though a network policy that applies to the us
 Use Key pair for npx and the desktop app, and a PAT for a server with a fixed egress address.
 A token names its own user and the SQL API takes no user beside it, so Studio compares User with the `CURRENT_USER()` the role check answers and fails the connect when they differ.
 The comparison ignores case unless User is double-quoted; `CURRENT_USER()` answers the user's NAME, so for a token enter the NAME when it differs from the login name.
+Studio does not read a token's format, with one exception: a key-pair JWT pasted as the token, which Snowflake accepts and which signs in as its own user until it expires within the hour, is refused before anything is sent:
+
+- `This is a key-pair JWT, not a programmatic access token: it signs in as the user its key belongs to and expires within the hour. Choose Key pair for Sign-in and paste the private key instead. Nothing was sent.`
 
 ### 2.5 Test connection
 

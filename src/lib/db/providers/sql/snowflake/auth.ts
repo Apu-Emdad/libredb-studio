@@ -41,6 +41,12 @@ export const SNOWFLAKE_JWT_LIFETIME_S = 900;
 /** How long a JWT is reused after its `iat`; the 300 s left before `exp` is the official clients' margin. */
 export const SNOWFLAKE_JWT_RENEW_AFTER_S = 600;
 
+/** The refusals of an access token, each raised by `readAccessToken` before any socket. */
+export const SNOWFLAKE_TOKEN_SENTENCES = {
+  keyPairJwt:
+    "This is a key-pair JWT, not a programmatic access token: it signs in as the user its key belongs to and expires within the hour. Choose Key pair for Sign-in and paste the private key instead. Nothing was sent.",
+} as const;
+
 /** Each key type's article and name in the not-RSA sentence. */
 const KEY_TYPE_NAMES: Readonly<Record<string, string>> = {
   ec: "an EC",
@@ -447,6 +453,36 @@ export function keyPairTokenSource(
       return pending;
     },
   };
+}
+
+/** What only a key-pair JWT's `iss` claim holds: the key fingerprint after `<ACCOUNT>.<USER>`. */
+const KEY_PAIR_ISSUER = /\.SHA256:/;
+
+/**
+ * Whether the text is a key-pair JWT: three `.`-separated parts whose middle one is base64url JSON with an `iss`
+ * holding `.SHA256:`. The signature is not verified and nothing else of a token is read: a PAT's format is
+ * Snowflake's, and the trial's PATs are JWTs too, whose `iss` has no fingerprint.
+ */
+function isKeyPairJwt(token: string): boolean {
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+  } catch {
+    return false;
+  }
+  const iss = typeof payload === "object" && payload !== null ? (payload as { iss?: unknown }).iss : undefined;
+  return typeof iss === "string" && KEY_PAIR_ISSUER.test(iss);
+}
+
+/**
+ * The Access token field as the bearer Studio sends, or a `config` refusal before any socket: a key-pair JWT pasted
+ * there is refused, since Snowflake accepts it as a token and it signs in as its own user until its `exp`.
+ */
+export function readAccessToken(value: string): string {
+  if (isKeyPairJwt(value)) refuse(SNOWFLAKE_TOKEN_SENTENCES.keyPairJwt);
+  return value;
 }
 
 /** A programmatic access token, sent as its own bearer. */

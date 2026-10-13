@@ -58,7 +58,7 @@ import { MAX_UNLIMITED_ROWS } from "@/lib/db/utils/query-limiter";
 import { SQLBaseProvider } from "../sql-base";
 import { snowflakeEndpoint, type SnowflakeEndpoint } from "./account";
 import { SNOWFLAKE_FIELD_SENTENCES } from "./account-host";
-import { jwtClaim, keyPairTokenSource, type LoadedKey, loadPrivateKey, patTokenSource } from "./auth";
+import { jwtClaim, keyPairTokenSource, type LoadedKey, loadPrivateKey, patTokenSource, readAccessToken } from "./auth";
 import { SNOWFLAKE, SNOWFLAKE_ERROR_SENTENCES, SnowflakeError, toDatabaseError } from "./errors";
 import {
   connectCautions,
@@ -391,7 +391,9 @@ export class SnowflakeProvider extends SQLBaseProvider {
       const { endpoint, user, role } = settings;
       const claim = jwtClaim(endpoint.accountClaim, user);
       const tokens =
-        loaded === null ? patTokenSource(this.config.password as string) : keyPairTokenSource(loaded, claim, deps.now);
+        loaded === null
+          ? patTokenSource(readAccessToken(this.config.password as string))
+          : keyPairTokenSource(loaded, claim, deps.now);
       const transport = createSnowflakeTransport(
         { origin: endpoint.origin, tls: { rejectUnauthorized: true, identity: endpoint.host }, tokens },
         deps,

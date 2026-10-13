@@ -9,6 +9,7 @@ import {
   type LoadedKey,
   loadPrivateKey,
   patTokenSource,
+  readAccessToken,
   SNOWFLAKE_JWT_LIFETIME_S,
   SNOWFLAKE_JWT_RENEW_AFTER_S,
   SNOWFLAKE_KEY_MAX_BYTES,
@@ -19,6 +20,7 @@ import {
   SNOWFLAKE_RSA_MAX_BITS,
   SNOWFLAKE_RSA_MIN_BITS,
   SNOWFLAKE_KEY_SENTENCES,
+  SNOWFLAKE_TOKEN_SENTENCES,
 } from "@/lib/db/providers/sql/snowflake/auth";
 import { SnowflakeError } from "@/lib/db/providers/sql/snowflake/errors";
 import {
@@ -574,4 +576,44 @@ describe("keyPairTokenSource (SR21)", () => {
     expect(source.tokenType).toBe("PROGRAMMATIC_ACCESS_TOKEN");
     expect(await source.token()).toBe("pat-x");
   });
+});
+
+describe("readAccessToken: a key-pair JWT is not an access token (SF-006)", () => {
+  const part = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const jwtWith = (payload: unknown): string => `${part({ alg: "RS256", typ: "JWT" })}.${part(payload)}.c2ln`;
+
+  test("a JWT Studio itself signs for a key pair is refused before any socket", async () => {
+    const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+    const source = keyPairTokenSource(loadPrivateKey(pem, undefined), jwtClaim("acme", "studio_svc"), () => 0);
+    const jwt = await source.token();
+    let error: unknown;
+    try {
+      readAccessToken(jwt);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(SnowflakeError);
+    expect((error as SnowflakeError).category).toBe("config");
+    expect((error as SnowflakeError).message).toBe(SNOWFLAKE_TOKEN_SENTENCES.keyPairJwt);
+  });
+
+  test("an iss with a key fingerprint is the only mark read", () => {
+    expect(() => readAccessToken(jwtWith({ iss: "ACME.STUDIO_SVC.SHA256:abc=", sub: "ACME.STUDIO_SVC" }))).toThrow(
+      SNOWFLAKE_TOKEN_SENTENCES.keyPairJwt,
+    );
+  });
+
+  for (const [label, token] of [
+    ["a PAT shaped as a JWT, its iss with no fingerprint", jwtWith({ p: "x", iss: "ab:1234", exp: 1 })],
+    ["an opaque token", "opaque-access-token"],
+    ["three parts whose middle one is not JSON", "a.!!!.c"],
+    ["a payload that is not an object", jwtWith(null)],
+    ["a payload whose iss is not text", jwtWith({ iss: 7 })],
+    ["four parts", `${jwtWith({ iss: "A.U.SHA256:x" })}.d`],
+  ] as const) {
+    test(`${label} is returned unchanged`, () => {
+      expect(readAccessToken(token)).toBe(token);
+    });
+  }
 });

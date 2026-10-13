@@ -27,6 +27,7 @@ import {
   SNOWFLAKE_MAX_SCRYPT_R,
   SNOWFLAKE_RSA_MAX_BITS,
   SNOWFLAKE_RSA_MIN_BITS,
+  SNOWFLAKE_TOKEN_SENTENCES,
 } from "@/lib/db/providers/sql/snowflake/auth";
 import { decodeCell, SNOWFLAKE_DECODE_SENTENCES } from "@/lib/db/providers/sql/snowflake/decode";
 import {
@@ -228,6 +229,10 @@ const QUOTED: Readonly<Record<string, { readonly keys: readonly string[]; readon
       SNOWFLAKE_KEY_SENTENCES.short,
       SNOWFLAKE_KEY_SENTENCES.long("<bits>" as unknown as number),
     ],
+  },
+  SNOWFLAKE_TOKEN_SENTENCES: {
+    keys: Object.keys(SNOWFLAKE_TOKEN_SENTENCES),
+    quotes: Object.values(SNOWFLAKE_TOKEN_SENTENCES),
   },
   SNOWFLAKE_FIELD_SENTENCES: {
     keys: Object.keys(SNOWFLAKE_FIELD_SENTENCES),
