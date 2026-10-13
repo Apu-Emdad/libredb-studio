@@ -155,6 +155,84 @@ function DeclaredFieldSelect({
 }
 
 /**
+ * Snowflake's Private key box (SF-014). A key is drawn as text only while the box has focus or after Show key, so a
+ * pasted key is hidden as soon as it lands, a typed one when the box is left, and a saved one is never drawn when the
+ * connection is opened for editing: a screen share or a screenshot of the dialog carries no key. A hidden key is still
+ * the form's value, so Test Connection and Save send it unchanged; Replace key empties the box for a new one. Masking
+ * the textarea itself is not portable (`-webkit-text-security` is not a standard property), so the text is not drawn
+ * at all instead.
+ */
+function PrivateKeyBox({
+  config,
+  value,
+  onChange,
+}: {
+  readonly config: DatabaseUIConfig;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+}) {
+  const [drawn, setDrawn] = useState(false);
+  const [focusOnDraw, setFocusOnDraw] = useState(false);
+  if (value !== "" && !drawn) {
+    return (
+      <div
+        data-testid="privateKey-stored"
+        className="flex flex-wrap items-center gap-2 rounded-md bg-panel border border-hairline p-3 text-xs text-fg-muted"
+      >
+        <span className="flex-1 min-w-[12rem]">A private key is entered. It is not shown.</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setFocusOnDraw(true);
+            setDrawn(true);
+          }}
+        >
+          Show key
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            onChange("");
+            setFocusOnDraw(true);
+            setDrawn(true);
+          }}
+        >
+          Replace key
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <textarea
+      id="privateKey"
+      value={value}
+      // Show key and Replace key hand the focus to the box they draw, so leaving it hides the key again.
+      autoFocus={focusOnDraw}
+      onChange={(e) => onChange(e.target.value)}
+      onFocus={() => {
+        setDrawn(true);
+        setFocusOnDraw(false);
+      }}
+      onBlur={() => setDrawn(false)}
+      // The pasted text lands before this runs, so the key is hidden at once rather than when the box is left.
+      onPaste={() => setDrawn(false)}
+      placeholder={connectionFieldPlaceholder(config, "privateKey", "")}
+      autoComplete="off"
+      spellCheck={false}
+      autoCorrect="off"
+      autoCapitalize="off"
+      rows={5}
+      aria-describedby={describedByHint(config, "privateKey")}
+      className="w-full rounded-md bg-panel border border-hairline focus:border-brand-tint/50 transition-all text-xs font-mono text-fg p-3"
+    />
+  );
+}
+
+/**
  * A statement that fixes a refusal, under the refusal's sentence: monospace, wrapped anywhere so a long key never
  * scrolls the dialog sideways, with a Copy button that writes exactly the statement. The sentence above still holds
  * the statement, so a host that shows only the message loses nothing.
@@ -1039,19 +1117,7 @@ export function ConnectionModal({
                           {connectionFieldLabel(uiConfig, "privateKey", "Private key")}
                         </Label>
                       </div>
-                      <textarea
-                        id="privateKey"
-                        value={privateKey}
-                        onChange={(e) => setPrivateKey(e.target.value)}
-                        placeholder={connectionFieldPlaceholder(uiConfig, "privateKey", "")}
-                        autoComplete="off"
-                        spellCheck={false}
-                        autoCorrect="off"
-                        autoCapitalize="off"
-                        rows={5}
-                        aria-describedby={describedByHint(uiConfig, "privateKey")}
-                        className="w-full rounded-md bg-panel border border-hairline focus:border-brand-tint/50 transition-all text-xs font-mono text-fg p-3"
-                      />
+                      <PrivateKeyBox config={uiConfig} value={privateKey} onChange={setPrivateKey} />
                       <DeclaredFieldHint config={uiConfig} field="privateKey" />
                     </div>
                   )}

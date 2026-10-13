@@ -2606,6 +2606,10 @@ describe("ConnectionModal: the Snowflake fields, the account-only host row and t
   test("takes the key in a textarea with spell check, autocorrect and autocapitalise off, and hands it on unchanged", () => {
     mockFormOverrides = { type: "snowflake", authMethod: "keypair", privateKey: "stored" };
     const { container } = render(React.createElement(ConnectionModal, createDefaultProps()));
+    // A key the form holds is not drawn until Show key (SF-014).
+    expect(container.querySelector("#privateKey")).toBeNull();
+    const show = Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Show key");
+    fireEvent.click(show as HTMLButtonElement);
     const key = container.querySelector("#privateKey") as HTMLTextAreaElement;
     expect(key.tagName).toBe("TEXTAREA");
     expect(key.value).toBe("stored");

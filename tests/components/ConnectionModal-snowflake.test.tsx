@@ -360,7 +360,8 @@ describe("a new engine or a new account opens without the previous one's credent
     fireEvent.change(field("privateKey"), { target: { value: "KEY-TYPED" } });
     paste("snowflake://carol@MYORG-MYACCT/DB3");
     expect(field("user").value).toBe("carol");
-    expect(field("privateKey").value).toBe("KEY-TYPED");
+    // The key is kept, and drawn as kept rather than as text (SF-014).
+    expect(screen.getByTestId("privateKey-stored")).toBeDefined();
   });
 
   test("a typed key and passphrase survive neither a paste for another account nor a switch to PostgreSQL and back", () => {
@@ -398,5 +399,85 @@ describe("a new engine or a new account opens without the previous one's credent
     const sent = probe.mock.calls[0][0];
     expect(sent).not.toHaveProperty("warehouse");
     expect(sent.user).toBe("cloudapp");
+  });
+});
+
+describe("the Private key box draws no key once one is entered (SF-014)", () => {
+  const KEY = `${pemArmour("BEGIN")}\nK-SENTINEL-BODY\n${pemArmour("END")}`;
+
+  function enterKey() {
+    const box = field("privateKey");
+    fireEvent.focus(box);
+    fireEvent.change(box, { target: { value: KEY } });
+  }
+
+  test("a typed key shows while the box has focus and is hidden when it is left, and is still the one sent", async () => {
+    const { probe } = openSnowflake();
+    fireEvent.change(field("host"), { target: { value: "myorg-myacct" } });
+    fireEvent.change(field("user"), { target: { value: "studio_svc" } });
+    fireEvent.change(field("role"), { target: { value: "STUDIO_RO" } });
+    enterKey();
+    expect(field("privateKey").value).toBe(KEY);
+    fireEvent.blur(field("privateKey"));
+    expect(document.getElementById("privateKey")).toBeNull();
+    expect(screen.getByTestId("privateKey-stored").textContent).toContain("A private key is entered. It is not shown.");
+    expect(everythingDrawn()).not.toContain("K-SENTINEL-BODY");
+    await click("Test Connection");
+    expect(probe.mock.calls[0][0].privateKey).toBe(KEY);
+  });
+
+  test("a pasted key is hidden at once", () => {
+    openSnowflake();
+    const box = field("privateKey");
+    fireEvent.focus(box);
+    fireEvent.change(box, { target: { value: KEY } });
+    fireEvent.paste(box);
+    expect(document.getElementById("privateKey")).toBeNull();
+    expect(everythingDrawn()).not.toContain("K-SENTINEL-BODY");
+  });
+
+  test("Show key draws the key again, and Replace key empties the box for a new one", () => {
+    openSnowflake();
+    enterKey();
+    fireEvent.blur(field("privateKey"));
+    fireEvent.click(screen.getByRole("button", { name: "Show key" }));
+    expect(field("privateKey").value).toBe(KEY);
+    fireEvent.blur(field("privateKey"));
+    fireEvent.click(screen.getByRole("button", { name: "Replace key" }));
+    expect(field("privateKey").value).toBe("");
+    expect(document.activeElement).toBe(field("privateKey"));
+  });
+
+  test("Edit opens with the saved key hidden, and Save Changes keeps it", async () => {
+    const probe = mock(async (_connection: DatabaseConnection) => ({ success: true }));
+    const onConnect = mock((_connection: DatabaseConnection) => {});
+    const saved: DatabaseConnection = {
+      id: "sf-1",
+      name: "sf",
+      type: "snowflake",
+      host: "myorg-myacct",
+      user: "studio_svc",
+      role: "STUDIO_RO",
+      authMethod: "keypair",
+      privateKey: KEY,
+      privateKeyPassphrase: "P-SENTINEL",
+      createdAt: new Date(0),
+    };
+    render(
+      <ConnectionModal
+        isOpen
+        onClose={() => {}}
+        onConnect={onConnect}
+        editConnection={saved}
+        onTestConnection={probe}
+      />,
+    );
+    expect(document.getElementById("privateKey")).toBeNull();
+    expect(screen.getByTestId("privateKey-stored")).toBeDefined();
+    expect(everythingDrawn()).not.toContain("K-SENTINEL-BODY");
+    expect(field("privateKeyPassphrase").type).toBe("password");
+    await click("Save Changes");
+    expect(onConnect).toHaveBeenCalledTimes(1);
+    expect(onConnect.mock.calls[0][0]).toMatchObject({ privateKey: KEY, privateKeyPassphrase: "P-SENTINEL" });
   });
 });

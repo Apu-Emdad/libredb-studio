@@ -528,6 +528,8 @@ Still unconfirmed: every Snowflake form not named above, among them `CREATE CATA
 ## 10. Security
 
 - Secrets of a connection a user creates are kept in browser storage, and `GET /api/storage` returns them to their owner ([STORAGE.md](../STORAGE.md)); keep an operator-seeded connection `managed: true` so its key stays on the server.
+- In browser storage the private key, its passphrase and the access token are kept in the clear in the same connection object, as every other engine's password is; the passphrase is stored beside the key it unlocks, so the key's encryption does not protect it from anyone who can read that storage. The `sqlite` and `postgres` storage providers encrypt all three at rest on the server ([STORAGE.md](../STORAGE.md#credential-encryption-at-rest)).
+- The dialog draws a key as text only while its box has focus or after Show key: a pasted key is hidden at once, a typed one when the box is left, and a saved one is not drawn when the connection is opened with Edit; Replace key empties the box for a new key.
 - Studio reads no key file; the key's text is parsed once at connect, and no field the provider owns keeps the key text or its passphrase: it keeps the key object and its fingerprint, while the connection object passed in still holds both.
 - Statement text, secrets in it included, is kept in the query history and sent to the AI safety check, as on every SQL engine.
 - A PAT created in the editor with `ALTER USER ... ADD PAT` appears once in the grid, as Snowflake returns it; Studio keeps no copy beyond that result.
