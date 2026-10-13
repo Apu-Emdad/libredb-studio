@@ -19,6 +19,7 @@ import {
   parseKeyPath,
 } from "@/lib/db/providers/network/netconf/keypath";
 import { classifyLoginFailure, mayShowDetail, REFUSED_SENTENCE } from "@/lib/db/providers/network/netconf/auth";
+import { messageIdOf } from "@/lib/db/providers/network/netconf/session";
 import { checkHostKey, fingerprintOf, readPin } from "@/lib/db/providers/network/netconf/hostkey";
 import {
   assertWritable,
@@ -566,4 +567,86 @@ test("the buffer cap allows its exact size and refuses one byte past it", () => 
   const tight = { maxMessageBytes: 1_048_576, maxBufferBytes: cap };
   expectBe(new FrameReader("eom", tight).feed("b".repeat(cap)).fault, undefined);
   expectBe(new FrameReader("eom", tight).feed("b".repeat(cap + 1)).fault?.kind, "buffer-too-large");
+});
+
+/**
+ * The protocol's own words, carried as DATA.
+ *
+ * A device's data is arbitrary text, so every marker this client looks for can appear inside a
+ * payload: the 1.0 end-of-message separator, something shaped like a chunk header, something shaped
+ * like the terminator. In chunked framing none of them means anything, because the reader counts
+ * bytes rather than scanning for markers, and these cases are what hold that.
+ */
+test("chunked framing carries the 1.0 separator, a chunk header and a terminator as ordinary data", () => {
+  for (const [what, payload] of [
+    ["the 1.0 separator", `<rpc-reply message-id="1"><data><d>${EOM}</d></data></rpc-reply>`],
+    ["something shaped like a chunk header", '<rpc-reply message-id="1"><data><d>\n#42\n</d></data></rpc-reply>'],
+    ["something shaped like the terminator", '<rpc-reply message-id="1"><data><d>\n##\n</d></data></rpc-reply>'],
+  ] as const) {
+    const step = new FrameReader("chunked", limits).feed(frame(payload, "chunked"));
+    expectEqual(step.messages, [payload]);
+    expectBe(step.fault, undefined, `${what} was treated as framing`);
+  }
+});
+
+/**
+ * In the 1.0 framing it DOES mean something, and that is the standard rather than a shortcoming:
+ * RFC 6242 section 4.3 states the sequence must not appear in the data, so a client that sees it
+ * has to take it as the end of the message. The case is here so the difference between the two
+ * framings is written down rather than discovered.
+ */
+test("end-of-message framing ends the message at the separator, even mid-element", () => {
+  const body = `<hello><capabilities><capability>urn:x:${EOM}:1.0</capability></capabilities></hello>`;
+  const step = new FrameReader("eom", limits).feed(body + EOM);
+  expectBe(step.messages.length, 2, "the separator in the data is a second boundary, by the standard");
+  expectBe(step.messages[0], "<hello><capabilities><capability>urn:x:");
+});
+
+/**
+ * MEASURED against the pattern this replaced, `/message-id="(\d+)"/`, which searched the whole
+ * message for a double-quoted integer.
+ *
+ * The first two cases are legal XML the old pattern did not match at all, and a reply it cannot
+ * read ends the session with "the device sent no message-id". The third is the one that matters: a
+ * reply whose own id is single quoted while its DATA carries the text `message-id="999"` matched
+ * the content, and the session then ended with "the device answered message-id 999 to request 7",
+ * accusing the device of this client's reading.
+ */
+test("the message-id is read from the first start tag, in either quote style, never from the data", () => {
+  expectBe(messageIdOf('<rpc-reply message-id="7"><data/></rpc-reply>'), "7");
+  expectBe(messageIdOf("<rpc-reply message-id='7'><data/></rpc-reply>"), "7");
+  expectBe(messageIdOf('<rpc-reply  message-id = "7" ><data/></rpc-reply>'), "7");
+  expectBe(
+    messageIdOf("<rpc-reply message-id='7'><data><note>message-id=\"999\"</note></data></rpc-reply>"),
+    "7",
+    "the data answered instead of the reply",
+  );
+  expectBe(messageIdOf('<rpc-reply><data><note>message-id="999"</note></data></rpc-reply>'), null);
+  expectBe(messageIdOf('<notification><eventTime>2026-10-13T20:00:00Z</eventTime></notification>'), null);
+  // An attribute whose NAME ends in message-id is a different attribute.
+  expectBe(messageIdOf('<rpc-reply x-message-id="9" message-id="7"><data/></rpc-reply>'), "7");
+});
+
+/**
+ * What may legally come before the first element, and a payload that can answer if it is not.
+ *
+ * MEASURED: the first version of this reader took the first `<`, so a reply led by an XML
+ * declaration or by a comment answered null, and every reply from such a device would have been
+ * refused for carrying no message-id. RFC 6241's examples are written with a declaration in front.
+ * The fixture does not send one, which is why only a test could find this.
+ *
+ * The last case is the one that holds the search to the first tag: with a space in front of it,
+ * `message-id="999"` inside the data is matchable, and a reader searching the whole message answers
+ * the content. Without the space it is not matchable at all, which is why the earlier version of
+ * this test could not tell the two readers apart.
+ */
+test("a declaration or a comment before the reply is skipped, and the data still cannot answer", () => {
+  expectBe(messageIdOf('<?xml version="1.0" encoding="UTF-8"?><rpc-reply message-id="7"><data/></rpc-reply>'), "7");
+  expectBe(messageIdOf("<!-- a device's note --><rpc-reply message-id='7'><data/></rpc-reply>"), "7");
+  expectBe(messageIdOf('\n  <rpc-reply message-id="7"><data/></rpc-reply>'), "7");
+  expectBe(
+    messageIdOf('<rpc-reply><data><note>the message-id="999" was echoed</note></data></rpc-reply>'),
+    null,
+    "a reader searching the whole message answers the data",
+  );
 });

@@ -77,6 +77,70 @@ export interface Hello {
 const CLIENT_BASES = ["urn:ietf:params:netconf:base:1.0", "urn:ietf:params:netconf:base:1.1"] as const;
 
 /** The client hello. Both base versions are offered, so the server picks the framing. */
+/**
+ * The first ELEMENT's start tag, skipping what may legally come before it.
+ *
+ * MEASURED against the first version of this function, which took the first `<`: a reply led by an
+ * XML declaration answered null, and so did one led by a comment, which means EVERY reply from such
+ * a device would have been refused for carrying no message-id. RFC 6241's own examples are written
+ * with `<?xml version="1.0" encoding="UTF-8"?>` in front, so this is a device away rather than a
+ * hypothetical; the fixture measured here does not send one, which is exactly why a test had to.
+ *
+ * A DOCTYPE is skipped here and refused where it matters: the reader port's contract refuses one
+ * outright, because RFC 6241 section 3.2 says it MUST NOT appear in NETCONF content.
+ */
+function firstElementTag(message: string): string | null {
+  let at = 0;
+  for (;;) {
+    while (at < message.length && /\s/.test(message[at] ?? "")) at += 1;
+    if (message[at] !== "<") return null;
+    const next = message[at + 1];
+    if (next === "?") {
+      const end = message.indexOf("?>", at);
+      if (end === -1) return null;
+      at = end + 2;
+      continue;
+    }
+    if (next === "!") {
+      const end = message.startsWith("<!--", at) ? message.indexOf("-->", at) + 2 : message.indexOf(">", at);
+      if (end < at) return null;
+      at = end + 1;
+      continue;
+    }
+    const close = message.indexOf(">", at);
+    return close === -1 ? null : message.slice(at, close + 1);
+  }
+}
+
+/**
+ * The `message-id` of a message, read from its FIRST element's start tag and nowhere else.
+ *
+ * Three things here are not decoration, and each one was measured against the pattern this
+ * replaced, `/message-id="(\d+)"/`:
+ *
+ * 1. XML allows an attribute value in single quotes, so `message-id='7'` is a legal reply. The old
+ *    pattern did not match it, and the session ended a healthy session saying the device sent no
+ *    message-id.
+ * 2. XML allows whitespace around the `=`, so `message-id = "7"` is legal and was not matched
+ *    either.
+ * 3. The old pattern searched the WHOLE message, so a reply whose own id was single quoted while
+ *    its DATA carried the text `message-id="999"` matched 999: the content. The session then ended
+ *    with "the device answered message-id 999 to request 7", which accuses the device of a fault
+ *    that is this client's reading. Limiting the search to the first start tag is what makes the
+ *    content unable to answer, and content is exactly what a device's data is.
+ *
+ * The value is compared as TEXT rather than parsed as a number, because the id in a reply is the
+ * one we sent echoed back, and an id that is not the text we sent is not our reply whatever it
+ * parses to.
+ */
+export function messageIdOf(message: string): string | null {
+  const tag = firstElementTag(message);
+  if (tag === null) return null;
+  const found = /\smessage-id\s*=\s*("([^"]*)"|'([^']*)')/.exec(tag);
+  const value = found?.[2] ?? found?.[3];
+  return value === undefined || value === "" ? null : value;
+}
+
 export function clientHello(): string {
   const caps = CLIENT_BASES.map((base) => `<capability>${base}</capability>`).join("");
   return (
@@ -236,8 +300,8 @@ export class NetconfSession {
       this.helloWaiter(message);
       return;
     }
-    const id = /message-id="(\d+)"/.exec(message);
-    if (!id?.[1]) {
+    const id = messageIdOf(message);
+    if (id === null) {
       if (message.includes("<notification")) {
         // This provider sends no create-subscription, so a notification means the session is
         // carrying somebody else's subscription or the device sent one unasked. Either way it is
@@ -253,12 +317,12 @@ export class NetconfSession {
     }
     const pending = this.pending;
     if (!pending) return;
-    if (Number(id[1]) !== pending.messageId) {
+    if (id !== String(pending.messageId)) {
       clearTimeout(pending.timer);
       this.pending = null;
       const end: SessionEnd = {
         reason: "protocol",
-        detail: `the device answered message-id ${id[1]} to request ${pending.messageId}`,
+        detail: `the device answered message-id ${id} to request ${pending.messageId}`,
       };
       this.end(end);
       pending.reject(new NetconfSessionError(end));
