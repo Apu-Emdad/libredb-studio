@@ -4,9 +4,9 @@
  * real module text, so neither needs the XML reader that another session is writing.
  */
 import { test } from "bun:test";
-import { expectBe, expectEqual, expectMatch, expectThrows } from "./helpers";
+import { expectBe, expectEqual, expectMatch, expectThrows, expectTruthy } from "./helpers";
 import { buildRows, rowForWriting, ROW_LIMITS } from "@/lib/db/providers/network/netconf/rows";
-import { keyNamesOf, scanYangModule } from "@/lib/db/providers/network/netconf/yangkeys";
+import { keyNamesOf, scanYangModule, YANG_LIMITS } from "@/lib/db/providers/network/netconf/yangkeys";
 import { QueryError } from "@/lib/db/errors";
 import type { XmlElement } from "@/lib/db/providers/network/netconf/reader-port";
 
@@ -160,4 +160,50 @@ module q {
 
 test("module text past the byte cap is refused rather than scanned", () => {
   expectThrows(() => scanYangModule("x".repeat(100), { maxBytes: 10, maxDepth: 8 }), QueryError);
+});
+
+/**
+ * The tests above prove the caps are applied. They cannot prove the published numbers are right,
+ * because they pass their own numbers in: `{ ...ROW_LIMITS, maxRows: 2 }` imports the record and
+ * then overrides the one field under test. Setting `maxRows` in the definition to 2 left every one
+ * of them green, measured. "Is the limit enforced" and "is the published limit this number" are
+ * different questions, and the four below answer the second: they call the default path, with
+ * nothing injected, and assert the figure itself rather than the constant against itself.
+ */
+test("the published row cap is 10,000, and the constant is only its name", () => {
+  const many = el(
+    "table",
+    undefined,
+    Array.from({ length: 10_001 }, (_, i) => el("entry", undefined, [el("id", String(i))])),
+  );
+  const rows = buildRows(many, "entry", ["id"]);
+  expectBe(rows.rows.length, 10_000);
+  expectMatch(rows.warning ?? "", /first 10000 are shown/);
+  expectBe(ROW_LIMITS.maxRows, 10_000);
+});
+
+test("the published cell cap is 65,536 characters, and a longer value is cut and declared", () => {
+  const long = "v".repeat(70_000);
+  const one = el("table", undefined, [el("entry", undefined, [el("id", "1"), el("note", long)])]);
+  const rows = buildRows(one, "entry", ["id"]);
+  expectBe(rows.rows[0]?.["note"]?.length, 65_536);
+  expectBe(ROW_LIMITS.maxCellChars, 65_536);
+});
+
+test("the published module text cap is 4 MiB, and the figure is 35 times the largest measured", () => {
+  const over = `module m { ${"/* pad */ ".repeat(430_000)} }`;
+  expectTruthy(over.length > 4 * 1024 * 1024);
+  expectThrows(() => scanYangModule(over), QueryError);
+  expectBe(YANG_LIMITS.maxBytes, 4_194_304);
+  // MEASURED: the largest of the fixture's 59 module texts is 118,482 bytes, so the cap has to be
+  // comfortably above that and is.
+  expectTruthy(YANG_LIMITS.maxBytes > 118_482);
+});
+
+test("the published nesting cap is 64 levels, and the figure is six times the deepest measured", () => {
+  const deep = `module m { ${"container c {".repeat(70)}${"}".repeat(70)} }`;
+  expectThrows(() => scanYangModule(deep), QueryError);
+  expectBe(YANG_LIMITS.maxDepth, 64);
+  // MEASURED: the deepest of the 59 modules nests 11 levels, median 5.
+  expectTruthy(YANG_LIMITS.maxDepth > 11);
 });

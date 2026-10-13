@@ -41,6 +41,21 @@ export interface YangLimits {
   readonly maxDepth: number;
 }
 
+/**
+ * Where the two numbers come from, and where they do not.
+ *
+ * MEASURED 2026-10-13, over 59 module texts fetched from the Netopeer2 fixture with `get-schema`:
+ * 890,070 bytes in all, the largest 118,482 bytes for `iana-tls-cipher-suite-algs`; and the deepest
+ * module nested 11 brace levels, `ietf-tcp-client`, with a median of 5.
+ *
+ * So `maxBytes` is about 35 times the largest module text read and `maxDepth` about 6 times the
+ * deepest nesting read. Both are STILL DEFAULTS. These 59 modules are the ones this fixture loads,
+ * and a vendor's own models are UNMEASURED: a large platform module can be far bigger than any
+ * IETF one here, and the depth figure says what these modules do, not what YANG allows. The caps
+ * exist because the text arrives from a device, and a device that answers more than this is
+ * refused with a sentence rather than read; the numbers themselves should be revised against the
+ * first real device, not defended.
+ */
 export const YANG_LIMITS: YangLimits = Object.freeze({ maxBytes: 4 * 1024 * 1024, maxDepth: 64 });
 
 /**

@@ -30,7 +30,17 @@ export type LoginFailure =
       readonly message: string;
     }
   | { readonly kind: "refused"; readonly message: string }
-  | { readonly kind: "host-key"; readonly message: string }
+  /**
+   * The two fingerprints are fields and not only words inside `message`.
+   *
+   * A caller that has to show, log or compare them cannot be made to parse a sentence, and neither
+   * can a test: a test that reads the fingerprints out of the message text asserts the wording
+   * rather than the fact, so it goes red when the sentence is reworded and stays green when the
+   * wrong key is reported. They are optional because this kind is also reached by classifying an
+   * error ssh2 raised on its own, where no comparison was made here and there is nothing to put in
+   * them.
+   */
+  | { readonly kind: "host-key"; readonly message: string; readonly expected?: string; readonly seen?: string }
   | { readonly kind: "transport"; readonly message: string };
 
 /** The one sentence every server side refusal gets. */

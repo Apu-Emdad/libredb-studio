@@ -13,7 +13,7 @@
 import { afterEach, test } from "bun:test";
 import type { LookupAddress } from "node:dns";
 import type { LookupFunction } from "node:net";
-import { expectBe, expectEqual, expectMatch, expectRejects, expectTruthy } from "./helpers";
+import { expectBe, expectEqual, expectMatch, expectNotBe, expectRejects, expectTruthy } from "./helpers";
 import { BLOCKED_HOST } from "@/lib/db/http/egress-policy";
 import {
   DialError,
@@ -44,7 +44,19 @@ interface Recorder {
   readonly subsystems: string[];
 }
 
-function ports(over: { hostKey?: Buffer; subsystemError?: unknown; connectError?: unknown } = {}): {
+function ports(
+  over: {
+    hostKey?: Buffer;
+    subsystemError?: unknown;
+    connectError?: unknown;
+    /**
+     * What ssh2 does after the verifier returns false: it raises its own "Host denied
+     * (verification failed)" a moment later. Without this the fake cannot show the two outcomes
+     * meeting, which is the whole question.
+     */
+    libraryErrorAfterRefusal?: boolean;
+  } = {},
+): {
   ssh: SshPort;
   socket: SocketPort;
   seen: Recorder;
@@ -70,6 +82,7 @@ function ports(over: { hostKey?: Buffer; subsystemError?: unknown; connectError?
         // depends on: a refusal here means nothing was sent.
         const accepted = options.hostVerifier(over.hostKey ?? DEVICE_KEY);
         if (accepted) ready?.();
+        else if (over.libraryErrorAfterRefusal) failed?.(new Error("Host denied (verification failed)"));
       });
       return {
         onReady: (handler) => {
@@ -160,8 +173,39 @@ test("a host key that does not match the pin ends the handshake, and the message
   expectTruthy(caught instanceof DialError);
   const failure = (caught as DialError).failure;
   expectBe(failure.kind, "host-key");
+  // The two fingerprints are read from fields, not out of the sentence. A test that regexed them
+  // out of the message would assert the wording: it would fail on a rewording that changed nothing
+  // and pass if the wrong key were reported in the right words. The sentence is checked too, but
+  // as a separate requirement below, because the user has to be told both causes.
+  expectTruthy(failure.kind === "host-key");
+  expectBe(failure.expected, PIN);
+  expectBe(failure.seen, fingerprintOf(Buffer.from("another host's key")));
+  expectNotBe(failure.expected, failure.seen);
   expectMatch(failure.message, /reinstalled/);
   expectMatch(failure.message, /another host/);
+});
+
+/**
+ * Returning false from the verifier makes ssh2 raise its own "Host denied (verification failed)",
+ * which arrives a moment later and classifies to this same kind carrying no fingerprints. Both
+ * orders end the dial the same way, and the one that carries the fields always wins, because it is
+ * built inside the verifier before it returns. That is why this is a fact and not a race.
+ */
+test("the host key failure carries its fields even when the library raises its own error after it", async () => {
+  const { ssh, socket } = ports({
+    hostKey: Buffer.from("another host's key"),
+    libraryErrorAfterRefusal: true,
+  });
+  let caught: unknown;
+  try {
+    await dialNetconf(config(), ssh, socket);
+  } catch (error) {
+    caught = error;
+  }
+  const failure = (caught as DialError).failure;
+  expectBe(failure.kind, "host-key");
+  expectTruthy(failure.kind === "host-key");
+  expectBe(failure.expected, PIN, "the library's own error must not be the one that settles this");
 });
 
 test("a refused host key has no second path: the session is never reached", async () => {

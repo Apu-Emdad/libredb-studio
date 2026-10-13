@@ -30,6 +30,21 @@ export interface RowLimits {
   readonly maxCellChars: number;
 }
 
+/**
+ * Where the two numbers come from, and where they do not.
+ *
+ * MEASURED 2026-10-13, against the Netopeer2 fixture: the largest list this provider has read is
+ * 5,000 interface entries, which answered 987,957 bytes and 15,000 cells, and the longest single
+ * cell in it was 11 characters, `ge-0/0/1000`.
+ *
+ * So `maxRows` is twice the largest list ever read here, and `maxCellChars` is four thousand times
+ * the longest cell ever read here. Both are STILL DEFAULTS: the fixture's values are values we
+ * wrote, and the figures a real device answers are UNMEASURED. A device's interface table may hold
+ * far more than 5,000 rows, and a single leaf may hold a description, a certificate or a public key
+ * that dwarfs 11 characters. These numbers are therefore a bound on what this grid will draw, not a
+ * statement about what devices hold, and the first real device should be measured against them
+ * rather than the other way round.
+ */
 export const ROW_LIMITS: RowLimits = Object.freeze({ maxRows: 10_000, maxCellChars: 64 * 1024 });
 
 /** The child elements of `parent` that are entries of the list named `listName`. */

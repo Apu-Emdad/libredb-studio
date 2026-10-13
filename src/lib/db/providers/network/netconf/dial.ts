@@ -113,11 +113,12 @@ export async function dialNetconf(config: DialConfig, ssh: SshPort, socket: Sock
 
   return await new Promise<Transport>((resolve, reject) => {
     let settled = false;
-    const fail = (error: unknown): void => {
+    const failWith = (failure: LoginFailure): void => {
       if (settled) return;
       settled = true;
-      reject(new DialError(classifyLoginFailure(error)));
+      reject(new DialError(failure));
     };
+    const fail = (error: unknown): void => failWith(classifyLoginFailure(error));
     const session = ssh.connect({
       sock: connected,
       username: config.username,
@@ -130,7 +131,19 @@ export async function dialNetconf(config: DialConfig, ssh: SshPort, socket: Sock
         if (mismatch === null) return true;
         // Refusing here stops the handshake before any user authentication packet, which is what
         // RFC 6242 section 6 asks for: the identity is verified before anything is sent.
-        fail(new Error(`Host denied (verification failed). ${mismatch.message}`));
+        //
+        // The failure is built here rather than thrown as an error and sorted back into a kind.
+        // Returning false makes ssh2 raise its own "Host denied (verification failed)", which
+        // arrives at `onError` a moment later and classifies to this same kind with no
+        // fingerprints in it. Both orders therefore end the dial the same way, and the one that
+        // carries the two fingerprints as fields is the one that always runs first, because this
+        // runs inside the verifier before it returns.
+        failWith({
+          kind: "host-key",
+          message: mismatch.message,
+          expected: mismatch.expected,
+          seen: mismatch.seen,
+        });
         return false;
       },
     });
