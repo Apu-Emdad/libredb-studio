@@ -238,3 +238,24 @@ export function snowflakeHostIdentity(text: string): string {
   const reading = readSnowflakeAccount(text);
   return reading.ok ? reading.host : text.trim().toLowerCase();
 }
+
+/** A region label of an account identifier: every Snowflake region id holds a hyphen (`eu-central-1`, `us-central1`). */
+const REGION_LABEL = /^[a-z0-9]+(?:-[a-z0-9]+)+$/;
+const CLOUD_LABELS: ReadonlySet<string> = new Set(["aws", "azure", "gcp"]);
+
+/**
+ * Whether `text` has the shape of an account identifier without its suffix: one name (`myorg-myacct`, `xy12345`),
+ * then optionally a region with its cloud, then optionally `privatelink`. A host on another domain, such as
+ * `attacker.com`, is not one, so a URL that carries a host rather than an identifier cannot pass for an account.
+ */
+export function isAccountIdentifier(text: string): boolean {
+  const [first, ...rest] = canonical(text).split(".");
+  if (!LABEL.test(first)) return false;
+  let at = 0;
+  if (rest[at] !== undefined && REGION_LABEL.test(rest[at])) {
+    at += 1;
+    if (rest[at] !== undefined && CLOUD_LABELS.has(rest[at])) at += 1;
+  }
+  if (rest[at] === "privatelink") at += 1;
+  return at === rest.length;
+}

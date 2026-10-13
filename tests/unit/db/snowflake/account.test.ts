@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   isSnowflakeHost,
   readSnowflakeAccount,
+  isAccountIdentifier,
   SNOWFLAKE_MAX_HOST_LABELS,
   SNOWFLAKE_FIELD_SENTENCES,
   snowflakeAccountRefusal,
@@ -297,5 +298,33 @@ describe("the Account hint, the dialog's check and connect() agree on every text
     }
     expect(snowflakeHostHint("  myorg-myacct ")).toBe("Studio connects to myorg-myacct.snowflakecomputing.com.");
     expect(snowflakeAccountRefusal("  myorg-myacct ")).toBeUndefined();
+  });
+});
+
+describe("isAccountIdentifier (SF-028)", () => {
+  test.each([
+    "xy12345",
+    "myorg-myacct",
+    "myorg-my_acct",
+    "xy12345.eu-central-1",
+    "xy12345.us-central1.gcp",
+    "xy12345.us-east-2.aws",
+    "xy12345.east-us-2.azure.privatelink",
+    "myorg-myacct.privatelink",
+    "XY12345.EU-CENTRAL-1.",
+  ])("%s is an account identifier", (text) => {
+    expect(isAccountIdentifier(text)).toBe(true);
+  });
+
+  test.each([
+    "attacker.com",
+    "evil.example.org",
+    "xy12345.aws",
+    "xy12345.eu-central-1.oracle",
+    "xy12345.privatelink.aws",
+    "my acct",
+    "",
+  ])("%s is not", (text) => {
+    expect(isAccountIdentifier(text)).toBe(false);
   });
 });

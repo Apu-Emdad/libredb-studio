@@ -1820,6 +1820,30 @@ describe("parseConnectionString: Snowflake URLs, decomposed into fields and neve
     );
   });
 
+  test.each([
+    "jdbc:snowflake://attacker.com/?user=x",
+    "JDBC:SNOWFLAKE://attacker.com/",
+    "jdbc:snowflake://myorg-myacct/?user=x",
+    "jdbc:snowflake://xy12345.eu-central-1/",
+    "snowflake://x@attacker.com/z",
+    "snowflake://x@evil.example.org/z",
+  ])("%s names a host outside Snowflake and is refused, not rewritten under its domain (SF-028)", (text) => {
+    expect(parseConnectionString(text)).toEqual({
+      type: "snowflake",
+      refusal: SNOWFLAKE_PASTE_SENTENCES.foreignHost,
+      discardPaste: true,
+    });
+  });
+
+  test.each([
+    ["snowflake://u@xy12345.eu-central-1/d", "xy12345.eu-central-1.snowflakecomputing.com"],
+    ["snowflake://u@xy12345.us-east-2.aws.privatelink/d", "xy12345.us-east-2.aws.privatelink.snowflakecomputing.com"],
+    ["snowflake://u@myorg-myacct.snowflakecomputing.com/d", "myorg-myacct.snowflakecomputing.com"],
+    ["jdbc:snowflake://xy12345.eu-central-1.snowflakecomputing.com/", "xy12345.eu-central-1.snowflakecomputing.com"],
+  ])("%s keeps its account", (text, host) => {
+    expect(parseConnectionString(text)!.host).toBe(host);
+  });
+
   test("an account the field would refuse refuses the paste with the account sentence", () => {
     const result = parseConnectionString("snowflake://u:PW@my%20acct/d");
     expect(result!.type).toBe("snowflake");
