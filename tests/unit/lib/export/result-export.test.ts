@@ -210,9 +210,27 @@ describe("buildResultExport — sql-insert", () => {
     expect(JSON.parse(buildResultExport("json", source({ rows, fields })).content)).toEqual([
       { a: "NaN", b: "Infinity", c: "-Infinity" },
     ]);
-    // `-Infinity` opens with a formula lead and is not a plain number, so the CSV formula
-    // guard prefixes it the way it does PostgreSQL's `numeric` text `-Infinity`.
-    expect(buildResultExport("csv", source({ rows, fields })).content).toBe('a,b,c\nNaN,Infinity,"\'-Infinity"');
+    // A number is never text, so `-Infinity` passes the formula guard as the number it is.
+    expect(buildResultExport("csv", source({ rows, fields })).content).toBe("a,b,c\nNaN,Infinity,-Infinity");
+  });
+
+  test("writes a -Infinity that crossed JSON as text plain in a numeric column, guarded in a text one", () => {
+    const rows = [{ f: "-Infinity", n: "-Infinity", d: "-Infinity", t: "-Infinity", u: "-Infinity" }];
+    const fields = ["f", "n", "d", "t", "u"];
+    const columnTypes = { f: "FLOAT", n: "numeric", d: "NUMBER(38, 2)", t: "text" };
+
+    for (const csvDelimiter of [",", ";", "\t"] as const) {
+      const file = buildResultExport("csv", source({ rows, fields, columnTypes, csvDelimiter }));
+      expect(file.content.split("\n")[1]).toBe(
+        ["-Infinity", "-Infinity", "-Infinity", `"'-Infinity"`, `"'-Infinity"`].join(csvDelimiter),
+      );
+    }
+    // Only the word itself: a formula in a numeric column is still neutralised.
+    const formula = buildResultExport(
+      "csv",
+      source({ rows: [{ f: "-1+1" }], fields: ["f"], columnTypes: { f: "double precision" } }),
+    );
+    expect(formula.content).toBe(`f\n"'-1+1"`);
   });
 
   test("writes a date as an ISO literal rather than as a locale string", () => {

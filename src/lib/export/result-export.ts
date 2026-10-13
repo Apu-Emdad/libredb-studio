@@ -1072,6 +1072,18 @@ function isFloatColumn(declared: unknown): boolean {
 }
 
 /**
+ * The exact numeric types that can hold an infinity, as the providers spell them: PostgreSQL's
+ * `numeric` (14 and later), Snowflake's `DECFLOAT`, and the `decimal`/`number` spellings, with or
+ * without a precision. Used only by the CSV writer, which lets `-Infinity` through its formula
+ * guard in a numeric column (`toCsv`).
+ */
+const EXACT_NUMERIC_TYPE = /^(numeric|decimal|number|decfloat)(\s*\(\s*\d+\s*(,\s*-?\d+\s*)?\))?$/i;
+
+function isNumericColumn(declared: unknown): boolean {
+  return isFloatColumn(declared) || (typeof declared === "string" && EXACT_NUMERIC_TYPE.test(declared.trim()));
+}
+
+/**
  * A value as SQL.
  *
  * Everything that is not a number, a bigint or a boolean is quoted through the
@@ -1173,7 +1185,12 @@ export function buildResultExport(format: ResultExportFormat, source: ResultExpo
   if (format === "csv") {
     // The charset is stated even though the download layer's byte order mark is what
     // Excel actually reads, because every other consumer reads the type.
-    return { content: toCsv(rows, columns, source.csvDelimiter), mimeType: "text/csv;charset=utf-8", extension: "csv" };
+    const numericColumns = new Set(columns.filter((column) => isNumericColumn(declaredTypeOf(source, column))));
+    return {
+      content: toCsv(rows, columns, source.csvDelimiter, numericColumns),
+      mimeType: "text/csv;charset=utf-8",
+      extension: "csv",
+    };
   }
 
   const sql = (content: string): ResultExportFile => ({ content, mimeType: "text/sql", extension: "sql" });
