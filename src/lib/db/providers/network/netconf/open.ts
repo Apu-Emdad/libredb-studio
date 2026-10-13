@@ -11,7 +11,7 @@
  */
 import { DatabaseConfigError } from "@/lib/db/errors";
 import type { DatabaseConnection } from "@/lib/db/types";
-import { dialNetconf, NETCONF_PORT, type SocketPort, type SshPort } from "./dial";
+import { dialNetconf, type SocketPort, type SshPort } from "./dial";
 import { nodeSocketPort, nodeSshPort } from "./node-ports";
 import type { XmlReaderPort } from "./reader-port";
 import { DeviceReaderImpl, type SessionPort } from "./reader";
@@ -119,5 +119,3 @@ export async function openNetconfReader(
     throw failure;
   }
 }
-
-export { NETCONF_PORT };

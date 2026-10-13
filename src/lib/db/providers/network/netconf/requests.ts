@@ -16,10 +16,10 @@ import { QueryError } from "@/lib/db/errors";
 
 import { buildKeyPath, encodeSegment, type PathNode } from "./keypath";
 
-export const BASE_NS = "urn:ietf:params:xml:ns:netconf:base:1.0";
-export const NMDA_NS = "urn:ietf:params:xml:ns:yang:ietf-netconf-nmda";
-export const DATASTORE_NS = "urn:ietf:params:xml:ns:yang:ietf-datastores";
-export const MONITORING_NS = "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring";
+const BASE_NS = "urn:ietf:params:xml:ns:netconf:base:1.0";
+const NMDA_NS = "urn:ietf:params:xml:ns:yang:ietf-netconf-nmda";
+const DATASTORE_NS = "urn:ietf:params:xml:ns:yang:ietf-datastores";
+const MONITORING_NS = "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring";
 
 export type ConfigDatastore = "running" | "candidate" | "startup";
 export type NmdaDatastore = "running" | "candidate" | "startup" | "operational" | "intended";
@@ -42,7 +42,7 @@ export interface SubtreeFilter {
  * 5000 on Netopeer2 and 211 bytes for one entry out of 5000 on Clixon, against roughly a megabyte
  * for the unfiltered read. This is the shape every grid page uses.
  */
-export function subtreeFilter(filter: SubtreeFilter): string {
+function subtreeFilter(filter: SubtreeFilter): string {
   return `<filter type="subtree">${filterBody(filter)}</filter>`;
 }
 
@@ -57,7 +57,7 @@ export function subtreeFilter(filter: SubtreeFilter): string {
  * their whole result, and no test caught it, because every test compared our own text with our own
  * expectation.
  */
-export function nmdaSubtreeFilter(filter: SubtreeFilter): string {
+function nmdaSubtreeFilter(filter: SubtreeFilter): string {
   return `<subtree-filter>${filterBody(filter)}</subtree-filter>`;
 }
 
@@ -90,7 +90,7 @@ export function rememberNamespace(module: string, namespace: string): void {
   NAMESPACES.set(module, namespace);
 }
 
-export function moduleNamespace(module: string): string {
+function moduleNamespace(module: string): string {
   const known = NAMESPACES.get(module);
   // A refusal the user reads, so it is a QueryError: see the note in keypath.ts.
   if (!known) throw new QueryError(`the YANG library of this connection does not name module ${module}`);
@@ -206,9 +206,3 @@ function assertDepth(depth: number): number {
   return depth;
 }
 
-/** The key path of a node chain, for a cursor or a row address. */
-export function addressOf(nodes: readonly PathNode[]): string {
-  return buildKeyPath(nodes);
-}
-
-export { encodeSegment };

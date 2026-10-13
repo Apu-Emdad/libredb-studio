@@ -58,7 +58,7 @@ export function isSensitiveLeaf(node: string): SensitiveCheck {
 }
 
 /** True when a path runs through a container whose whole subtree is secret bearing. */
-export function isSensitivePath(path: readonly string[]): SensitiveCheck {
+function isSensitivePath(path: readonly string[]): SensitiveCheck {
   for (const node of path) {
     const name = localName(node);
     const hit = SENSITIVE_SUBTREES.find((subtree) => subtree === name);

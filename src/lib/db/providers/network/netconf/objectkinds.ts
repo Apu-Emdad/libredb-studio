@@ -37,25 +37,6 @@ import type { KeyScanCapability, ObjectKindSpec } from "@/lib/db/types";
  * `KeyScanCapability` that this provider sets, and no more.
  */
 
-export type ObjectKindDeclaration = ObjectKindSpec;
-
-export interface KeyScanDeclarationShape {
-  readonly defaultCount: number;
-  readonly maxCount: number;
-  readonly separator: string;
-  readonly cursor: "opaque";
-  readonly pattern: "prefix";
-  readonly totalScope: "none";
-  /**
-   * `rootKind` is absent on purpose (decisions K-18 and K-35). It names the object kind whose rows
-   * stand for the first segment of a key space, which only an engine with no container level has.
-   * This engine addresses the key space through its container levels, the datastore and the module,
-   * so no tree row stands for a folder of the walk.
-   */
-  readonly levels: Record<string, never>;
-}
-
-/** The module's YANG text opens in the Source tab, which is why the object kind declares a source. */
 export const NETCONF_OBJECT_KINDS: readonly ObjectKindSpec[] = Object.freeze([
   {
     id: "node",

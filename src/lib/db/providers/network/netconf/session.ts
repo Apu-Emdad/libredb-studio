@@ -281,4 +281,3 @@ export class NetconfSession {
   }
 }
 
-export { EOM };
