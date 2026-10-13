@@ -1,3 +1,5 @@
+import type { KeyScanCapability, ObjectKindSpec } from "@/lib/db/types";
+
 /**
  * Who enumerates what, for the `netconf` provider, phase 1 (issue #1724), requirement Y-S6.
  *
@@ -35,16 +37,11 @@
  * `KeyScanCapability` that this provider sets, and no more.
  */
 
-export interface ObjectKindDeclaration {
-  readonly id: string;
-  readonly label: string;
-  /** Absent: the object surface enumerates this kind. `"key-browser"`: only the Keys panel does. */
-  readonly enumeratedBy?: "key-browser";
-  readonly hasSource?: true;
-  readonly sourceLanguage?: "yang" | "xml" | "json";
-}
+export type ObjectKindDeclaration = ObjectKindSpec;
 
-export interface KeyScanDeclaration {
+export interface KeyScanDeclarationShape {
+  readonly defaultCount: number;
+  readonly maxCount: number;
   readonly separator: string;
   readonly cursor: "opaque";
   readonly pattern: "prefix";
@@ -59,45 +56,50 @@ export interface KeyScanDeclaration {
 }
 
 /** The module's YANG text opens in the Source tab, which is why the object kind declares a source. */
-export const NETCONF_OBJECT_KINDS: readonly ObjectKindDeclaration[] = Object.freeze([
-  Object.freeze({
+export const NETCONF_OBJECT_KINDS: readonly ObjectKindSpec[] = Object.freeze([
+  {
     id: "node",
-    label: "Top-level node",
+    role: "relation",
+    label: "Node",
+    labelPlural: "Nodes",
+    hasColumns: true,
     hasSource: true,
     sourceLanguage: "yang",
-  }),
-  Object.freeze({
+  },
+  {
     id: "key",
+    role: "config",
     label: "Key",
+    labelPlural: "Keys",
     enumeratedBy: "key-browser",
     hasSource: true,
     sourceLanguage: "xml",
-  }),
-] as const);
+  },
+]);
 
 /**
  * The key scan declaration. The separator is one UTF-16 code unit, which the level contract
  * requires, and the cursor is opaque because it carries a key path rather than a number.
  */
-export const NETCONF_KEY_SCAN: KeyScanDeclaration = Object.freeze({
+export const NETCONF_KEY_SCAN: KeyScanCapability = Object.freeze<KeyScanCapability>({
+  // A level page holds at most this many entries; the server answers a level unpaged and Studio
+  // pages it, so the cap is Studio's and not the device's.
+  defaultCount: 500,
+  maxCount: 1_000,
   separator: "/",
   cursor: "opaque",
   pattern: "prefix",
   totalScope: "none",
-  levels: Object.freeze({}) as Record<string, never>,
+  levels: {},
 });
 
 /** The kinds the object surface enumerates: the repository's `enumerableKinds()`, locally. */
-export function enumerableKinds(
-  kinds: readonly ObjectKindDeclaration[] = NETCONF_OBJECT_KINDS,
-): readonly ObjectKindDeclaration[] {
+export function enumerableKinds(kinds: readonly ObjectKindSpec[] = NETCONF_OBJECT_KINDS): readonly ObjectKindSpec[] {
   return kinds.filter((kind) => kind.enumeratedBy === undefined);
 }
 
 /** The one kind the Keys panel enumerates: the repository's `keyBrowserKind()`, locally. */
-export function keyBrowserKind(
-  kinds: readonly ObjectKindDeclaration[] = NETCONF_OBJECT_KINDS,
-): ObjectKindDeclaration | undefined {
+export function keyBrowserKind(kinds: readonly ObjectKindSpec[] = NETCONF_OBJECT_KINDS): ObjectKindSpec | undefined {
   return kinds.find((kind) => kind.enumeratedBy === "key-browser");
 }
 
@@ -105,7 +107,7 @@ export function keyBrowserKind(
  * The three rules the repository's own census enforces, asserted here as well so that a wrong
  * declaration fails in this directory rather than after a connection opens.
  */
-export function assertDeclarationIsSound(kinds: readonly ObjectKindDeclaration[] = NETCONF_OBJECT_KINDS): void {
+export function assertDeclarationIsSound(kinds: readonly ObjectKindSpec[] = NETCONF_OBJECT_KINDS): void {
   const browsers = kinds.filter((kind) => kind.enumeratedBy === "key-browser");
   if (browsers.length !== 1) {
     throw new Error(`exactly one kind is enumerated by the Keys panel, found ${browsers.length}`);
@@ -117,7 +119,7 @@ export function assertDeclarationIsSound(kinds: readonly ObjectKindDeclaration[]
   if (NETCONF_KEY_SCAN.levels === undefined) {
     throw new Error("a key-browser kind needs a keyScan declaration with levels");
   }
-  if ("rootKind" in NETCONF_KEY_SCAN.levels) {
+  if (NETCONF_KEY_SCAN.levels.rootKind !== undefined) {
     throw new Error("rootKind belongs to an engine with no container level, and this engine has two");
   }
   if (enumerableKinds(kinds).some((kind) => kind.id === browser?.id)) {

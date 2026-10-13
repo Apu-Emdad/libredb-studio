@@ -6,6 +6,7 @@ import { test } from "bun:test";
 import { expectBe, expectEqual, expectMatch, expectRejects, expectThrows } from "./helpers";
 import { NetconfProvider, parseReadRequest, type DeviceReader } from "@/lib/db/providers/network/netconf/provider";
 import { RefusedError } from "@/lib/db/providers/network/netconf/provider-types";
+import { NetconfProvider as RealNetconfProvider } from "@/lib/db/providers/network/netconf/index";
 import type { NetconfSession } from "@/lib/db/providers/network/netconf/session";
 
 const facts = {
@@ -142,4 +143,30 @@ test("a read request with no datastore or no path is refused, never defaulted", 
 test("nothing answers before connect", async () => {
   const p = provider();
   await expectRejects(p.listContainers(), /not open/);
+});
+
+/**
+ * The cost of shipping the class before the registration, held by a test rather than by a comment.
+ *
+ * `resolveTabType` gives every provider whose `queryLanguage` is `"json"` and which declares no
+ * dialect of its own MongoDB's tab type, so until the registration lands this provider's console
+ * reads as MongoDB's. That is a known, stated cost. What must not happen is a dialect appearing
+ * here quietly before the registration is ready, because the dialect name has to be added to three
+ * registries in the same change or the build breaks. So the absence is asserted: the day it
+ * changes, it changes on purpose.
+ */
+test("no query dialect is declared yet, and the cost of that is stated rather than hidden", () => {
+  const capabilities = new RealNetconfProvider({ type: "mongodb", name: "n", host: "h" } as never).getCapabilities();
+  expectBe(capabilities.queryDialect, undefined);
+  expectBe(capabilities.queryLanguage, "json");
+  expectBe(capabilities.enforcesReadOnly, true);
+  expectBe(capabilities.supportsMaintenance, false);
+});
+
+test("the container levels are declared as the datastore and then the module", () => {
+  const capabilities = new RealNetconfProvider({ type: "mongodb", name: "n", host: "h" } as never).getCapabilities();
+  expectEqual(
+    capabilities.containerLevels?.map((level) => level.label),
+    ["Datastore", "Module"],
+  );
 });

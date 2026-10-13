@@ -327,19 +327,25 @@ test("the declaration meets the three rules the repository's own census enforces
   assertDeclarationIsSound();
   // A kind the Keys panel lists while leaving the field absent is walked by the object surface too,
   // which compiles and passes every other test, so it is asserted here.
-  expectThrows(() => assertDeclarationIsSound([{ id: "key", label: "Key", hasSource: true }]));
+  expectThrows(() =>
+    assertDeclarationIsSound([{ id: "key", role: "config", label: "Key", labelPlural: "Keys", hasSource: true }]),
+  );
   expectThrows(() =>
     assertDeclarationIsSound([
-      { id: "a", label: "A", enumeratedBy: "key-browser", hasSource: true },
-      { id: "b", label: "B", enumeratedBy: "key-browser", hasSource: true },
+      { id: "a", role: "config", label: "A", labelPlural: "As", enumeratedBy: "key-browser", hasSource: true },
+      { id: "b", role: "config", label: "B", labelPlural: "Bs", enumeratedBy: "key-browser", hasSource: true },
     ]),
   );
-  expectThrows(() => assertDeclarationIsSound([{ id: "key", label: "Key", enumeratedBy: "key-browser" }]));
+  expectThrows(() =>
+    assertDeclarationIsSound([
+      { id: "key", role: "config", label: "Key", labelPlural: "Keys", enumeratedBy: "key-browser" },
+    ]),
+  );
 });
 
 test("rootKind is absent, because this engine addresses its key space through container levels", () => {
-  expectBe("rootKind" in NETCONF_KEY_SCAN.levels, false);
-  expectBe(NETCONF_KEY_SCAN.separator.length, 1);
+  expectBe(NETCONF_KEY_SCAN.levels?.rootKind, undefined);
+  expectBe(NETCONF_KEY_SCAN.separator?.length, 1);
   expectBe(NETCONF_KEY_SCAN.pattern, "prefix");
   expectBe(NETCONF_KEY_SCAN.totalScope, "none");
 });
