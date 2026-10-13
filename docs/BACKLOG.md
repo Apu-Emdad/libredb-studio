@@ -28,7 +28,7 @@ None of it is a GitHub issue.
 **Sections**
 
 - [SQL statement reading](#sql-statement-reading) — S2-S9 · 6
-- [Drivers and connections](#drivers-and-connections) — D1-D348, U17 · 247
+- [Drivers and connections](#drivers-and-connections) — D1-D349, U17 · 248
 - [Value interpolation](#value-interpolation) — V1
 - [Row editing](#row-editing) — R1–R3 · 3
 - [Studio UI and query execution](#studio-ui-and-query-execution) — X2-X27, U2-U139 · 127
@@ -3552,6 +3552,14 @@ Its grant parser and engine admission are pure functions that the provider suite
 Found 2026-10-13 while reviewing #1629.
 
 **Done when:** the profile lives in its own module under a `sql/mysql/` directory, its pure checks have unit tests of their own, and `tests/integration/db/mysql-provider.test.ts` and `tests/live/mysql-agent-profile.ts` pass unchanged.
+
+### D349. Snowflake's first result partition is read uncompressed
+
+The status answer that carries partition 0 inline goes through the shared text transport, which asks every server for `accept-encoding: identity` and refuses a compressed body (`src/lib/db/http/node-transport.ts`), so Snowflake sends it uncompressed.
+Measured 2026-10-14 from the development host for `SELECT 2 AS ID, REPEAT('ğ', 4000000) AS S`: 8,001,156 bytes in 5.5 s uncompressed, 36,040 bytes in 1.4 s with `accept-encoding: gzip`; Studio's own processing of the same 8 MB answer over loopback took 0.36 to 0.48 s. The E2E sweep's 11 to 17 s for that cell (SF-037), against 3.3 s for a raw fetch that accepts gzip, is this transfer, not decoding.
+The identity rule is the transport's bound on what it parses, so it was not loosened for one provider.
+
+**Done when:** the Snowflake provider reads the status answer that carries partition 0 compressed, through a streaming gunzip under the same byte bound as a partition (the byte transport and `rows.ts` already decode gzip partitions that way), and an 8 MB text cell measures within a small factor of a raw gzip fetch.
 
 ## Value interpolation
 

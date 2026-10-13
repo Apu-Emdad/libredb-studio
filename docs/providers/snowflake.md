@@ -434,6 +434,8 @@ A `SELECT` that ends in its own bound keeps it and gets none appended, and that 
 Snowflake parses the bound with the statement, so a syntax error in the user's text can be reported at it (`unexpected 'LIMIT'`, `unexpected '501'`); such an error gets the sentence of [Where the bound is placed](../editor/query-optimization.md#an-error-that-names-the-bound) after Snowflake's message.
 Export writes the rows the grid shows, in the browser, and sends no statement; over a cut or limited result the export menu reads "Writes the <n> rows shown." with "The result was cut, so the file is not the whole result."
 In practice an unlimited run shows about 10,000 to 16,700 rows of typical widths.
+The first partition arrives uncompressed, because Studio's HTTP transport asks every server for an uncompressed body; later partitions arrive gzip-compressed as Snowflake stores them.
+A large first partition is therefore bounded by the network: measured on 2026-10-14, one 8 MB text cell took 5.5 s to arrive uncompressed against 1.4 s compressed (36 KB), while Studio decoded and returned it in under half a second ([BACKLOG](../BACKLOG.md) D349).
 
 | Wire type | Cell | Column type |
 | --- | --- | --- |
