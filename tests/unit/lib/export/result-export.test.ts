@@ -2051,6 +2051,23 @@ describe("buildResultExport: Snowflake's rows and types", () => {
     );
   });
 
+  test("a year outside 1 to 9999 is written, never skipped (SF-008)", () => {
+    const file = buildResultExport(
+      "sql-insert",
+      source({
+        rows: [{ d: "-0002-06-01" }, { d: "10000-01-01" }],
+        fields: ["d"],
+        tabName: "t",
+        dialect: "snowflake",
+        columnTypes: { d: "DATE" },
+      }),
+    );
+    expect(file.content).toBe(
+      `INSERT INTO t ("d") SELECT DATEADD(DAY, -146097, TO_DATE('0398-06-01', 'YYYY-MM-DD'));\n` +
+        `INSERT INTO t ("d") SELECT TO_DATE('10000-01-01', 'YYYY-MM-DD');`,
+    );
+  });
+
   test("a VECTOR column, as the SQL API reports it, is cast to the dimension its value spells", () => {
     const file = buildResultExport(
       "sql-insert",

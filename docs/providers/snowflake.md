@@ -462,7 +462,10 @@ To see an LTZ value at the session's own offset, cast it: `ltz_col::TIMESTAMP_TZ
 Dates and timestamps follow the proleptic Gregorian calendar with astronomical years, as Snowflake counts its days.
 Snowflake stores years outside 1 to 9999, and Studio shows such a value with every digit of its year and a `-` at or before year 0, never refusing it: `10000-01-01`, and `-0002-06-01` for 3 BC, which `'-0002-06-01'::DATE` reads back to the same day.
 Snowflake's own text for that date, `DATE::VARCHAR`, is `0003-06-01`, with no sign.
-The SQL INSERT export writes such a cell's row as a skipped-row comment naming the column, since its `TO_DATE` mask reads four-digit years only; CSV and JSON write the text.
+The SQL INSERT export writes such a cell too, never skipping its row: the `TO_*` mask reads a year of any length, so `10000-01-01` is `TO_DATE('10000-01-01', 'YYYY-MM-DD')`, but no mask or cast reads a signed timestamp year (100097, 100035), so a year before 1 is written whole 400-year eras later and moved back by their exact day count, `DATEADD(DAY, -146097, TO_DATE('0398-06-01', 'YYYY-MM-DD'))` for `-0002-06-01`; an LTZ cell is moved as a `TIMESTAMP_TZ` at `+00:00` and cast back to `TIMESTAMP_LTZ`, so the session's zone never takes part.
+`DATEADD(DAY, ...)` is used because `DATEADD(YEAR, ...)` moves a February 29 to the 28th.
+Replayed on the trial on 2026-10-14 under the session zones UTC and `America/Los_Angeles`, DATE, TIMESTAMP_NTZ, TIMESTAMP_LTZ and TIMESTAMP_TZ cells at years -2, -400 (February 29), -10000, 10000 and 252026 came back as the same day counts, instants and offsets.
+CSV and JSON write the text.
 
 The trial capture (section 13) reports a GEOGRAPHY, GEOMETRY, MAP or FILE column as `object` and a UUID column as `text`; a GEOGRAPHY or GEOMETRY entry also carries `extTypeName`, so a result types those two `GEOGRAPHY` and `GEOMETRY`, and MAP, FILE and UUID `OBJECT` and `VARCHAR`; describe shows the catalog's spelling from `SHOW COLUMNS`.
 A CHAR(n) column is reported as `text` of length n, exactly as a VARCHAR(n) is, so a result types it `VARCHAR(n)`: Snowflake stores CHAR as VARCHAR, and both hold the same values.

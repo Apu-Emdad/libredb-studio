@@ -388,12 +388,52 @@ describe("typedLiteral: snowflake (provisional until a replay on an account)", (
     );
   });
 
+  // SF-008: replayed on the trial on 2026-10-14, each form below read back the day count or instant Snowflake sent.
+  test("a year past 9999 goes through the same mask, which reads every digit of the year", () => {
+    expect(typedLiteral("10000-01-01", "DATE", "snowflake", scalar)).toBe("TO_DATE('10000-01-01', 'YYYY-MM-DD')");
+    expect(typedLiteral("252026-03-04 05:06:07.5", "TIMESTAMP_NTZ(1)", "snowflake", scalar)).toBe(
+      "TO_TIMESTAMP_NTZ('252026-03-04 05:06:07.5', 'YYYY-MM-DD HH24:MI:SS.FF1')",
+    );
+    expect(typedLiteral("10000-01-01 01:02:03+00:00", "TIMESTAMP_LTZ(0)", "snowflake", scalar)).toBe(
+      "TO_TIMESTAMP_LTZ('10000-01-01 01:02:03+00:00', 'YYYY-MM-DD HH24:MI:SSTZH:TZM')",
+    );
+    expect(typedLiteral("10000-01-01 01:02:03-07:00", "TIMESTAMP_TZ(0)", "snowflake", scalar)).toBe(
+      "TO_TIMESTAMP_TZ('10000-01-01 01:02:03-07:00', 'YYYY-MM-DD HH24:MI:SSTZH:TZM')",
+    );
+  });
+
+  test("a year before 1 is written whole 400-year eras later and moved back by their exact day count", () => {
+    expect(typedLiteral("0000-02-29", "DATE", "snowflake", scalar)).toBe("TO_DATE('0000-02-29', 'YYYY-MM-DD')");
+    expect(typedLiteral("-0002-06-01", "DATE", "snowflake", scalar)).toBe(
+      "DATEADD(DAY, -146097, TO_DATE('0398-06-01', 'YYYY-MM-DD'))",
+    );
+    expect(typedLiteral("-0400-02-29", "DATE", "snowflake", scalar)).toBe(
+      "DATEADD(DAY, -146097, TO_DATE('0000-02-29', 'YYYY-MM-DD'))",
+    );
+    expect(typedLiteral("-10000-12-31", "DATE", "snowflake", scalar)).toBe(
+      "DATEADD(DAY, -3652425, TO_DATE('0000-12-31', 'YYYY-MM-DD'))",
+    );
+    expect(typedLiteral("-0002-06-01 12:34:56.876543211", "TIMESTAMP_NTZ(9)", "snowflake", scalar)).toBe(
+      "DATEADD(DAY, -146097, TO_TIMESTAMP_NTZ('0398-06-01 12:34:56.876543211', 'YYYY-MM-DD HH24:MI:SS.FF9'))",
+    );
+    expect(typedLiteral("-0401-03-01 23:59:59-07:00", "TIMESTAMP_TZ(0)", "snowflake", scalar)).toBe(
+      "DATEADD(DAY, -292194, TO_TIMESTAMP_TZ('0399-03-01 23:59:59-07:00', 'YYYY-MM-DD HH24:MI:SSTZH:TZM'))",
+    );
+    // An LTZ cell is a UTC instant, so it is moved as a TIMESTAMP_TZ at +00:00, where no session zone applies.
+    expect(typedLiteral("-0002-06-01 12:34:56.123+00:00", "TIMESTAMP_LTZ(3)", "snowflake", scalar)).toBe(
+      "DATEADD(DAY, -146097, TO_TIMESTAMP_TZ('0398-06-01 12:34:56.123+00:00', 'YYYY-MM-DD HH24:MI:SS.FF3TZH:TZM'))" +
+        "::TIMESTAMP_LTZ",
+    );
+  });
+
   test("a temporal cell not in the decoder's form, or not text, is refused", () => {
     expect(() => typedLiteral("12/10/2026", "DATE", "snowflake", scalar)).toThrow(
       "a DATE that is not in the form Studio reads",
     );
     expect(() => typedLiteral(new Date(0), "TIMESTAMP_NTZ(3)", "snowflake", scalar)).toThrow(UnwritableValue);
     expect(() => typedLiteral("2026-10-12 01:02:03", "TIMESTAMP_TZ(0)", "snowflake", scalar)).toThrow(UnwritableValue);
+    expect(() => typedLiteral("999-01-01", "DATE", "snowflake", scalar)).toThrow(UnwritableValue);
+    expect(() => typedLiteral("--0002-06-01", "DATE", "snowflake", scalar)).toThrow(UnwritableValue);
   });
 
   test("a DECFLOAT text is a quoted literal cast to DECFLOAT, never a bare number (SF-003)", () => {
