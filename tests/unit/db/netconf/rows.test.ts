@@ -207,3 +207,49 @@ test("the published nesting cap is 64 levels, and the figure is six times the de
   // MEASURED: the deepest of the 59 modules nests 11 levels, median 5.
   expectTruthy(YANG_LIMITS.maxDepth > 11);
 });
+
+/**
+ * Every cap, at the value it allows and the first value it refuses.
+ *
+ * A test that only exceeds a cap cannot see the cap move upwards: raising maxRows to a million
+ * leaves "10,001 entries were cut" true. A test that only stays under it cannot see it move
+ * downwards. The pairs below pin both sides, so the threshold itself is held and not just its
+ * direction.
+ */
+test("the row cap allows exactly 10,000 and cuts at 10,001", () => {
+  const listOf = (count: number) =>
+    el(
+      "table",
+      undefined,
+      Array.from({ length: count }, (_, i) => el("entry", undefined, [el("id", String(i))])),
+    );
+  const atCap = buildRows(listOf(10_000), "entry", ["id"]);
+  expectBe(atCap.rows.length, 10_000);
+  expectBe(atCap.warning, undefined, "a list exactly at the cap is complete, so nothing is declared");
+  const over = buildRows(listOf(10_001), "entry", ["id"]);
+  expectBe(over.rows.length, 10_000);
+  expectMatch(over.warning ?? "", /10000/);
+});
+
+test("the cell cap keeps 65,536 characters and cuts 65,537", () => {
+  const cellOf = (length: number) =>
+    el("table", undefined, [el("entry", undefined, [el("id", "1"), el("note", "v".repeat(length))])]);
+  expectBe(buildRows(cellOf(65_536), "entry", ["id"]).rows[0]?.["note"]?.length, 65_536);
+  expectBe(buildRows(cellOf(65_537), "entry", ["id"]).rows[0]?.["note"]?.length, 65_536);
+});
+
+test("the nesting cap allows 64 levels and refuses 65", () => {
+  // The module's own brace is one level, so 63 containers reach 64 and 64 containers reach 65.
+  const nested = (containers: number) =>
+    `module m { ${"container c {".repeat(containers)}${"}".repeat(containers)} }`;
+  expectBe(scanYangModule(nested(63)).lists.length, 0, "63 containers inside the module is 64 levels");
+  expectThrows(() => scanYangModule(nested(64)), QueryError);
+});
+
+test("the module text cap allows exactly 4 MiB and refuses one character more", () => {
+  const head = "module m { } ";
+  const atCap = head + " ".repeat(4 * 1024 * 1024 - head.length);
+  expectBe(atCap.length, 4 * 1024 * 1024);
+  expectBe(scanYangModule(atCap).lists.length, 0);
+  expectThrows(() => scanYangModule(`${atCap} `), QueryError);
+});

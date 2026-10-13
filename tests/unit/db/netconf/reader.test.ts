@@ -9,7 +9,7 @@
 import { test } from "bun:test";
 import { expectBe, expectEqual, expectMatch, expectRejects, expectTruthy } from "./helpers";
 import { DeviceReaderImpl, type SessionPort } from "@/lib/db/providers/network/netconf/reader";
-import type { XmlElement, XmlReaderPort } from "@/lib/db/providers/network/netconf/reader-port";
+import { READER_LIMITS, type XmlElement, type XmlReaderPort } from "@/lib/db/providers/network/netconf/reader-port";
 import type { NetconfRequest } from "@/lib/db/providers/network/netconf/requests";
 
 function el(name: string, text?: string, children: XmlElement[] = []): XmlElement {
@@ -266,4 +266,29 @@ test("closing the reader closes the session once", async () => {
   await reader.close();
   expectBe(h.closed.count, 1);
   expectTruthy(reader.facts.sessionId === "6");
+});
+
+/**
+ * The published limits have to REACH the parser, not merely exist.
+ *
+ * A reader that invented its own numbers would pass every test above, because none of them look at
+ * what the port was handed. The declaration and the call are two different facts, and this is the
+ * second one.
+ */
+test("the reader hands the published limits to the parser, not numbers of its own", async () => {
+  const seen: unknown[] = [];
+  const h = harness([LIBRARY]);
+  const recording: XmlReaderPort = {
+    parse: (message, limits) => {
+      seen.push(limits);
+      return h.xml.parse(message, limits);
+    },
+  };
+  await DeviceReaderImpl.open(h.session, recording, { sessionId: "6", capabilities: [] });
+  expectBe(seen.length, 1);
+  expectBe(seen[0], READER_LIMITS);
+  // And the record itself is the one published, with the figures it publishes.
+  expectBe(READER_LIMITS.maxDepth, 64);
+  expectBe(READER_LIMITS.maxElements, 500_000);
+  expectBe(READER_LIMITS.maxTextBytes, 4_194_304);
 });

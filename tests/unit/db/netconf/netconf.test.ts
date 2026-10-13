@@ -9,7 +9,7 @@ import { QueryError } from "@/lib/db/errors";
 import { READER_LIMITS } from "@/lib/db/providers/network/netconf/reader-port";
 import { expectBe, expectEqual, expectMatch, expectNotBe, expectNotEqual, expectThrows, expectTruthy } from "./helpers";
 import { readFile } from "node:fs/promises";
-import { EOM, FrameReader, frame } from "@/lib/db/providers/network/netconf/framing";
+import { EOM, FrameReader, frame, MAX_CHUNK_SIZE } from "@/lib/db/providers/network/netconf/framing";
 import {
   buildKeyPath,
   compareUtf8,
@@ -523,4 +523,38 @@ test("the reader limits are above what the measured replies actually need", () =
   expectTruthy(READER_LIMITS.maxDepth >= 16);
   // The byte cap has to clear the largest module text measured through get-schema, 118,482 bytes.
   expectTruthy(READER_LIMITS.maxTextBytes >= 118_482);
+});
+
+/**
+ * The framing caps, at the value they allow and the first they refuse.
+ *
+ * The chunk size range is the standard's, not ours: RFC 6242 section 4.2 gives the chunk size as 1
+ * to 4294967295, so both ends are held against those figures rather than against the constant.
+ */
+test("a chunk size of 1 is read and 4294967296 is refused, which are the standard's two ends", () => {
+  const one = new FrameReader("chunked", limits).feed("\n#1\nx\n##\n");
+  expectEqual(one.messages, ["x"]);
+  expectBe(new FrameReader("chunked", limits).feed(`\n#${MAX_CHUNK_SIZE}\n`).fault, undefined);
+  expectBe(
+    new FrameReader("chunked", limits).feed(`\n#${MAX_CHUNK_SIZE + 1}\n`).fault?.kind,
+    "chunk-size-out-of-range",
+  );
+  expectBe(MAX_CHUNK_SIZE, 4_294_967_295);
+});
+
+test("a message exactly at the cap is read and one byte more is refused, in both framings", () => {
+  const cap = 256;
+  const tight = { maxMessageBytes: cap, maxBufferBytes: 1_048_576 };
+  const atCap = "m".repeat(cap);
+  expectEqual(new FrameReader("eom", tight).feed(frame(atCap, "eom")).messages, [atCap]);
+  expectBe(new FrameReader("eom", tight).feed(frame(`${atCap}m`, "eom")).fault?.kind, "message-too-large");
+  expectEqual(new FrameReader("chunked", tight).feed(frame(atCap, "chunked")).messages, [atCap]);
+  expectBe(new FrameReader("chunked", tight).feed(frame(`${atCap}m`, "chunked")).fault?.kind, "message-too-large");
+});
+
+test("the buffer cap allows its exact size and refuses one byte past it", () => {
+  const cap = 128;
+  const tight = { maxMessageBytes: 1_048_576, maxBufferBytes: cap };
+  expectBe(new FrameReader("eom", tight).feed("b".repeat(cap)).fault, undefined);
+  expectBe(new FrameReader("eom", tight).feed("b".repeat(cap + 1)).fault?.kind, "buffer-too-large");
 });

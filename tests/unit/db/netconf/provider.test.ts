@@ -12,6 +12,7 @@ import { expectBe, expectEqual, expectRejects, expectTruthy } from "./helpers";
 import { NetconfProvider, parseReadRequest, type DeviceReader } from "@/lib/db/providers/network/netconf/index";
 import type { DatabaseConnection } from "@/lib/db/types";
 import { QueryError, TimeoutError } from "@/lib/db/errors";
+import { NETCONF_KEY_SCAN, NETCONF_OBJECT_KINDS } from "@/lib/db/providers/network/netconf/objectkinds";
 import { encodeSegment } from "@/lib/db/providers/network/netconf/keypath";
 import { buildRpc } from "@/lib/db/providers/network/netconf/requests";
 
@@ -313,4 +314,16 @@ test("a key value that cannot be spelled as a path is refused as a QueryError to
     caught = error;
   }
   expectTruthy(caught instanceof QueryError);
+});
+
+/**
+ * The key scan declaration has to REACH the capabilities the application reads. The declaration's
+ * own fields are held in `netconf.test.ts`; what is held here is that the provider publishes that
+ * record and not another one, because a provider that built a second record inline would satisfy
+ * every assertion about the declaration while the application read something else.
+ */
+test("the capabilities carry the declared key scan and object kinds themselves", () => {
+  const capabilities = new NetconfProvider(connection).getCapabilities();
+  expectBe(capabilities.keyScan, NETCONF_KEY_SCAN);
+  expectBe(capabilities.objectKinds, NETCONF_OBJECT_KINDS);
 });
