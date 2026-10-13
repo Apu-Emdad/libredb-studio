@@ -131,6 +131,13 @@ export interface ScriptGrammar {
    *   Server 2025). A `CREATE PROCEDURE` body likewise runs to the end of its batch.
    */
   readonly unit: "statement" | "batch";
+  /**
+   * The operative keywords whose statement the engine refuses without its own terminating `;`, so the splitter keeps
+   * that `;` on the statement instead of dropping it. T-SQL's `MERGE` (Msg 10713, "A MERGE statement must be
+   * terminated by a semi-colon (;)", measured on SQL Server 2025 and through sqlcmd, SF-046). Absent means none: every
+   * statement drops its `;`.
+   */
+  readonly terminatedStatements?: readonly string[];
 }
 
 /** The grammar facts that differ between the engines this product supports. */
@@ -474,7 +481,8 @@ const MSSQL_GRAMMAR: SqlGrammar = {
   // already holds every body it contains: `CREATE PROCEDURE` runs to the end of its batch.
   // Measured on 2025 RTM-CU9: `DECLARE @x INT = 5; SELECT @x * 2` sent as two requests is
   // `Must declare the scalar variable "@x"`, and as one batch answers 10.
-  script: { blocks: "none", separatorLine: "GO", unit: "batch" },
+  // A MERGE keeps its `;`: the server refuses one without it (Msg 10713, SF-046).
+  script: { blocks: "none", separatorLine: "GO", unit: "batch", terminatedStatements: ["MERGE"] },
   trailingLimitClauses: DEFAULT_SQL_GRAMMAR.trailingLimitClauses,
 };
 const SQLITE_GRAMMAR: SqlGrammar = {

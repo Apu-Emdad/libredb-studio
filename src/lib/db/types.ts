@@ -1398,7 +1398,8 @@ export interface ProviderCapabilities {
    * not properly ended" and the same statement without the `;` returns the rows (#789).
    *
    * It bounds the generators, and it also tells the editor to read a one-statement
-   * SELECTION through the statement splitter, which drops its trailing `;` (#1414): a
+   * SELECTION through the statement splitter, which drops its trailing `;` (#1414; a T-SQL
+   * `MERGE` keeps it, `script.terminatedStatements`): a
    * selection is otherwise sent exactly as selected, and a selected line ending in `;`
    * answered that same `extraneous input ';'` on Elasticsearch 9.5.3. With the caret
    * in a statement the editor reads it through the splitter on every engine, so that
