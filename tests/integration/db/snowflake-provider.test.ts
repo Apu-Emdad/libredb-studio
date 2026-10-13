@@ -764,8 +764,9 @@ describe("every type of the type table", () => {
     await entry.provider.connect();
     const result = await entry.provider.query("SELECT * FROM STUDIO_DEMO.PROBE.EVERY_TYPE ORDER BY 1 NULLS LAST");
     expectRequests(entry.transports.requests, scenario.exchanges);
-    // The SQL API's rowType names a structured, geospatial or FILE column `object` and a UUID `text`, so a result
-    // types them as such; describe reads the catalog's full spelling from SHOW COLUMNS.
+    // The SQL API's rowType names a structured, geospatial or FILE column `object` and a UUID `text`; a geospatial
+    // one also carries `extTypeName`, which types it GEOGRAPHY or GEOMETRY (SF-033). Describe reads the catalog's full
+    // spelling from SHOW COLUMNS.
     expect(result.columnTypes).toEqual({
       ID: "NUMBER(38,0)",
       N38: "NUMBER(38,0)",
@@ -788,8 +789,8 @@ describe("every type of the type table", () => {
       SO: "OBJECT",
       SA: "ARRAY",
       M: "OBJECT",
-      GEOG: "OBJECT",
-      GEOM: "OBJECT",
+      GEOG: "GEOGRAPHY",
+      GEOM: "GEOMETRY",
       U: "VARCHAR",
       VEC: "VECTOR",
       FL: "OBJECT",

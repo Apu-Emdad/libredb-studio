@@ -7,7 +7,7 @@ import { htmlTable } from "./html";
 import { binaryCellsAsHex, jsonText } from "./json";
 import { markdownTable } from "./markdown";
 import { resolveUpdateTarget } from "@/lib/sql/update-target";
-import { cqlFrozenNested, typedLiteral, UnwritableValue } from "./typed-literals";
+import { cqlFrozenNested, snowflakeVectorType, typedLiteral, UnwritableValue } from "./typed-literals";
 import { isNonFiniteWord, nonFiniteWord, type NonFiniteWord } from "@/lib/non-finite";
 
 /**
@@ -685,6 +685,26 @@ function completeDeclaredType(declared: string, dialect: DatabaseType | undefine
 }
 
 /**
+ * A Snowflake VECTOR column's declaration, from its first value.
+ *
+ * Snowflake reports a VECTOR result column as `vector` with no element type and no dimension, and
+ * `CREATE TABLE t (v VECTOR)` is a syntax error (001003), so the declaration is the one the first
+ * non-null cell spells, as the SQL INSERT export already casts each cell (`snowflakeVectorType`).
+ * Every cell of a VECTOR column has the same element type and dimension, so one cell decides. A
+ * column with no value to read is declared `ARRAY`, which holds the NULLs the file inserts and is
+ * the semi-structured type the cell's JSON text belongs to.
+ */
+function snowflakeVectorDeclaration(sample: unknown): string {
+  if (sample === undefined) return "ARRAY";
+  try {
+    return snowflakeVectorType(typeof sample === "string" ? sample : jsonText(sample));
+  } catch (error) {
+    if (!(error instanceof UnwritableValue)) throw error;
+    return "ARRAY";
+  }
+}
+
+/**
  * A column's declared type for the CREATE TABLE.
  *
  * What the engine declared, when it declared anything plausible: that is the type of
@@ -700,6 +720,9 @@ function completeDeclaredType(declared: string, dialect: DatabaseType | undefine
 function sqlTypeOf(column: string, rows: readonly Record<string, unknown>[], source: ResultExportSource): string {
   const declared = source.columnTypes;
   if (declared !== undefined && Object.hasOwn(declared, column) && isPlausibleType(declared[column])) {
+    if (source.dialect === "snowflake" && declared[column].trim().toUpperCase() === "VECTOR") {
+      return snowflakeVectorDeclaration(firstSample(rows, column));
+    }
     return completeDeclaredType(declared[column], source.dialect);
   }
   const kind = inferKind(firstSample(rows, column));

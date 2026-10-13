@@ -423,11 +423,12 @@ In practice an unlimited run shows about 10,000 to 16,700 rows of typical widths
 | `timestamp_ntz` | `YYYY-MM-DD HH:MM:SS[.f]` | `TIMESTAMP_NTZ(s)` |
 | `timestamp_ltz` | the UTC instant with `+00:00` (every request sends `timezone: "UTC"`) | `TIMESTAMP_LTZ(s)` |
 | `timestamp_tz` | the wall time at its offset, with `+HH:MM` or `-HH:MM` | `TIMESTAMP_TZ(s)` |
-| `variant`, `object`, `array`, `map`, structured types | the JSON text, never parsed | the type name |
+| `variant`, `object`, `array`, `map`, structured types | the JSON text, never parsed | the type name; an `object` with `extTypeName` `GEOGRAPHY` or `GEOMETRY` is typed by that name |
 | `vector` | the JSON array text | `VECTOR`: the SQL API reports `vector` with no element type or dimension |
 | `geography`, `geometry`, `uuid`, `file` and any other | the text | the reported name |
 
-The trial capture (section 13) reports a GEOGRAPHY, GEOMETRY, MAP or FILE column as `object` and a UUID column as `text`, so a result types them `OBJECT` and `VARCHAR`; describe shows the catalog's spelling from `SHOW COLUMNS`.
+The trial capture (section 13) reports a GEOGRAPHY, GEOMETRY, MAP or FILE column as `object` and a UUID column as `text`; a GEOGRAPHY or GEOMETRY entry also carries `extTypeName`, so a result types those two `GEOGRAPHY` and `GEOMETRY`, and MAP, FILE and UUID `OBJECT` and `VARCHAR`; describe shows the catalog's spelling from `SHOW COLUMNS`.
+A CHAR(n) column is reported as `text` of length n, exactly as a VARCHAR(n) is, so a result types it `VARCHAR(n)`: Snowflake stores CHAR as VARCHAR, and both hold the same values.
 
 A cell whose text does not match its type is refused with the column name, never shown as a wrong value:
 
@@ -437,6 +438,8 @@ A cell whose text does not match its type is refused with the column name, never
 The SQL INSERT export writes semi-structured, structured and vector cells as `INSERT ... SELECT` rows through `PARSE_JSON`, and dates and timestamps through `TO_DATE`, `TO_TIME` and `TO_TIMESTAMP_*` with an explicit format.
 A vector column carries no dimension in the result, so each vector cell is cast to `VECTOR(<element>, <n>)`, `<n>` being the number of elements in the cell and the element `FLOAT` when any element has a decimal point, an exponent or a non-finite word, else `INT`.
 A FLOAT NaN or infinity is written as `'NaN'::FLOAT`, `'inf'::FLOAT` or `'-inf'::FLOAT`.
+The DDL (CREATE TABLE) export declares a VECTOR column as the `VECTOR(<element>, <n>)` its first non-null cell spells, by the same rule, since `VECTOR` alone is a syntax error (001003); a VECTOR column with no such cell in the export is declared `ARRAY`, which holds the NULLs the file inserts.
+A GEOGRAPHY or GEOMETRY cell is written as its quoted text, which Snowflake casts to the column's type on insert.
 A DECFLOAT cell is written as its exact text quoted and cast, `'1.23e40'::DECFLOAT`, never as a bare number: Snowflake reads a bare numeric literal as NUMBER or FLOAT first, and a replay on 2026-10-14 changed `1.23e40` to `1.22999999999999995e40`, stored `-4.2e-5432` as 0 and refused `1e16384`, while the quoted form came back exactly.
 A structured OBJECT, ARRAY or MAP column is reported as `object` or `array`, as a semi-structured one is, so its cells are written as semi-structured values, which a structured column refuses with `incompatible types` (001010).
 Replayed on the trial on 2026-10-13, the export of the capture's every-type table came back cell for cell into a copy whose structured columns were semi-structured, vector and FLOAT infinities included, except DECFLOAT, which came back exactly once it was written in the quoted form above.

@@ -708,7 +708,7 @@ const SNOWFLAKE_TEMPORAL: Readonly<Record<string, { shape: RegExp; convert: stri
  * The VECTOR type a cell's own text spells, for a column whose result metadata carries no dimension, as the trial's
  * did: as many elements as the value holds, FLOAT when any is not an integer, else INT.
  */
-function snowflakeVectorType(text: string): string {
+export function snowflakeVectorType(text: string): string {
   const inner = /^\s*\[([\s\S]*)\]\s*$/.exec(text)?.[1];
   const elements = inner === undefined ? [] : inner.split(",").map((element) => element.trim());
   if (elements.length === 0 || !elements.every((element) => SNOWFLAKE_VECTOR_ELEMENT.test(element))) {

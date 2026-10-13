@@ -39,6 +39,11 @@ export interface SnowflakeColumn {
   readonly precision: number | null;
   readonly scale: number | null;
   readonly length: number | null;
+  /**
+   * The `extTypeName` Snowflake adds to some columns: measured on 2026-10-14, a GEOGRAPHY or GEOMETRY column is
+   * `type: "object"` with `extTypeName: "GEOGRAPHY"` or `"GEOMETRY"`. Absent when the entry carries none.
+   */
+  readonly extTypeName?: string;
 }
 
 export type SnowflakeCell = string | number | boolean | Buffer | null;
@@ -85,6 +90,9 @@ function unreadable(column: SnowflakeColumn): SnowflakeError {
   return new SnowflakeError("query", SNOWFLAKE_DECODE_SENTENCES.unreadable(columnTypeOf(column), column.name));
 }
 
+/** The `extTypeName`s that name the column's type, read only for an `object` column. */
+const SPATIAL_TYPES: ReadonlySet<string> = new Set(["GEOGRAPHY", "GEOMETRY"]);
+
 /** The type in catalog spelling, as `columnTypes` shows it. */
 export function columnTypeOf(column: SnowflakeColumn): string {
   const scaled = (name: string) => (column.scale === null ? name : `${name}(${column.scale})`);
@@ -99,6 +107,10 @@ export function columnTypeOf(column: SnowflakeColumn): string {
       return column.length === null ? "VARCHAR" : `VARCHAR(${column.length})`;
     case "boolean":
       return "BOOLEAN";
+    case "object":
+      return column.extTypeName !== undefined && SPATIAL_TYPES.has(column.extTypeName.toUpperCase())
+        ? column.extTypeName.toUpperCase()
+        : "OBJECT";
     case "binary":
       return "BINARY";
     case "date":
@@ -255,13 +267,14 @@ export function readColumns(rowType: unknown): SnowflakeColumn[] {
     if (typeof entry !== "object" || entry === null) {
       throw new SnowflakeError("defect", SNOWFLAKE_DECODE_SENTENCES.columns);
     }
-    const { name, type, precision, scale, length } = entry as Record<string, unknown>;
+    const { name, type, precision, scale, length, extTypeName } = entry as Record<string, unknown>;
     const sizes = [optionalNumber(precision), optionalNumber(scale), optionalNumber(length)];
     if (typeof name !== "string" || typeof type !== "string" || sizes.includes(undefined)) {
       throw new SnowflakeError("defect", SNOWFLAKE_DECODE_SENTENCES.columns);
     }
     const [p, s, l] = sizes as (number | null)[];
-    return { name, type: type.toLowerCase(), precision: p, scale: s, length: l };
+    const column = { name, type: type.toLowerCase(), precision: p, scale: s, length: l };
+    return typeof extTypeName === "string" ? { ...column, extTypeName } : column;
   });
 }
 

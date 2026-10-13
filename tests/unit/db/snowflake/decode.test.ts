@@ -257,6 +257,13 @@ describe("columnTypeOf", () => {
     expect(columnTypeOf(col("vector"))).toBe("VECTOR");
     expect(columnTypeOf(col("geography"))).toBe("GEOGRAPHY");
   });
+
+  test("an object column is GEOGRAPHY or GEOMETRY when its extTypeName says so, else OBJECT (SF-033)", () => {
+    expect(columnTypeOf({ ...col("object"), extTypeName: "GEOGRAPHY" })).toBe("GEOGRAPHY");
+    expect(columnTypeOf({ ...col("object"), extTypeName: "geometry" })).toBe("GEOMETRY");
+    expect(columnTypeOf({ ...col("object"), extTypeName: "FILE" })).toBe("OBJECT");
+    expect(columnTypeOf(col("object"))).toBe("OBJECT");
+  });
 });
 
 describe("parseCellJson and readColumns", () => {
@@ -305,6 +312,12 @@ describe("parseCellJson and readColumns", () => {
     );
     expect(readColumns([{ name: "N", type: "fixed", precision: 38, scale: 0 }])).toEqual([
       { name: "N", type: "fixed", precision: 38, scale: 0, length: null },
+    ]);
+    expect(
+      readColumns([{ name: "G", type: "object", extTypeName: "GEOGRAPHY", precision: null, scale: null }]),
+    ).toEqual([{ name: "G", type: "object", precision: null, scale: null, length: null, extTypeName: "GEOGRAPHY" }]);
+    expect(readColumns([{ name: "O", type: "object", extTypeName: 7 }])).toEqual([
+      { name: "O", type: "object", precision: null, scale: null, length: null },
     ]);
     expect(readColumns([])).toEqual([]);
   });

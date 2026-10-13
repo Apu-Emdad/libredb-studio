@@ -2077,6 +2077,55 @@ describe("buildResultExport: Snowflake's rows and types", () => {
     expect(file.content).toContain('-- Row 1 skipped: column "d" holds a DATE that is not in the form');
   });
 
+  test("the DDL declares a VECTOR by its first value, and GEOGRAPHY, GEOMETRY and VARCHAR as reported (SF-033)", () => {
+    const ddl = buildResultExport(
+      "sql-ddl",
+      source({
+        rows: [
+          { vf: null, vi: "[1,2,3]", g: "POINT(1 2)", gm: "POINT(1 2)", c: "ab" },
+          { vf: "[1.5,2,3]", vi: "[4,5,6]", g: null, gm: null, c: null },
+        ],
+        fields: ["vf", "vi", "g", "gm", "c"],
+        tabName: "t",
+        dialect: "snowflake",
+        columnTypes: { vf: "VECTOR", vi: "vector", g: "GEOGRAPHY", gm: "GEOMETRY", c: "VARCHAR(5)" },
+      }),
+    ).content;
+    expect(ddl).toBe(
+      'CREATE TABLE t (\n  "vf" VECTOR(FLOAT, 3),\n  "vi" VECTOR(INT, 3),\n  "g" GEOGRAPHY,\n  "gm" GEOMETRY,\n  "c" VARCHAR(5)\n);',
+    );
+    const insert = buildResultExport(
+      "sql-insert",
+      source({
+        rows: [{ g: "POINT(1 2)" }],
+        fields: ["g"],
+        tabName: "t",
+        dialect: "snowflake",
+        columnTypes: { g: "GEOGRAPHY" },
+      }),
+    ).content;
+    // Snowflake casts the quoted text to GEOGRAPHY on insert (replayed 2026-10-14), so the cell stays text.
+    expect(insert).toBe(`INSERT INTO t ("g") SELECT 'POINT(1 2)';`);
+  });
+
+  test("a VECTOR column with no readable value is declared ARRAY, which holds its NULLs", () => {
+    const declare = (rows: Record<string, unknown>[]) =>
+      buildResultExport(
+        "sql-ddl",
+        source({ rows, fields: ["v"], tabName: "t", dialect: "snowflake", columnTypes: { v: "VECTOR" } }),
+      ).content;
+    expect(declare([{ v: null }])).toContain('"v" ARRAY');
+    expect(declare([{ v: "not a vector" }])).toContain('"v" ARRAY');
+    expect(declare([{ v: [1, 2.5] }])).toContain('"v" VECTOR(FLOAT, 2)');
+    // Only Snowflake reads its VECTOR this way; another dialect keeps the declared spelling.
+    expect(
+      buildResultExport(
+        "sql-ddl",
+        source({ rows: [{ v: null }], fields: ["v"], tabName: "t", dialect: "duckdb", columnTypes: { v: "VECTOR" } }),
+      ).content,
+    ).toContain('"v" VECTOR');
+  });
+
   test("the DDL offers FLOAT for a float column and BINARY, never BLOB, for bytes", () => {
     const ddl = buildResultExport(
       "sql-ddl",
