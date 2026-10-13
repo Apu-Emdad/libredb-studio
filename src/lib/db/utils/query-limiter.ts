@@ -203,6 +203,35 @@ function stripTrailingClauses(
   return { code: body.slice(0, end.end), midTrivia: body.slice(end.end), clauseRun };
 }
 
+/**
+ * A row-bound value as a pattern: a digit run, or one of the dialect's declared non-numeric values (SF-021). With no
+ * declaration this is `\d+`, the exact pattern every probe below used before, so no other dialect reads differently.
+ */
+function rowBoundValue(grammar: SqlGrammar): string {
+  const declared = grammar.nonNumericRowBounds ?? [];
+  return ["\\d+", ...declared.map((value) => value.replace(/[$^.*+?()[\]{}|\\]/g, "\\$&"))].join("|");
+}
+
+/** A count as a number, or undefined for a declared non-numeric value, which means no limit. */
+function boundCount(text: string): number | undefined {
+  return /^\d+$/.test(text) ? parseInt(text) : undefined;
+}
+
+/** An offset as a number; a declared non-numeric value skips nothing. */
+function boundOffset(text: string): number {
+  return /^\d+$/.test(text) ? parseInt(text) : 0;
+}
+
+/**
+ * Whether the bound word the end-anchored probe matched at `index` is code. Asked only when the match carries a
+ * non-numeric value, whose quotes and `$` could otherwise be the tail of a literal or a comment.
+ */
+function isCodeWordAt(code: string, word: string, index: number, grammar: SqlGrammar): boolean {
+  let found = findCodeWord(code, word, 0, grammar);
+  while (found !== null && found.start < index) found = findCodeWord(code, word, found.end, grammar);
+  return found !== null && found.start === index;
+}
+
 /** The type this module reports for a statement operated by `keyword`. */
 function classifyKeyword(keyword: string | undefined): ParsedQueryInfo["type"] {
   if (keyword === "SELECT") return "SELECT";
@@ -299,7 +328,20 @@ function analyzeUnderGrammar(sql: string, grammar: SqlGrammar): ParsedQueryInfo 
 
   // LIMIT/OFFSET detection - en dıştaki sorgunun LIMIT'ini bul
   // Regex: Sorgunun sonundaki LIMIT [sayı] [OFFSET sayı] pattern'i
-  const limitMatch = clauseStripped.match(/\bLIMIT\s+(\d+)(?:\s*,\s*(\d+)|\s+OFFSET\s+(\d+))?\s*$/i);
+  // A count or an offset is a digit run, or one of the values the dialect declares (Snowflake's `NULL`, `''` and
+  // `$$$$`, SF-021); the MySQL `LIMIT x, y` form stays digits only.
+  const value = rowBoundValue(grammar);
+  const declaredValue = (text: string | undefined): boolean => text !== undefined && boundCount(text) === undefined;
+  let limitMatch = clauseStripped.match(
+    new RegExp(`\\bLIMIT\\s+(${value})(?:\\s*,\\s*(\\d+)|\\s+OFFSET\\s+(${value}))?\\s*$`, "i"),
+  );
+  if (
+    limitMatch !== null &&
+    (declaredValue(limitMatch[1]) || declaredValue(limitMatch[3])) &&
+    !isCodeWordAt(clauseStripped, "LIMIT", limitMatch.index ?? 0, grammar)
+  ) {
+    limitMatch = null;
+  }
 
   let hasLimit = false;
   let existingLimit: number | undefined;
@@ -313,17 +355,22 @@ function analyzeUnderGrammar(sql: string, grammar: SqlGrammar): ParsedQueryInfo 
       existingOffset = parseInt(limitMatch[1]);
       existingLimit = parseInt(limitMatch[2]);
     } else {
-      existingLimit = parseInt(limitMatch[1]);
-      existingOffset = limitMatch[3] ? parseInt(limitMatch[3]) : undefined;
+      existingLimit = boundCount(limitMatch[1]);
+      existingOffset = limitMatch[3] ? boundOffset(limitMatch[3]) : undefined;
     }
   }
 
   // Oracle/MSSQL: FETCH FIRST N ROWS ONLY / FETCH NEXT N ROWS ONLY
   if (!hasLimit) {
-    const fetchMatch = clauseStripped.match(/\bFETCH\s+(?:FIRST|NEXT)\s+(\d+)\s+ROWS?\s+ONLY\s*$/i);
-    if (fetchMatch) {
+    const fetchMatch = clauseStripped.match(
+      new RegExp(`\\bFETCH\\s+(?:FIRST|NEXT)\\s+(${value})\\s+ROWS?\\s+ONLY\\s*$`, "i"),
+    );
+    if (
+      fetchMatch &&
+      (!declaredValue(fetchMatch[1]) || isCodeWordAt(clauseStripped, "FETCH", fetchMatch.index ?? 0, grammar))
+    ) {
       hasLimit = true;
-      existingLimit = parseInt(fetchMatch[1]);
+      existingLimit = boundCount(fetchMatch[1]);
     }
   }
 
@@ -468,10 +515,13 @@ export function applyQueryLimit(
   // at the end of the STATEMENT, so a trailing comment neither hides the bound
   // from them nor gets torn apart by them.
   if (info.hasLimit && forceLimit) {
+    const value = rowBoundValue(grammar);
     // MySQL style: LIMIT offset, count
     statement = statement.replace(/\bLIMIT\s+\d+\s*,\s*\d+\s*$/i, "").trim();
-    // Standard style: LIMIT count OFFSET offset
-    statement = statement.replace(/\bLIMIT\s+\d+(?:\s+OFFSET\s+\d+)?\s*$/i, "").trim();
+    // Standard style: LIMIT count OFFSET offset, either value one the dialect declares (SF-021)
+    statement = statement
+      .replace(new RegExp(`\\bLIMIT\\s+(?:${value})(?:\\s+OFFSET\\s+(?:${value}))?\\s*$`, "i"), "")
+      .trim();
   }
 
   // LIMIT OFFSET clause'u ekle

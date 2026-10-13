@@ -263,6 +263,14 @@ export interface SqlGrammar {
    */
   readonly trailingLimitClauses: readonly RegExp[];
   /**
+   * The values other than a digit run this dialect accepts as a `LIMIT` or `FETCH` count and as an `OFFSET`, each
+   * spelled as the statement writes it (a word is matched in any case). A count among them means no limit and an
+   * offset among them skips nothing, so the shared limiter reads `LIMIT <value>` as the statement's own bound and
+   * appends none. Absent means none: every other dialect keeps reading only digits, and a second `LIMIT` after such
+   * a value is that engine's own refusal, as it was before.
+   */
+  readonly nonNumericRowBounds?: readonly string[];
+  /**
    * Keyword sequences that ask for a confirmation when they OPERATE a statement, read where the shared
    * dangerous-keyword set is read: at the operative keyword, after leading comments, labels and a `WITH` clause, and
    * anywhere in the code of a control-flow block. Words are compared case-insensitively and may be separated by
@@ -851,6 +859,9 @@ const SNOWFLAKE_GRAMMAR: SqlGrammar = {
   // `SELECT ... FOR UPDATE [NOWAIT | WAIT <n>]` ends the statement, after any LIMIT. The wait is a number, so a `)`
   // after it ends the match.
   trailingLimitClauses: [/\s+FOR\s+UPDATE(?:\s+NOWAIT|\s+WAIT\s+\d+)?\s*$/i],
+  // The reference gives NULL, '' and $$$$ as an unlimited LIMIT (and FETCH) count and a zero OFFSET; measured on the
+  // trial on 2026-10-14, each returned every row, any case, and a LIMIT appended after one is a syntax error (SF-021).
+  nonNumericRowBounds: ["NULL", "''", "$$$$"],
   // The forms that replace, overwrite, unload, delete stage files, run text the gate cannot read, spend credits or
   // open a path out of the account, none of which the shared set names: every COPY asks, whichever way it moves data,
   // and so does every CALL and every pipe. `CREATE OR ALTER` drops whatever columns its new definition leaves out. A

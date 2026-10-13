@@ -78,6 +78,7 @@ import {
   SNOWFLAKE_USER_AGENT,
   snowflakeBackoffMs,
 } from "@/lib/db/providers/sql/snowflake/transport";
+import { applyQueryLimit } from "@/lib/db/utils/query-limiter";
 import { resolveSqlGrammar } from "@/lib/sql/grammar";
 import type { DatabaseProvider } from "@/lib/db/types";
 import type { DatabaseConnection } from "@/lib/types";
@@ -564,6 +565,26 @@ describe("every other number and sentence the doc states is the code's", () => {
     expect(FLAT_DOC).toContain(
       `The wait has its own bound of the same length (\`timeout\` plus ${seconds(SNOWFLAKE_DEADLINE_GRACE_MS)})`,
     );
+  });
+
+  test("the unlimited LIMIT and OFFSET forms the limiter keeps are the grammar's (SF-021)", () => {
+    const forms = resolveSqlGrammar("snowflake").nonNumericRowBounds ?? [];
+    expect(forms).toEqual(["NULL", "''", "$$$$"]);
+    expect(FLAT_DOC).toContain(
+      forms
+        .map((form) => `\`LIMIT ${form}\``)
+        .join(", ")
+        .replace(/, (?=[^,]*$)/, " and "),
+    );
+    expect(FLAT_DOC).toContain(
+      forms
+        .map((form) => `\`OFFSET ${form}\``)
+        .join(", ")
+        .replace(/, (?=[^,]*$)/, " and "),
+    );
+    for (const form of forms) {
+      expect(applyQueryLimit(`SELECT 1 LIMIT ${form}`, 500, 0, {}, "snowflake").sql).toBe(`SELECT 1 LIMIT ${form}`);
+    }
   });
 
   test("the resend ladder, the partition size and the User-Agent", () => {

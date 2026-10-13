@@ -412,6 +412,7 @@ A partition Studio cannot take is refused:
 - `Snowflake sent a cell that is not text in column "<column>", so the result is not shown.`
 
 The shared limiter appends `LIMIT 500` to a `SELECT`; a longer result shows 500 rows with no Load More.
+A `SELECT` that ends in its own bound keeps it and gets none appended, and that includes Snowflake's unlimited forms `LIMIT NULL`, `LIMIT ''` and `LIMIT $$$$`, which return every row up to Studio's budget, and `OFFSET NULL`, `OFFSET ''` and `OFFSET $$$$`, which skip none.
 Export writes the rows the grid shows, in the browser, and sends no statement; over a cut or limited result the export menu reads "Writes the <n> rows shown." with "The result was cut, so the file is not the whole result."
 In practice an unlimited run shows about 10,000 to 16,700 rows of typical widths.
 

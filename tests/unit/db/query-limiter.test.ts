@@ -1614,3 +1614,86 @@ describe("a comment before a trailing clause keeps the bound in code (#1398 revi
     expect(result.sql).toBe("SELECT * FROM big LIMIT 5 -- note\nALLOW FILTERING");
   });
 });
+
+describe("a dialect's declared non-numeric LIMIT and OFFSET values are bounds (SF-021)", () => {
+  // Measured on Snowflake (2026-10-14): `LIMIT NULL`, `LIMIT ''` and `LIMIT $$$$` return every row, and `OFFSET NULL`,
+  // `OFFSET ''` and `OFFSET $$$$` skip none, any case. Appending a second LIMIT after one of them is a syntax error.
+  const read = "SELECT ID FROM E_TYPES ORDER BY ID";
+
+  for (const value of ["NULL", "null", "''", "$$$$"]) {
+    test(`Snowflake LIMIT ${value} is an existing, unlimited bound: nothing is appended`, () => {
+      const result = applyQueryLimit(`${read} LIMIT ${value}`, 501, 0, {}, "snowflake");
+      expect(result.sql).toBe(`${read} LIMIT ${value}`);
+      expect(result.wasLimited).toBe(false);
+      expect(result.appliedLimit).toBe(0);
+      const info = analyzeQuery(`${read} LIMIT ${value}`, "snowflake");
+      expect(info.hasLimit).toBe(true);
+      expect(info.existingLimit).toBeUndefined();
+    });
+
+    test(`Snowflake LIMIT 2 OFFSET ${value} keeps its count and skips nothing`, () => {
+      const result = applyQueryLimit(`${read} LIMIT 2 OFFSET ${value}`, 501, 0, {}, "snowflake");
+      expect(result.sql).toBe(`${read} LIMIT 2 OFFSET ${value}`);
+      expect(result.wasLimited).toBe(false);
+      expect(result.appliedLimit).toBe(2);
+      expect(result.appliedOffset).toBe(0);
+      expect(analyzeQuery(`${read} LIMIT 2 OFFSET ${value}`, "snowflake")).toMatchObject({
+        hasLimit: true,
+        existingLimit: 2,
+        hasOffset: true,
+        existingOffset: 0,
+      });
+    });
+  }
+
+  test("Snowflake LIMIT NULL OFFSET 1, a trailing comment and a FOR UPDATE run all read as bounded", () => {
+    for (const sql of [
+      `${read} LIMIT NULL OFFSET 1`,
+      `${read} limit null offset null`,
+      `${read} LIMIT  NULL -- every row`,
+      `${read} LIMIT NULL FOR UPDATE`,
+      `${read} OFFSET NULL ROWS FETCH NEXT NULL ROWS ONLY`,
+      `${read} FETCH FIRST $$$$ ROWS ONLY`,
+    ]) {
+      expect(applyQueryLimit(sql, 501, 0, {}, "snowflake")).toMatchObject({ sql, wasLimited: false });
+    }
+    expect(analyzeQuery(`${read} LIMIT NULL OFFSET 1`, "snowflake")).toMatchObject({ existingOffset: 1 });
+  });
+
+  test("forceLimit replaces a non-numeric bound instead of appending a second one", () => {
+    expect(applyQueryLimit(`${read} LIMIT NULL OFFSET ''`, 10, 0, { forceLimit: true }, "snowflake").sql).toBe(
+      `${read} LIMIT 10`,
+    );
+  });
+
+  test("a value only spelled like one, inside a literal or a comment, is not a bound", () => {
+    expect(applyQueryLimit("SELECT 'LIMIT NULL' AS x", 501, 0, {}, "snowflake").sql).toBe(
+      "SELECT 'LIMIT NULL' AS x LIMIT 501",
+    );
+    expect(applyQueryLimit("SELECT 1 /* LIMIT NULL */", 501, 0, {}, "snowflake").sql).toBe(
+      "SELECT 1 LIMIT 501 /* LIMIT NULL */",
+    );
+    expect(applyQueryLimit(`${read} LIMIT 'x'`, 501, 0, {}, "snowflake").sql).toBe(`${read} LIMIT 'x' LIMIT 501`);
+    // `LIMIT` inside a dollar string, the text ending in `$$$$`: the end-anchored pattern matches, the word is not code.
+    expect(analyzeQuery("SELECT $$ LIMIT $$$$", "snowflake").hasLimit).toBe(false);
+  });
+
+  test("every other dialect reads these forms exactly as before: a LIMIT is appended", () => {
+    for (const type of [
+      "postgres",
+      "mysql",
+      "clickhouse",
+      "duckdb",
+      "sqlite",
+      "trino",
+      "databend",
+      "bigquery",
+    ] as const) {
+      for (const tail of ["LIMIT NULL", "LIMIT ''", "LIMIT 2 OFFSET NULL"]) {
+        const result = applyQueryLimit(`${read} ${tail}`, 501, 0, {}, type);
+        expect(result.sql).toBe(`${read} ${tail} LIMIT 501`);
+        expect(analyzeQuery(`${read} ${tail}`, type).hasLimit).toBe(false);
+      }
+    }
+  });
+});
