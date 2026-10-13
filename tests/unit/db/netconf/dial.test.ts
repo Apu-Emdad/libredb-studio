@@ -26,6 +26,7 @@ import {
   type SshPort,
 } from "@/lib/db/providers/network/netconf/dial";
 import { fingerprintOf } from "@/lib/db/providers/network/netconf/hostkey";
+import { classifyLoginFailure } from "@/lib/db/providers/network/netconf/auth";
 import type { Transport } from "@/lib/db/providers/network/netconf/session";
 
 const DEVICE_KEY = Buffer.from("the device's host key");
@@ -317,4 +318,33 @@ test("with the flag on, the same dial's lookup refuses that name, and the senten
   const answer = await answerFor(lookup, "localhost");
   expectTruthy(answer instanceof Error, `localhost was accepted with the flag on: ${String(answer)}`);
   expectBe(answer.message, BLOCKED_HOST);
+});
+
+/**
+ * Two configuration failures that are fixed in two different boxes must not answer one reason.
+ *
+ * MEASURED: both answered `key-unreadable`, the connection's private key and the device's host key
+ * fingerprint alike. Their sentences differed, which helps a person reading the sentence and does
+ * nothing for anything branching on the field, and a field that exists to be branched on has to
+ * separate what the sentences separate. A reader sent to the key file when the fingerprint is the
+ * problem edits the one thing that was correct.
+ */
+test("an unreadable fingerprint and an unreadable private key answer different reasons", async () => {
+  const { ssh, socket } = ports();
+  let caught: unknown;
+  try {
+    await dialNetconf(config({ hostKeyFingerprint: "MD5:aa:bb" }), ssh, socket);
+  } catch (error) {
+    caught = error;
+  }
+  const failure = (caught as DialError).failure;
+  expectBe(failure.kind, "configuration");
+  expectTruthy(failure.kind === "configuration");
+  expectBe(failure.reason, "pin-unreadable");
+  // The other one, from the same union, read off the classifier the library's error goes through.
+  const key = classifyLoginFailure(new Error("Cannot parse privateKey: unsupported format"));
+  expectBe(key.kind, "configuration");
+  expectTruthy(key.kind === "configuration");
+  expectBe(key.reason, "key-unreadable");
+  expectNotBe(failure.reason, key.reason);
 });

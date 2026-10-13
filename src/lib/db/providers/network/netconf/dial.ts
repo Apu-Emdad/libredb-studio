@@ -95,7 +95,9 @@ export class DialError extends Error {
  */
 export async function dialNetconf(config: DialConfig, ssh: SshPort, socket: SocketPort): Promise<Transport> {
   const pin = readPin(config.hostKeyFingerprint);
-  if (!pin.ok) throw new DialError({ kind: "configuration", reason: "key-unreadable", message: pin.message });
+  // `pin-unreadable` and not `key-unreadable`: this is the device's fingerprint, not the
+  // connection's private key, and the two are fixed in different boxes.
+  if (!pin.ok) throw new DialError({ kind: "configuration", reason: "pin-unreadable", message: pin.message });
 
   // `socketEgress` refuses a link-local literal itself when `refusesLinkLocal` is set
   // (`egress-policy.ts:220`), and it answers the lookup the socket dials through, so the address

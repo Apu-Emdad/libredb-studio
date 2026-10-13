@@ -309,11 +309,13 @@ export class NetconfSession {
     if (this.ended) return;
     const step = this.reader.feed(chunk);
     if (step.fault) {
+      // One end, with the framing fault as its reason. A second call followed this one, describing
+      // a framing fault as "a reply with no message-id": dead, because `end` keeps the FIRST reason
+      // and ignores later ones, and wrong, because the two are different faults with different
+      // answers. A reader told the stream broke looks at the wire; a reader told a reply carried no
+      // id looks at the device's replies. The dead call could only ever have moved them the wrong
+      // way, and a sentence that cannot run is still a sentence somebody will read.
       this.end({ reason: "framing", fault: step.fault });
-      this.end({
-        reason: "protocol",
-        detail: "the device sent a reply with no message-id, so no reply can be matched to its request",
-      });
       return;
     }
     for (const message of step.messages) {

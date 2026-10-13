@@ -26,7 +26,17 @@
 export type LoginFailure =
   | {
       readonly kind: "configuration";
-      readonly reason: "passphrase-missing" | "passphrase-wrong" | "key-unreadable";
+      /**
+       * Which thing could not be read, and the two keys are NOT one reason.
+       *
+       * `key-unreadable` is the connection's private key, which an operator fixes by pasting the
+       * whole file; `pin-unreadable` is the device's host key fingerprint, which they fix by
+       * pasting the line `ssh-keygen -lf` prints. Both answered `key-unreadable` once: the
+       * sentences differed while the machine-readable reason did not, so anything branching on this
+       * field sent a reader to the wrong box, and a field that exists to be branched on has to
+       * separate what the sentences separate.
+       */
+      readonly reason: "passphrase-missing" | "passphrase-wrong" | "key-unreadable" | "pin-unreadable";
       readonly message: string;
     }
   | { readonly kind: "refused"; readonly message: string }
