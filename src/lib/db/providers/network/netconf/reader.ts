@@ -215,12 +215,17 @@ export class DeviceReaderImpl {
     // Validation first, and through the port, so an `rpc-error` becomes the device's sentence
     // instead of being sliced into the editor as though it were data.
     parseReply(this.xml, reply);
-    const opening = reply.search(/<data[\s>/]/);
+    // The element may carry a namespace prefix, and `<data>` and `<nc:data>` are the same element.
+    // MEASURED against the pattern this replaced: a prefixed reply answered "this device answered
+    // no data for this path", which is a sentence about the device for a fault in the reading.
+    const opening = reply.search(/<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?data[\s>/]/);
     if (opening === -1) throw new QueryError("this device answered no data for this path");
-    const selfClosing = /<data[^>]*\/>/.exec(reply.slice(opening, opening + 200));
-    if (selfClosing !== null && selfClosing.index === 0) return "";
+    const selfClosing = /^<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?data[^>]*\/>/.exec(reply.slice(opening, opening + 400));
+    if (selfClosing !== null) return "";
     const from = reply.indexOf(">", opening) + 1;
-    const to = reply.lastIndexOf("</data>");
+    const closings = [...reply.matchAll(/<\/(?:[A-Za-z_][A-Za-z0-9_.-]*:)?data\s*>/g)];
+    const last = closings[closings.length - 1];
+    const to = last === undefined ? -1 : (last.index ?? -1);
     if (to <= from) throw new QueryError("this device answered no data for this path");
     return reply.slice(from, to);
   }

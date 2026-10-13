@@ -19,7 +19,7 @@ import {
   parseKeyPath,
 } from "@/lib/db/providers/network/netconf/keypath";
 import { classifyLoginFailure, mayShowDetail, REFUSED_SENTENCE } from "@/lib/db/providers/network/netconf/auth";
-import { messageIdOf } from "@/lib/db/providers/network/netconf/session";
+import { messageIdOf, readHello } from "@/lib/db/providers/network/netconf/session";
 import { checkHostKey, fingerprintOf, readPin } from "@/lib/db/providers/network/netconf/hostkey";
 import {
   assertWritable,
@@ -658,4 +658,49 @@ test("a declaration or a comment before the reply is skipped, and the data still
     null,
     "a reader searching the whole message answers the data",
   );
+});
+
+/**
+ * Three spellings of the same XML, each legal, each measured against the patterns they replaced.
+ *
+ * A namespace prefix does not make a different element: `<session-id>` and `<nc:session-id>` are
+ * the same thing, and a reader that sees only the first reports the second as ABSENT. MEASURED: a
+ * prefixed hello was refused with "the device's hello carried no session-id, which RFC 6241 8.1
+ * requires", which blames the device for the reading; a prefixed notification was taken for a reply
+ * with no message-id, which ends the session with another wrong sentence. Netopeer2 writes neither
+ * with a prefix, so the fixture could not have shown this, exactly as the XML declaration could not
+ * be shown by it either.
+ */
+test("a hello written with namespace prefixes is read, not reported as missing its session-id", () => {
+  const prefixed =
+    '<nc:hello xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0"><nc:capabilities>' +
+    "<nc:capability>urn:ietf:params:netconf:base:1.0</nc:capability>" +
+    "<nc:capability>urn:ietf:params:netconf:base:1.1</nc:capability>" +
+    "</nc:capabilities><nc:session-id>4</nc:session-id></nc:hello>";
+  const hello = readHello(prefixed);
+  expectBe(hello.sessionId, "4");
+  expectBe(hello.capabilities.length, 2);
+  expectBe(hello.bases.length, 2);
+});
+
+test("the two spellings of one hello are read the same way", () => {
+  const plain =
+    '<hello xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><capabilities>' +
+    "<capability>urn:ietf:params:netconf:base:1.1</capability>" +
+    "</capabilities><session-id>9</session-id></hello>";
+  const prefixed =
+    '<x:hello xmlns:x="urn:ietf:params:xml:ns:netconf:base:1.0"><x:capabilities>' +
+    "<x:capability>urn:ietf:params:netconf:base:1.1</x:capability>" +
+    "</x:capabilities><x:session-id>9</x:session-id></x:hello>";
+  expectEqual(readHello(prefixed), readHello(plain));
+});
+
+/**
+ * The message-id reader takes the tag as it finds it, so a prefixed reply has always worked; this
+ * case is here because "it happens to work" and "it is held to work" are different states, and the
+ * one that survives a rewrite is the second.
+ */
+test("a prefixed reply's message-id is read, and a prefixed notification is still a notification", () => {
+  expectBe(messageIdOf('<nc:rpc-reply nc:x="1" message-id="7"><nc:data/></nc:rpc-reply>'), "7");
+  expectBe(messageIdOf('<nc:notification xmlns:nc="x"><nc:eventTime/></nc:notification>'), null);
 });

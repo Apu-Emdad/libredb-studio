@@ -364,3 +364,20 @@ test("a payload holding its own data element is sliced at the reply's closing ta
   );
   expectBe(await reader.sourceXml("running", [{ name: "sensors", module: "example-sensors" }]), body);
 });
+
+test("a prefixed data element is sliced like an unprefixed one, in all three of its shapes", async () => {
+  const h = harness([LIBRARY]);
+  const reader = await open(h);
+  const path = [{ name: "interfaces", module: "ietf-interfaces" }];
+  const body = "<if:interfaces><if:interface><if:name>ge-0/0/1</if:name></if:interface></if:interfaces>";
+  const tree = el("rpc-reply", undefined, [el("data", undefined, [])]);
+
+  h.answer(tree, `<nc:rpc-reply message-id="1"><nc:data>${body}</nc:data></nc:rpc-reply>`);
+  expectBe(await reader.sourceXml("running", path), body);
+
+  h.answer(tree, '<nc:rpc-reply message-id="2"><nc:data/></nc:rpc-reply>');
+  expectBe(await reader.sourceXml("running", path), "", "a prefixed self-closing data is an empty answer");
+
+  h.answer(tree, `<nc:rpc-reply message-id="3"><nc:data xmlns:nc="urn:x">${body}</nc:data ></nc:rpc-reply>`);
+  expectBe(await reader.sourceXml("running", path), body, "attributes and a space before > are both legal");
+});

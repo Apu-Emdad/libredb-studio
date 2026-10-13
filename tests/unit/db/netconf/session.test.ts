@@ -112,6 +112,33 @@ test("a notification is not a reply, and it is counted rather than mistaken for 
   expectBe(session.notificationCount, 1);
 });
 
+/**
+ * The same fact for a notification written with a namespace prefix, which is the same element.
+ *
+ * MEASURED: the detection was `message.includes("<notification")`, so a prefixed notification was
+ * taken for a reply carrying no message-id and ENDED THE SESSION, with a sentence about the device.
+ * A reader cannot tell "the device is misbehaving" from "this client cannot read the spelling", and
+ * the first is what the sentence said.
+ *
+ * It is a session test and not a reader test on purpose: the previous round asserted that the id
+ * reader answers null for a prefixed notification, which was true before the fix as well, so that
+ * assertion could not fail. What changed is what the SESSION does with it.
+ */
+test("a notification written with a prefix is counted, and the session survives it", async () => {
+  const transport = new FakeTransport();
+  const opening = NetconfSession.open(transport, limits);
+  transport.send(helloWith([BASE10]));
+  const { session } = await opening;
+  const reply = session.request({ operation: "get" });
+  transport.send(
+    '<nc:notification xmlns:nc="urn:ietf:params:xml:ns:netconf:notification:1.0"><nc:eventTime/></nc:notification>' +
+      EOM,
+  );
+  transport.send(`<rpc-reply message-id="1"><data/></rpc-reply>${EOM}`);
+  expectMatch(await reply, /message-id="1"/);
+  expectBe(session.notificationCount, 1);
+});
+
 test("a reply with no message-id and no notification element ends the session", async () => {
   const transport = new FakeTransport();
   const opening = NetconfSession.open(transport, limits);

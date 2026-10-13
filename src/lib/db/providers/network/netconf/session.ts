@@ -78,6 +78,31 @@ const CLIENT_BASES = ["urn:ietf:params:netconf:base:1.0", "urn:ietf:params:netco
 
 /** The client hello. Both base versions are offered, so the server picks the framing. */
 /**
+ * A name pattern that accepts a namespace PREFIX, which is the half of XML a flat pattern forgets.
+ *
+ * `<session-id>` and `<nc:session-id>` are the same element: the prefix binds a namespace and the
+ * local name is what identifies it. MEASURED against the patterns these replaced: a hello written
+ * with prefixes was refused with "the device's hello carried no session-id, which RFC 6241 8.1
+ * requires", a sentence that blames the device for this client's reading, and a prefixed
+ * notification was taken for a reply with no id, which ends the session with another wrong
+ * sentence. Netopeer2 writes neither with a prefix, so the fixture could never show this.
+ *
+ * The prefix is not VALIDATED against its binding here, and that limit is deliberate: resolving a
+ * prefix to a namespace is the reader port's work, and this file parses no XML. What it does is
+ * stop a legal spelling from reading as an absent element.
+ */
+const PREFIX = "(?:[A-Za-z_][A-Za-z0-9_.-]*:)?";
+
+/** The local name of an element start tag, prefix removed. */
+function localNameOf(tag: string | null): string | null {
+  if (tag === null) return null;
+  const name = /^<\s*([A-Za-z_][A-Za-z0-9_.-]*(?::[A-Za-z_][A-Za-z0-9_.-]*)?)/.exec(tag)?.[1];
+  if (name === undefined) return null;
+  const colon = name.indexOf(":");
+  return colon === -1 ? name : name.slice(colon + 1);
+}
+
+/**
  * The first ELEMENT's start tag, skipping what may legally come before it.
  *
  * MEASURED against the first version of this function, which took the first `<`: a reply led by an
@@ -157,14 +182,16 @@ export function clientHello(): string {
  * else: the session id and the capability URIs.
  */
 export function readHello(message: string): Hello {
-  const id = /<session-id>\s*(\d+)\s*<\/session-id>/.exec(message);
+  const id = new RegExp(`<${PREFIX}session-id>\\s*(\\d+)\\s*</${PREFIX}session-id>`).exec(message);
   if (!id?.[1]) {
     throw new NetconfSessionError({
       reason: "protocol",
       detail: "the device's hello carried no session-id, which RFC 6241 8.1 requires",
     });
   }
-  const capabilities = [...message.matchAll(/<capability>\s*([^<\s]+)\s*<\/capability>/g)].map((m) => m[1] ?? "");
+  const capabilities = [
+    ...message.matchAll(new RegExp(`<${PREFIX}capability>\\s*([^<\\s]+)\\s*</${PREFIX}capability>`, "g")),
+  ].map((m) => m[1] ?? "");
   const bases = capabilities.filter((cap) => cap.startsWith("urn:ietf:params:netconf:base:"));
   return { sessionId: id[1], capabilities, bases };
 }
@@ -302,7 +329,7 @@ export class NetconfSession {
     }
     const id = messageIdOf(message);
     if (id === null) {
-      if (message.includes("<notification")) {
+      if (localNameOf(firstElementTag(message)) === "notification") {
         // This provider sends no create-subscription, so a notification means the session is
         // carrying somebody else's subscription or the device sent one unasked. Either way it is
         // not a reply and it must not be counted as one.
