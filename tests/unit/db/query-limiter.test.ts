@@ -1,8 +1,11 @@
 import { describe, test, expect } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   analyzeQuery,
+  appendedBoundNote,
   applyQueryLimit,
   hasQueryLimit,
+  noteAppendedBound,
   isSelectQuery,
   type ParsedQueryInfo,
 } from "@/lib/db/utils/query-limiter";
@@ -1695,5 +1698,109 @@ describe("a dialect's declared non-numeric LIMIT and OFFSET values are bounds (S
         expect(analyzeQuery(`${read} ${tail}`, type).hasLimit).toBe(false);
       }
     }
+  });
+});
+
+describe("an error that points into the bound Studio added says so (SF-022)", () => {
+  const written = "SELECT * FROM D_PARENT WHERE";
+  const sent = "SELECT * FROM D_PARENT WHERE LIMIT 501";
+  const noted = (message: string, w = written, x = sent) => {
+    const error = new Error(message);
+    noteAppendedBound(error, w, x);
+    return error.message;
+  };
+
+  test("Snowflake's position into the appended LIMIT gets the note, the error's class and text kept", () => {
+    const error = new SyntaxError(
+      "Snowflake: SQL compilation error: syntax error line 1 at position 35 unexpected '501'. (code 001003, SQLSTATE 42000)",
+    );
+    const original = error.message;
+    expect(noteAppendedBound(error, written, sent)).toBe(error);
+    expect(error).toBeInstanceOf(SyntaxError);
+    expect(error.message).toBe(`${original} ${appendedBoundNote("LIMIT 501")}`);
+  });
+
+  test("the note is plain text, since the results panel shows an error message as text", () => {
+    expect(appendedBoundNote("LIMIT 501")).toBe(
+      "Studio added the clause LIMIT 501 to this statement to bound its rows, so a position or token this error names may be in that clause rather than in your text.",
+    );
+    expect(appendedBoundNote("LIMIT 501")).not.toContain("`");
+  });
+
+  // Each message below is the engine's own text for a statement whose syntax error falls on the clause Studio added,
+  // taken from PostgreSQL 16, MySQL 8.4, SQLite (bun:sqlite), SQL Server 2025, ClickHouse and Snowflake.
+  test("each engine's syntax error at the clause gets the note", () => {
+    for (const message of [
+      'syntax error at or near "LIMIT"',
+      "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'LIMIT 501' at line 1",
+      'near "LIMIT": syntax error',
+      "Code: 62. DB::Exception: Syntax error: failed at position 38 (501): 501. Expected one of: token sequence, Dot, LIMIT, OFFSET, end of query. (SYNTAX_ERROR)",
+      "SQL compilation error:\nsyntax error line 1 at position 29 unexpected 'LIMIT'.",
+      "Snowflake: SQL compilation error:\nsyntax error line 1 at position 36 unexpected '501'. (code 001003, SQLSTATE 42000)",
+    ]) {
+      expect(noted(message)).toEndWith(` ${appendedBoundNote("LIMIT 501")}`);
+    }
+  });
+
+  test("an error that only contains the clause's word or number gets no note", () => {
+    for (const message of [
+      // PostgreSQL
+      'column "limit" does not exist',
+      'column "LIMIT" does not exist',
+      'invalid input syntax for type integer: "foo 501"',
+      'syntax error at or near "FROM"',
+      // PostgreSQL and SQLite echo the token as the user spelt it; Studio writes LIMIT in capitals
+      'syntax error at or near "limit"',
+      'near "limit": syntax error',
+      // MySQL: the quoted rest of the statement starts in the user's text
+      "Unknown column 'limit' in 'field list'",
+      "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'FROM t LIMIT 501' at line 1",
+      // SQLite
+      "no such column: LIMIT",
+      // SQL Server
+      "Invalid column name 'limit'.",
+      "Conversion failed when converting the varchar value 'foo 501' to data type int.",
+      "Incorrect syntax near 'WHERE'.",
+      "A TOP can not be used in the same query or sub-query as a OFFSET.",
+      // ClickHouse: the list of expected tokens, and a message that quotes the statement sent
+      "Code: 62. DB::Exception: Syntax error: failed at position 30 (WHERE): WHERE LIMIT 501. Expected one of: ORDER BY, LIMIT, OFFSET, end of query.",
+      "Code: 47. DB::Exception: Unknown expression identifier `limit`. In scope SELECT limit FROM system.one LIMIT 501. (UNKNOWN_IDENTIFIER)",
+      // Snowflake
+      "Snowflake: SQL compilation error: error line 1 at position 7\ninvalid identifier 'LIMIT' (code 000904, SQLSTATE 42000)",
+      "Snowflake: SQL compilation error: error line 1 at position 7\ninvalid identifier '\"limit\"' (code 000904, SQLSTATE 42000)",
+      "Object 'D_PARENT' does not exist or not authorized.",
+      // a number that only contains the limit's digits
+      'syntax error at or near "15012"',
+    ]) {
+      expect(noted(message)).toBe(message);
+    }
+  });
+
+  test("a bound inserted mid-statement (TOP) and a probe with an offset are named as written", () => {
+    expect(
+      noted("Incorrect syntax near the keyword 'TOP'.", "SELECT * FROM t WHERE", "SELECT TOP 501 * FROM t WHERE"),
+    ).toEndWith(appendedBoundNote("TOP 501"));
+    expect(noted("unexpected '500'", "SELECT 1 -- note\n", "SELECT 1 LIMIT 501 OFFSET 500 -- note\n")).toEndWith(
+      appendedBoundNote("LIMIT 501 OFFSET 500"),
+    );
+  });
+
+  test("nothing changes when nothing was added, or it is not an Error", () => {
+    expect(noted('syntax error at or near "LIMIT"', "SELECT 1 LIMIT", "SELECT 1 LIMIT")).toBe(
+      'syntax error at or near "LIMIT"',
+    );
+    expect(noteAppendedBound("LIMIT 501", written, sent)).toBe("LIMIT 501");
+  });
+
+  test("docs/editor/query-optimization.md quotes the note word for word", () => {
+    const doc = readFileSync("docs/editor/query-optimization.md", "utf8").replace(/\s*\n\s*/g, " ");
+    expect(doc).toContain(`\`${appendedBoundNote("LIMIT 501")}\``);
+  });
+
+  test("the note is added once, however often the error passes", () => {
+    const error = new Error("unexpected 'LIMIT'");
+    noteAppendedBound(error, written, sent);
+    noteAppendedBound(error, written, sent);
+    expect(error.message.split("Studio added").length).toBe(2);
   });
 });

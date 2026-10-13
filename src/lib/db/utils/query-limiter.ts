@@ -555,3 +555,69 @@ export function isSelectQuery(sql: string, type?: DatabaseType): boolean {
   const info = analyzeQuery(sql, type);
   return info.type === "SELECT";
 }
+
+// ============================================================================
+// An error about the bound Studio added
+// ============================================================================
+
+/**
+ * The note an engine error gets when it points into the row bound Studio added (SF-022). Plain words, no backticks:
+ * the results panel, the toast and History show an error message as text, so a code span would show its backticks.
+ */
+export function appendedBoundNote(addition: string): string {
+  return `Studio added the clause ${addition} to this statement to bound its rows, so a position or token this error names may be in that clause rather than in your text.`;
+}
+
+/**
+ * The text `sent` carries that `written` does not: what lies between their longest common prefix and suffix,
+ * trimmed. The limiter only ever inserts one clause (`LIMIT n [OFFSET m]` at the end, or `TOP n` where a dialect
+ * writes it), so this is that clause; empty when nothing was added.
+ */
+function addedText(written: string, sent: string): string {
+  let prefix = 0;
+  while (prefix < written.length && prefix < sent.length && written[prefix] === sent[prefix]) prefix++;
+  let suffix = 0;
+  const room = Math.min(written.length, sent.length) - prefix;
+  while (suffix < room && written[written.length - 1 - suffix] === sent[sent.length - 1 - suffix]) suffix++;
+  return sent.slice(prefix, sent.length - suffix).trim();
+}
+
+/**
+ * Whether an engine message is a syntax error that points at `token`, one word or number of the clause Studio added,
+ * in a shape an engine uses to name the token it stopped at. The token must be the quoted token itself (or the first
+ * word of a quoted rest of the statement), spelt as Studio wrote it, so a message that only contains the word or the
+ * number is not taken: PostgreSQL's `column "limit" does not exist` or `invalid input syntax for type integer:
+ * "foo 501"`, MySQL's `Unknown column 'limit'`, ClickHouse's "Expected one of: ... LIMIT, OFFSET" list, and a message
+ * that quotes the whole statement sent. A message that points at the clause in another shape gets no note: a missing
+ * note leaves the engine's own message as it was, a wrong one blames a clause that is not at fault.
+ */
+function pointsAt(message: string, token: string): boolean {
+  const end = "(?![A-Za-z0-9_])";
+  return [
+    // PostgreSQL `syntax error at or near "LIMIT"`, MySQL `... to use near 'LIMIT 501' at line 1`, SQLite
+    // `near "LIMIT": syntax error`, SQL Server `Incorrect syntax near 'TOP'.` or `near the keyword 'TOP'.`
+    new RegExp(`\\bnear (?:the keyword )?['"]${token}${end}`),
+    // Snowflake `syntax error line 1 at position 35 unexpected '501'.`
+    new RegExp(`\\bunexpected '${token}'`),
+    // ClickHouse `Syntax error: failed at position 38 (501): 501.`
+    new RegExp(`\\bfailed at position \\d+ \\('?${token}'?\\)`),
+  ].some((shape) => shape.test(message));
+}
+
+/**
+ * Adds `appendedBoundNote` to an engine error that points into the bound Studio added to the user's statement, so a
+ * syntax error "at position 35 unexpected '501'" or "near LIMIT" is not read as a fault in text the user never
+ * wrote. The error is the same object, its class and category kept, with the note after its message, once. It is
+ * left alone when nothing was added, when it is not an `Error`, or when its message is not a syntax error that
+ * points at one of the addition's words or numbers (`pointsAt`).
+ */
+export function noteAppendedBound(error: unknown, written: string, sent: string): unknown {
+  if (!(error instanceof Error)) return error;
+  const addition = addedText(written, sent);
+  if (addition === "") return error;
+  const note = appendedBoundNote(addition);
+  if (error.message.includes(note)) return error;
+  const tokens = addition.match(/[A-Za-z_]+|\d+/g) ?? [];
+  if (tokens.some((token) => pointsAt(error.message, token))) error.message = `${error.message} ${note}`;
+  return error;
+}
