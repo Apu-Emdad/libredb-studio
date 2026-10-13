@@ -842,7 +842,10 @@ statements of their own (measured on Materialize, AlloyDB Omni and Cloudberry: t
 twice).
 
 The plan request carries a `queryId` of its own, and **Cancel** cancels it on the server together
-with the run.
+with the run. Closing an editor tab whose statement is still running cancels it the same way, run and
+plan, since the tab's Cancel button goes with it. That cancel raises no toast of its own, so the close's
+**Undo** toast stays the one on top to click; Undo brings back the tab's text, not the run (standalone
+app; the embedded package's host owns its runs).
 
 ### Supported Databases
 

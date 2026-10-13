@@ -4245,6 +4245,86 @@ describe("useQueryExecution", () => {
       }
     });
 
+    // SF-023: closing a running tab cancels it silently, since a cancel toast raised a moment after the close's Undo
+    // toast covered it and took the click meant for Undo. The cancel itself is the one Stop sends.
+    describe("a silent cancel (closing a running tab)", () => {
+      const noToast = () => {
+        expect(mockToastLoading).not.toHaveBeenCalled();
+        expect(mockToastSuccess).not.toHaveBeenCalled();
+        expect(mockToastError).not.toHaveBeenCalled();
+        expect(mockToastDefault).not.toHaveBeenCalled();
+      };
+      const clearToasts = () => {
+        for (const m of [mockToastLoading, mockToastSuccess, mockToastError, mockToastDefault]) m.mockClear();
+      };
+
+      async function runThenSilentCancel(params: Parameters<typeof createDefaultParams>[0], sql: string) {
+        let tabs = [createTab()];
+        const setTabs = mock((updater: unknown) => {
+          if (typeof updater === "function") tabs = (updater as (prev: QueryTab[]) => QueryTab[])(tabs);
+        });
+        const { result } = renderHook(() => useQueryExecution(createDefaultParams({ setTabs, ...params })));
+        const running = act(async () => {
+          await result.current.executeQuery(sql);
+        });
+        clearToasts();
+        await act(async () => {
+          await result.current.cancelQuery("tab-1", { silent: true });
+        });
+        await running;
+        return tabs;
+      }
+
+      for (const cancelled of [true, false]) {
+        test(`posts the run's cancel and raises no toast when the server answers cancelled: ${cancelled}`, async () => {
+          const posted: string[] = [];
+          const restore = installCancelAnswers((queryId) => {
+            posted.push(queryId);
+            return json({ cancelled });
+          });
+          try {
+            const tabs = await runThenSilentCancel({}, "SELECT * FROM users");
+            expect(posted.length).toBeGreaterThan(0);
+            expect(tabs[0].isExecuting).toBe(false);
+            noToast();
+          } finally {
+            restore();
+          }
+        });
+      }
+
+      test("raises no toast for a provider without cancel or a run with no id on the server", async () => {
+        const restore = installCancelAnswers(() => json({ cancelled: false }));
+        const originalFetch = globalThis.fetch;
+        // /api/db/transaction hangs until aborted, like the run above.
+        const hanging = globalThis.fetch;
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+          if (url.includes("/api/db/transaction")) {
+            return new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () =>
+                reject(new DOMException("The operation was aborted.", "AbortError")),
+              );
+            });
+          }
+          return hanging(input, init);
+        }) as typeof fetch;
+        try {
+          const metadata = {
+            ...mockMetadata,
+            capabilities: { ...mockMetadata.capabilities, supportsQueryCancel: false },
+          };
+          await runThenSilentCancel({ metadata }, "SELECT * FROM users");
+          noToast();
+          await runThenSilentCancel({ transactionActive: true }, "UPDATE users SET name = 'x' WHERE id = 1");
+          noToast();
+        } finally {
+          globalThis.fetch = originalFetch;
+          restore();
+        }
+      });
+    });
+
     // A script goes to /api/db/multi-query with the run's id, which the route binds to each unit in turn, so Stop
     // posts one cancel with that id and it reaches the unit in flight.
     test("Stop on a script posts one cancel with the run's id", async () => {
