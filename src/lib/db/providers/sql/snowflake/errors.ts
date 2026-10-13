@@ -193,6 +193,8 @@ export const SNOWFLAKE_ERROR_SENTENCES = Object.freeze({
     `Snowflake has no account at ${host} (HTTP 404 on the first request). Check the account identifier: an organisation account is written orgname-account_name, with a hyphen after the organisation, and a locator outside AWS Oregon needs its region.`,
   invalidPayload:
     "Snowflake could not read the request Studio sent (390142). This is a Studio defect; please report it.",
+  connectDeadline: (host: string, seconds: number) =>
+    `Studio gave up connecting to ${host} after ${seconds} s with no answer. Check the account identifier and the network path to Snowflake; a locator outside AWS Oregon needs its region, and a PrivateLink name resolves only inside its private network.`,
   unreachable: (host: string) =>
     `Studio could not reach ${host}. Check the account identifier; a locator outside AWS Oregon needs its region.`,
   certMismatch: (host: string) =>
@@ -309,13 +311,31 @@ function signInError(failure: SnowflakeFailure, context: SnowflakeFailureContext
   return new SnowflakeError("auth", sentence, administratorStatement(fp8, body));
 }
 
+/** Each deadline error with the `timeout` its statement was sent with, so `connect()` can word its own. */
+const deadlines = new WeakMap<SnowflakeError, number>();
+
 /** Studio's own deadline passed, worded by the bound that set it, since only the query timeout is the user's. */
 export function deadlineError(timeoutS: number, bound: SnowflakeDeadlineBound): SnowflakeError {
   const sentences = SNOWFLAKE_ERROR_SENTENCES;
-  return new SnowflakeError(
+  const error = new SnowflakeError(
     "query",
     bound === "surface" ? sentences.surfaceDeadline(timeoutS) : sentences.deadline(timeoutS),
   );
+  deadlines.set(error, timeoutS);
+  return error;
+}
+
+/**
+ * A deadline met by a statement `connect()` sent, as a connection failure naming the host and the wait: neither the
+ * connect statement nor the role check needs a warehouse, so no answer within the bound means Snowflake was not
+ * reached, and the query sentence's advice to raise Query Timeout would point at a value the user may never have set.
+ * Any other error is returned unchanged.
+ */
+export function connectDeadlineError(error: unknown, host: string, waitedS: (timeoutS: number) => number): unknown {
+  if (!(error instanceof SnowflakeError)) return error;
+  const timeoutS = deadlines.get(error);
+  if (timeoutS === undefined) return error;
+  return new SnowflakeError("unavailable", sentences.connectDeadline(host, waitedS(timeoutS)));
 }
 
 /** A failed Snowflake answer as its category and sentence; the first matching row of the table wins. */

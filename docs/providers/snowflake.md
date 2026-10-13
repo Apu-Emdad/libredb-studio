@@ -181,6 +181,7 @@ Neither needs a running warehouse: on the trial the role check answered with the
 The check with `CURRENT_USER()` added answered the same way on 2026-10-14, the warehouse suspended before and after it.
 A role other than Role fails the connect with the role mismatch sentence of [section 11](#11-errors).
 Under token sign-in a user other than User fails it too, with the token user sentence of [section 11](#11-errors).
+Either statement unanswered within its bound fails the connect with the connect sentence of [section 11](#11-errors), never the query-timeout one: Test connection sends them under its own 10 s, which Query Timeout does not change.
 They add a caution only when something is wrong:
 
 - `Snowflake shows no warehouse named <wh> to role <role>. Check the name, and that the role has USAGE on it.`
@@ -590,6 +591,7 @@ Still unconfirmed: every Snowflake form not named above, among them `CREATE CATA
 | Result gone (404 on the status or partition GET of a statement Snowflake accepted) | `QueryError` | `Snowflake no longer holds this statement's result; run it again.` |
 | Account not found (404 on the first submit: `*.snowflakecomputing.com` resolves for any name, and the load balancer answers an account it does not have with a `File not Found` page) | `ConnectionError` | `Snowflake has no account at <host> (HTTP 404 on the first request). Check the account identifier: an organisation account is written orgname-account_name, with a hyphen after the organisation, and a locator outside AWS Oregon needs its region.` |
 | Invalid payload (390142) | `DatabaseError` | `Snowflake could not read the request Studio sent (390142). This is a Studio defect; please report it.` |
+| No answer to the connect statement or the role check within their bound (the statement's `timeout` plus 5 s; Test connection sends them under 10 s, so it gives up after 15 s) | `ConnectionError` | `Studio gave up connecting to <host> after <n> s with no answer. Check the account identifier and the network path to Snowflake; a locator outside AWS Oregon needs its region, and a PrivateLink name resolves only inside its private network.` |
 | Host unreachable | `ConnectionError` | `Studio could not reach <host>. Check the account identifier; a locator outside AWS Oregon needs its region.` |
 | Certificate mismatch | `ConnectionError` | `The certificate <host> presented does not match its name. Check the account identifier, including the region for a locator.` |
 | Statement slots busy | `ConnectionError` | `Studio's Snowflake statement slots stayed busy for <n> seconds, so nothing was sent. Try again when a running statement finishes.` |

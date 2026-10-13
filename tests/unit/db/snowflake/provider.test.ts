@@ -7,7 +7,13 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { KeyObject } from "node:crypto";
 import { enumerateContainers, scopeGroundingContainers } from "@/lib/db/container-walk";
-import { AuthenticationError, DatabaseConfigError, QueryCancelledError, QueryError } from "@/lib/db/errors";
+import {
+  AuthenticationError,
+  ConnectionError,
+  DatabaseConfigError,
+  QueryCancelledError,
+  QueryError,
+} from "@/lib/db/errors";
 import { SNOWFLAKE_FIELD_SENTENCES } from "@/lib/db/providers/sql/snowflake/account-host";
 import { SNOWFLAKE_TOKEN_SENTENCES } from "@/lib/db/providers/sql/snowflake/auth";
 import { SNOWFLAKE, SNOWFLAKE_ERROR_SENTENCES } from "@/lib/db/providers/sql/snowflake/errors";
@@ -414,6 +420,51 @@ describe("connect() reads the names without the whitespace around them (SF-012)"
     entry.transports.answer(SUBMIT, RUNNING);
     await entry.provider.getHealth();
     expect(bodyOf(entry.transports.requests[0]).statement).toBe("SHOW WAREHOUSES LIKE 'STUDIO_WH'");
+  });
+});
+
+describe("a connect that gets no answer (SF-018)", () => {
+  /** A provider under Test Connection's 10 s query timeout, its deadlines fired by `settle`. */
+  function underTestConnection(): Built {
+    const transports = scriptedTransports();
+    const clock = fakeClock();
+    const deps = testDeps(transports, clock);
+    const entry = {
+      provider: new SnowflakeProvider(connection(), { queryTimeout: 10_000 }, deps),
+      transports,
+      deps,
+      clock,
+    };
+    built.push(entry);
+    return entry;
+  }
+
+  for (const [label, answers] of [
+    ["the connect statement", [HANG]],
+    ["the role check", [RUNNING, HANG]],
+  ] as const) {
+    test(`${label} past its bound fails the connect as a connection failure naming the host and the wait`, async () => {
+      const entry = underTestConnection();
+      entry.transports.answer(SUBMIT, ...answers);
+      const outcome = caught(entry.provider.connect());
+      await settle(entry, outcome);
+      const error = await outcome;
+      expect(error).toBeInstanceOf(ConnectionError);
+      expect((error as Error).message).toBe(SNOWFLAKE_ERROR_SENTENCES.connectDeadline(HOST, 15));
+      expect((error as Error).message).not.toContain("Query Timeout");
+      expect(entry.deps.deadlines.requested).toContain(15_000);
+      expect(entry.provider.isConnected()).toBe(false);
+    });
+  }
+
+  test("a statement after the connect keeps the query-timeout sentence", async () => {
+    const entry = underTestConnection();
+    entry.transports.answer(SUBMIT, RUNNING, ROLE_OK);
+    await entry.provider.connect();
+    entry.transports.answer(SUBMIT, HANG);
+    const outcome = caught(entry.provider.query("SELECT 1"));
+    await settle(entry, outcome);
+    expect(((await outcome) as Error).message).toBe(SNOWFLAKE_ERROR_SENTENCES.deadline(10));
   });
 });
 

@@ -214,6 +214,7 @@ const QUOTED: Readonly<Record<string, { readonly keys: readonly string[]; readon
       SNOWFLAKE_ERROR_SENTENCES.resultGone,
       SNOWFLAKE_ERROR_SENTENCES.accountNotFound("<host>"),
       SNOWFLAKE_ERROR_SENTENCES.invalidPayload,
+      SNOWFLAKE_ERROR_SENTENCES.connectDeadline("<host>", "<n>" as unknown as number),
       SNOWFLAKE_ERROR_SENTENCES.unreachable("<host>"),
       SNOWFLAKE_ERROR_SENTENCES.certMismatch("<host>"),
       SNOWFLAKE_ERROR_SENTENCES.slotsBusy("<n>" as unknown as number),

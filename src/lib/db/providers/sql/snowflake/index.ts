@@ -59,7 +59,7 @@ import { SQLBaseProvider } from "../sql-base";
 import { snowflakeEndpoint, type SnowflakeEndpoint } from "./account";
 import { SNOWFLAKE_FIELD_SENTENCES } from "./account-host";
 import { jwtClaim, keyPairTokenSource, type LoadedKey, loadPrivateKey, patTokenSource, readAccessToken } from "./auth";
-import { SNOWFLAKE, SNOWFLAKE_ERROR_SENTENCES, SnowflakeError, toDatabaseError } from "./errors";
+import { connectDeadlineError, SNOWFLAKE, SNOWFLAKE_ERROR_SENTENCES, SnowflakeError, toDatabaseError } from "./errors";
 import {
   connectCautions,
   connectStatement,
@@ -77,6 +77,7 @@ import {
 import { createSnowflakeMonitoring, SNOWFLAKE_MONITORING_LABELS, type SnowflakeMonitoring } from "./monitoring";
 import {
   createSnowflakeStatements,
+  deadlineMsFor,
   foldIdentifier,
   SNOWFLAKE_QUERY_TAGS,
   type SnowflakeResult,
@@ -380,9 +381,11 @@ export class SnowflakeProvider extends SQLBaseProvider {
    */
   public async connect(): Promise<void> {
     let opened: SnowflakeSession | null = null;
+    let host = "";
     let cautions: QueryWarning[];
     try {
       const settings = readSettings(this.config);
+      host = settings.endpoint.host;
       const loaded: LoadedKey | null =
         settings.method === "keypair"
           ? loadPrivateKey(this.config.privateKey, withoutLineEnd(this.config.privateKeyPassphrase))
@@ -448,7 +451,7 @@ export class SnowflakeProvider extends SQLBaseProvider {
         if (this.connecting === opened) this.connecting = null;
         await this.close(opened);
       }
-      const failure = toDatabaseError(error) as Error;
+      const failure = toDatabaseError(connectDeadlineError(error, host, (s) => deadlineMsFor(s) / 1000)) as Error;
       if (!displaced) this.setError(failure);
       throw failure;
     }
