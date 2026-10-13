@@ -91,16 +91,12 @@ export interface SnowflakeFailureContext {
 
 /**
  * The registration statement an administrator runs, `<name>` standing for the user's NAME, which can differ from the
- * login name Studio knows. It leads the refusal and is its copyable statement, because the trial refused the
- * self-service form with 003001, by a message naming MODIFY PROGRAMMATIC AUTHENTICATION METHODS on the user (M97).
+ * login name Studio knows. It is the refusal's copyable statement, and only there, so the sentence stays short: the
+ * public key body is long. The administrator's form, because the trial refused the self-service form with 003001, by a
+ * message naming MODIFY PROGRAMMATIC AUTHENTICATION METHODS on the user (M97); the provider doc names both.
  */
-function administratorStatement(fp8: string, body: string): string {
+export function administratorStatement(fp8: string, body: string): string {
   return `ALTER USER <name> ADD KEY PAIR ${keyPairName(fp8)} PUBLIC_KEY = '${body}'`;
-}
-
-/** The self-service registration statement, a user signed in as itself, which the refusal names with that 003001. */
-function selfServiceStatement(fp8: string, body: string): string {
-  return `ALTER USER ADD KEY PAIR ${keyPairName(fp8)} PUBLIC_KEY = '${body}'`;
 }
 
 /**
@@ -114,8 +110,6 @@ export const SNOWFLAKE_ERROR_SENTENCES = Object.freeze({
     readonly account: string;
     readonly user: string;
     readonly fingerprint: string;
-    readonly fp8: string;
-    readonly body: string;
   }) => {
     const id = values.uuid === null ? "" : `, [${values.uuid}]`;
     const cause =
@@ -123,11 +117,9 @@ export const SNOWFLAKE_ERROR_SENTENCES = Object.freeze({
         ? ""
         : `; an administrator can see the exact cause with SELECT SYSTEM$GET_LOGIN_FAILURE_DETAILS('${values.uuid}')`;
     return (
-      `Snowflake refused the key pair (JWT token is invalid${id}). ` +
-      `Studio signed as ${values.account}.${values.user} with the key whose fingerprint is ${values.fingerprint}. ` +
-      `An administrator registers it with ${administratorStatement(values.fp8, values.body)} and checks it with SHOW USER KEY PAIRS FOR USER <name>, where <name> is the user's NAME, which DESC USER and SHOW USERS show and which can differ from the login name; ALTER USER <name> SET RSA_PUBLIC_KEY = '${values.body}' is the documented alternative. ` +
-      `Signed in as this user, SHOW USER KEY PAIRS lists your keys; ${selfServiceStatement(values.fp8, values.body)} is refused with 003001 by a message that names MODIFY PROGRAMMATIC AUTHENTICATION METHODS on your own user as the privilege it needs. ` +
-      `If the key is listed, check that the account and user are the ones the key was registered on and that this computer's clock is correct${cause}.`
+      `Snowflake refused the key pair (JWT token is invalid${id}) for ${values.account}.${values.user}: no user has this login name, or the key whose fingerprint is ${values.fingerprint} is not registered on it. ` +
+      `Check User; an administrator registers the key with ALTER USER <name> ADD KEY PAIR, where <name> is the user's NAME from SHOW USERS, and Test connection shows the full statement to copy. ` +
+      `If the key is registered, check the account and this computer's clock${cause}.`
     );
   },
   keyPairMidRun: (code: string) =>
@@ -305,8 +297,6 @@ function signInError(failure: SnowflakeFailure, context: SnowflakeFailureContext
     account: context.accountClaim,
     user: context.userClaim,
     fingerprint,
-    fp8,
-    body,
   });
   return new SnowflakeError("auth", sentence, administratorStatement(fp8, body));
 }

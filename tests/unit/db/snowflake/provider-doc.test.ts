@@ -32,6 +32,7 @@ import {
 } from "@/lib/db/providers/sql/snowflake/auth";
 import { decodeCell, SNOWFLAKE_DECODE_SENTENCES } from "@/lib/db/providers/sql/snowflake/decode";
 import {
+  administratorStatement,
   keyPairName,
   SNOWFLAKE_ERROR_SENTENCES,
   SNOWFLAKE_SERVER_TEXT_MAX_CHARS,
@@ -152,9 +153,9 @@ const KEY_PAIR_REFUSED = SNOWFLAKE_ERROR_SENTENCES.keyPairRefused({
   account: "<ACCOUNT>",
   user: "<USER>",
   fingerprint: "SHA256:<fp>",
-  fp8: "<fp8>",
-  body: "<body>",
 });
+/** The statement the refusal carries to copy, with the doc's placeholders. */
+const KEY_PAIR_FIX = administratorStatement("<fp8>", "<body>");
 
 /** Every sentence of each exported record, each template filled with the doc's placeholders. */
 const QUOTED: Readonly<Record<string, { readonly keys: readonly string[]; readonly quotes: readonly string[] }>> = {
@@ -435,17 +436,15 @@ describe("docs/providers/snowflake.md", () => {
     expect(sessions).toContain('A backslash inside `"..."` is part of the name');
   });
 
-  test("registers the key under the name and statements Studio's refusal prints, the administrator's first", () => {
-    const admin = /registers it with (ALTER USER <name> ADD KEY PAIR \S+ PUBLIC_KEY = )'<body>'/.exec(KEY_PAIR_REFUSED);
-    const self = /; (ALTER USER ADD KEY PAIR \S+ PUBLIC_KEY = )'<body>' is refused with 003001/.exec(KEY_PAIR_REFUSED);
+  test("registers the key under the name and statement Studio's refusal carries, the self-service form in the doc", () => {
+    const admin = /^(ALTER USER <name> ADD KEY PAIR \S+ PUBLIC_KEY = )'<body>'$/.exec(KEY_PAIR_FIX);
     expect(admin).not.toBeNull();
-    expect(self).not.toBeNull();
-    expect(KEY_PAIR_REFUSED.indexOf(admin?.[1] ?? "")).toBeLessThan(KEY_PAIR_REFUSED.indexOf(self?.[1] ?? ""));
-    expect(KEY_PAIR_REFUSED).toContain("MODIFY PROGRAMMATIC AUTHENTICATION METHODS on your own user");
-    expect(KEY_PAIR_REFUSED).toContain("ALTER USER <name> SET RSA_PUBLIC_KEY = '<body>'");
+    expect(KEY_PAIR_REFUSED).not.toContain("<body>");
+    expect(KEY_PAIR_REFUSED).toContain("ALTER USER <name> ADD KEY PAIR, where <name> is the user's NAME");
+    const self = ["ALTER USER ADD KEY PAIR ", keyPairName("<fp8>"), " PUBLIC_KEY = "].join("");
     const connecting = flat(sectionOf(DOC, "## 2. Connecting"));
     expect(connecting).toContain(`${admin?.[1]}'<public key body>'`);
-    expect(connecting).toContain(`${self?.[1]}'<public key body>'`);
+    expect(connecting).toContain(`${self}'<public key body>'`);
     expect(connecting).toContain("ALTER USER <name> SET RSA_PUBLIC_KEY = '<public key body>'");
     expect(connecting).toContain("MODIFY PROGRAMMATIC AUTHENTICATION METHODS");
     // No capture shows SET RSA_PUBLIC_KEY replacing a key, or the self-service form working once granted (M97).
@@ -458,7 +457,7 @@ describe("docs/providers/snowflake.md", () => {
     const generate = connecting.indexOf("openssl genrsa 2048");
     const register = connecting.indexOf(admin?.[1] ?? "");
     const check = connecting.indexOf("SHOW USER KEY PAIRS FOR USER <name>", register);
-    const selfService = connecting.indexOf(self?.[1] ?? "");
+    const selfService = connecting.indexOf(self);
     expect(generate).toBeGreaterThan(-1);
     expect(register).toBeGreaterThan(generate);
     expect(check).toBeGreaterThan(register);

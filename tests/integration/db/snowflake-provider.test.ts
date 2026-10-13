@@ -460,8 +460,10 @@ describe("each refusal the fixtures hold, with its class and its sentence", () =
     expect(error).toBeInstanceOf(AuthenticationError);
     // The account answered "JWT token is invalid. null": no login-failure id, so the sentence names none.
     expect(scenario.exchanges[0].response.body.message).toBe("JWT token is invalid. null");
-    expect(error.message).toStartWith("Snowflake refused the key pair (JWT token is invalid). ");
-    expect(error.message).toContain("Studio signed as ACMEORG-PROBEACCT.STUDIO_READER with the key whose fingerprint");
+    expect(error.message).toStartWith(
+      "Snowflake refused the key pair (JWT token is invalid) for ACMEORG-PROBEACCT.STUDIO_READER: no user has this login name, or the key whose fingerprint is SHA256:",
+    );
+    expect(error.message).not.toContain("PUBLIC_KEY");
     expect(error.message).not.toContain("SYSTEM$GET_LOGIN_FAILURE_DETAILS");
     expect(error.fixStatement).toMatch(
       /^ALTER USER <name> ADD KEY PAIR libredb_studio_[0-9a-f]{8} PUBLIC_KEY = '[A-Za-z0-9+/=]+'$/,

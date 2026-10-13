@@ -59,9 +59,9 @@ const failure = (overrides: Partial<SnowflakeFailure>): SnowflakeFailure => ({
 });
 
 const KEY_PAIR_WITH_UUID =
-  "Snowflake refused the key pair (JWT token is invalid, [019c06a4-0000-df4f-0000-00100006589e]). Studio signed as MYORG-MYACCOUNT.STUDIO_SVC with the key whose fingerprint is SHA256:abc=. An administrator registers it with ALTER USER <name> ADD KEY PAIR libredb_studio_0a1b2c3d PUBLIC_KEY = 'MIIBIjANBgkq' and checks it with SHOW USER KEY PAIRS FOR USER <name>, where <name> is the user's NAME, which DESC USER and SHOW USERS show and which can differ from the login name; ALTER USER <name> SET RSA_PUBLIC_KEY = 'MIIBIjANBgkq' is the documented alternative. Signed in as this user, SHOW USER KEY PAIRS lists your keys; ALTER USER ADD KEY PAIR libredb_studio_0a1b2c3d PUBLIC_KEY = 'MIIBIjANBgkq' is refused with 003001 by a message that names MODIFY PROGRAMMATIC AUTHENTICATION METHODS on your own user as the privilege it needs. If the key is listed, check that the account and user are the ones the key was registered on and that this computer's clock is correct; an administrator can see the exact cause with SELECT SYSTEM$GET_LOGIN_FAILURE_DETAILS('019c06a4-0000-df4f-0000-00100006589e').";
+  "Snowflake refused the key pair (JWT token is invalid, [019c06a4-0000-df4f-0000-00100006589e]) for MYORG-MYACCOUNT.STUDIO_SVC: no user has this login name, or the key whose fingerprint is SHA256:abc= is not registered on it. Check User; an administrator registers the key with ALTER USER <name> ADD KEY PAIR, where <name> is the user's NAME from SHOW USERS, and Test connection shows the full statement to copy. If the key is registered, check the account and this computer's clock; an administrator can see the exact cause with SELECT SYSTEM$GET_LOGIN_FAILURE_DETAILS('019c06a4-0000-df4f-0000-00100006589e').";
 const KEY_PAIR_WITHOUT_UUID =
-  "Snowflake refused the key pair (JWT token is invalid). Studio signed as MYORG-MYACCOUNT.STUDIO_SVC with the key whose fingerprint is SHA256:abc=. An administrator registers it with ALTER USER <name> ADD KEY PAIR libredb_studio_0a1b2c3d PUBLIC_KEY = 'MIIBIjANBgkq' and checks it with SHOW USER KEY PAIRS FOR USER <name>, where <name> is the user's NAME, which DESC USER and SHOW USERS show and which can differ from the login name; ALTER USER <name> SET RSA_PUBLIC_KEY = 'MIIBIjANBgkq' is the documented alternative. Signed in as this user, SHOW USER KEY PAIRS lists your keys; ALTER USER ADD KEY PAIR libredb_studio_0a1b2c3d PUBLIC_KEY = 'MIIBIjANBgkq' is refused with 003001 by a message that names MODIFY PROGRAMMATIC AUTHENTICATION METHODS on your own user as the privilege it needs. If the key is listed, check that the account and user are the ones the key was registered on and that this computer's clock is correct.";
+  "Snowflake refused the key pair (JWT token is invalid) for MYORG-MYACCOUNT.STUDIO_SVC: no user has this login name, or the key whose fingerprint is SHA256:abc= is not registered on it. Check User; an administrator registers the key with ALTER USER <name> ADD KEY PAIR, where <name> is the user's NAME from SHOW USERS, and Test connection shows the full statement to copy. If the key is registered, check the account and this computer's clock.";
 const FIX = "ALTER USER <name> ADD KEY PAIR libredb_studio_0a1b2c3d PUBLIC_KEY = 'MIIBIjANBgkq'";
 
 /** Splits a statement on `;` outside double-quoted identifiers and single-quoted strings. */
@@ -422,6 +422,17 @@ describe("failureError: the key-pair refusal", () => {
     const error = failureError(failure({ status: 401, code: "390144", message: "JWT token is invalid." }), context());
     expect(error.message).toBe(KEY_PAIR_WITHOUT_UUID);
     expect(error.fixStatement).toBe(FIX);
+  });
+
+  test("the sentence holds no public key body and stays short; the statement holds it once (SF-027)", () => {
+    const body = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA".repeat(9);
+    const error = failureError(
+      failure({ status: 401, code: "390144", message: `JWT token is invalid. [${UUID}]` }),
+      context({ publicKeyBody: body }),
+    );
+    expect(error.message).not.toContain(body.slice(0, 40));
+    expect(error.message.length).toBeLessThan(700);
+    expect(error.fixStatement?.split(body).length).toBe(2);
   });
 
   test("the fix statement is the administrator's registration, carried onto the AuthenticationError", () => {

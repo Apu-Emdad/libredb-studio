@@ -217,14 +217,12 @@ describe("the Snowflake key-pair refusal in the result banner", () => {
   const BODY = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA".repeat(9);
   const FINGERPRINT = "SHA256:Qm9vZ2xlR29vZ2xlR29vZ2xlR29vZ2xlR29vZ2xlR29vZ2xlJWZG3hSx=";
 
-  test("wraps its long words, so the fingerprint and both key bodies are read whole at any width", async () => {
+  test("wraps its long words, so the fingerprint and the statement's key body are read whole at any width", async () => {
     const sentence = SNOWFLAKE_ERROR_SENTENCES.keyPairRefused({
       uuid: null,
       account: "MYORG-MYACCT",
       user: "STUDIO_SVC",
       fingerprint: FINGERPRINT,
-      fp8: "0a1b2c3d",
-      body: BODY,
     });
     const statement = `ALTER USER ADD KEY PAIR STUDIO_0a1b2c3d PUBLIC_KEY = '${BODY}'`;
     const probe = mock(async (_connection: DatabaseConnection) => ({
@@ -243,6 +241,8 @@ describe("the Snowflake key-pair refusal in the result banner", () => {
     const text = screen.getByTestId("connection-test-message");
     expect(text.textContent).toBe(sentence);
     expect(text.textContent).toContain(FINGERPRINT);
+    // The key body is in the copyable statement only, never in the banner's sentence (SF-027).
+    expect(text.textContent).not.toContain(BODY.slice(0, 40));
     // happy-dom lays nothing out, so the rule that lets a word longer than the line break is what is read: without
     // it the fingerprint and the key bodies run past the banner and its overflow-hidden ancestor clips them.
     expect(text.className.split(" ")).toContain("break-words");
