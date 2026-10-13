@@ -6,6 +6,7 @@
  */
 import { test } from "bun:test";
 import { QueryError } from "@/lib/db/errors";
+import { READER_LIMITS } from "@/lib/db/providers/network/netconf/reader-port";
 import { expectBe, expectEqual, expectMatch, expectNotBe, expectNotEqual, expectThrows, expectTruthy } from "./helpers";
 import { readFile } from "node:fs/promises";
 import { EOM, FrameReader, frame } from "@/lib/db/providers/network/netconf/framing";
@@ -348,4 +349,37 @@ test("rootKind is absent, because this engine addresses its key space through co
   expectBe(NETCONF_KEY_SCAN.separator?.length, 1);
   expectBe(NETCONF_KEY_SCAN.pattern, "prefix");
   expectBe(NETCONF_KEY_SCAN.totalScope, "none");
+});
+
+/**
+ * The declared limits, asserted against what was measured rather than against themselves.
+ *
+ * A mutation replacing `defaultCount` with 1 and `maxDepth` with 1 survived the earlier tests,
+ * because nothing held either number to anything. Asserting that a constant equals itself is not a
+ * test, so these assert the floors the measurements imply: with 5,000 interfaces on the fixture, a
+ * page of a handful would need a thousand round trips, and a tree that nests deeper than a couple
+ * of levels cannot be read at a depth cap of 1.
+ */
+test("the key scan page sizes are usable on the size of list that was measured", () => {
+  const scan = NETCONF_KEY_SCAN;
+  // A default of a handful turns an ordinary level into a hundred round trips: MEASURED, the
+  // fixture's one list held 5,000 entries, so the default has to page that in tens of requests
+  // rather than thousands. A mutation setting it to 1 survived an assertion of ">= 1", which is
+  // the shape this rule is about: a floor has to come from the measurement, not from the type.
+  expectTruthy((scan.defaultCount ?? 0) >= 50);
+  expectTruthy((scan.maxCount ?? 0) >= (scan.defaultCount ?? 0));
+  // MEASURED: the fixture served 5,000 interfaces under one list. A maximum page of a few entries
+  // turns one level into a thousand requests, so the cap has to be in the hundreds at least.
+  expectTruthy((scan.maxCount ?? 0) >= 100);
+});
+
+test("the reader limits are above what the measured replies actually need", () => {
+  // MEASURED on the fixture: 5,000 interfaces of four leaves each, so a reply holds about 25,000
+  // elements. A cap below that refuses the device's ordinary answer.
+  expectTruthy(READER_LIMITS.maxElements >= 25_000);
+  // MEASURED: a key path of module, list, entry, container and leaf is five levels before any
+  // nesting inside the entry, and real modules nest deeper. A cap of a handful refuses everything.
+  expectTruthy(READER_LIMITS.maxDepth >= 16);
+  // The byte cap has to clear the largest module text measured through get-schema, 118,482 bytes.
+  expectTruthy(READER_LIMITS.maxTextBytes >= 118_482);
 });

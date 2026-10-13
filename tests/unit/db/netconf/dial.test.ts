@@ -92,10 +92,18 @@ const config = (over: Partial<DialConfig> = {}): DialConfig => ({
   ...over,
 });
 
-test("the socket is dialled with Nagle off, on 830 unless the connection says otherwise", async () => {
+/**
+ * The number is written out rather than compared against the constant it came from. A mutation
+ * replacing `NETCONF_PORT` with a bare 830 survived the earlier version of this test, because the
+ * test asserted that the constant equalled itself: it would have passed just as happily if the
+ * constant had been 22. IANA registers 830/tcp as `netconf-ssh` and RFC 6242 section 3 names it,
+ * so 830 is the fact and the constant is only its name.
+ */
+test("the default port is 830, the number the standard names, and a connection can override it", async () => {
   const { ssh, socket, seen } = ports();
   await dialNetconf(config(), ssh, socket);
-  expectBe(seen.dialled[0]?.port, NETCONF_PORT);
+  expectBe(seen.dialled[0]?.port, 830);
+  expectBe(NETCONF_PORT, 830);
   expectBe(seen.dialled[0]?.noDelay, true);
   await dialNetconf(config({ port: 2830 }), ssh, socket);
   expectBe(seen.dialled[1]?.port, 2830);
