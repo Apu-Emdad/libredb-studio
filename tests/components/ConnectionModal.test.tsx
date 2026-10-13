@@ -212,6 +212,7 @@ function getDefaultForm() {
     isTesting: false,
     testResult: null,
     setTestResult: mockSetTestResult,
+    withdrawResult: mock(() => {}),
     pasteInput: "",
     setPasteInput: mockSetPasteInput,
     showPasteInput: false,

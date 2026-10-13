@@ -532,3 +532,51 @@ describe("the Account hint and Test agree (SF-025)", () => {
     expect(probe).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("the Snowflake form's small consistencies (SF-043)", () => {
+  test("Account's example fits its box, and the URL form is said in the hint under it", () => {
+    openSnowflake();
+    expect(field("host").placeholder).toBe("myorg-myaccount");
+    expect(screen.getByTestId("host-hint").textContent).toBe(
+      "An account identifier such as myorg-myaccount, or its https:// URL.",
+    );
+  });
+
+  test("User, Database and Schema keep spell checking, autocorrect, autocapitalise and autocomplete off", () => {
+    openSnowflake();
+    for (const id of ["user", "database", "schema", "warehouse", "role", "host"]) {
+      const box = field(id);
+      expect([id, box.getAttribute("spellcheck"), box.getAttribute("autocomplete")]).toEqual([id, "false", "off"]);
+      expect([id, box.getAttribute("autocorrect"), box.getAttribute("autocapitalize")]).toEqual([id, "off", "off"]);
+    }
+  });
+
+  test("the fields Test refuses empty are marked required, and the optional ones are not", () => {
+    openSnowflake();
+    const required = (id: string) => field(id).getAttribute("aria-required");
+    const marked = (id: string) =>
+      (document.querySelector(`label[for="${id}"]`) as HTMLElement).className.includes("after:content-['*']");
+    for (const id of ["host", "user", "privateKey", "role"])
+      expect([id, required(id), marked(id)]).toEqual([id, "true", true]);
+    for (const id of ["privateKeyPassphrase", "warehouse", "database", "schema"]) {
+      expect([id, required(id), marked(id)]).toEqual([id, null, false]);
+    }
+    fireEvent.change(field("authMethod"), { target: { value: "pat" } });
+    expect([required("password"), marked("password")]).toEqual(["true", true]);
+  });
+
+  test("a Test result is withdrawn when any field changes, the key included", async () => {
+    openSnowflake();
+    fireEvent.change(field("host"), { target: { value: "myorg-myacct" } });
+    fireEvent.change(field("user"), { target: { value: "studio_svc" } });
+    fireEvent.change(field("role"), { target: { value: "STUDIO_RO" } });
+    await click("Test Connection");
+    expect(screen.getByTestId("connection-test-result").textContent).toContain("Paste the private key");
+    fireEvent.change(field("privateKey"), { target: { value: pemArmour("BEGIN") } });
+    await waitFor(() => expect(screen.queryByTestId("connection-test-result")).toBeNull());
+    await click("Test Connection");
+    expect(screen.queryByTestId("connection-test-result")).not.toBeNull();
+    fireEvent.change(field("warehouse"), { target: { value: "WH" } });
+    await waitFor(() => expect(screen.queryByTestId("connection-test-result")).toBeNull());
+  });
+});

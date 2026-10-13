@@ -1760,9 +1760,8 @@ describe("the Snowflake entry", () => {
     expect(snowflake.hostHint).toBe(snowflakeHostHint);
     expect(snowflake.hostHint?.("myorg-myacct")).toBe("Studio connects to myorg-myacct.snowflakecomputing.com.");
     expect(snowflake.hostHint?.("")).toBeUndefined();
-    expect(connectionFieldPlaceholder(snowflake, "host", "localhost")).toBe(
-      "myorg-myaccount or https://myorg-myaccount.snowflakecomputing.com",
-    );
+    // The identifier alone, which fits the box; the hint says the URL form (SF-043).
+    expect(connectionFieldPlaceholder(snowflake, "host", "localhost")).toBe("myorg-myaccount");
   });
 
   test("only snowflake and opcua take a host without a port, so every other host row keeps its Port box", () => {

@@ -172,6 +172,7 @@ function PrivateKeyBox({
   readonly value: string;
   readonly onChange: (value: string) => void;
 }) {
+  const required = config.fieldRules?.privateKey?.required !== undefined;
   const [drawn, setDrawn] = useState(false);
   const [focusOnDraw, setFocusOnDraw] = useState(false);
   if (value !== "" && !drawn) {
@@ -210,6 +211,7 @@ function PrivateKeyBox({
   return (
     <textarea
       id="privateKey"
+      aria-required={required || undefined}
       value={value}
       // Show key and Replace key hand the focus to the box they draw, so leaving it hides the key again.
       autoFocus={focusOnDraw}
@@ -354,6 +356,7 @@ export function ConnectionModal({
     isTesting,
     testResult,
     setTestResult,
+    withdrawResult,
     pasteInput,
     setPasteInput,
     showPasteInput,
@@ -489,6 +492,14 @@ export function ConnectionModal({
 
   const derivedHostHint = uiConfig.hostHint?.(host);
   /**
+   * A field Test refuses empty (its declared rule has `required`), marked on its label with an asterisk drawn by CSS,
+   * so the label's text stays the field's name, and on its box with `aria-required` (SF-043).
+   */
+  const isRequired = (field: ConnectionField): boolean => uiConfig.fieldRules?.[field]?.required !== undefined;
+  const labelClass = (field: ConnectionField): string =>
+    cn("text-xs font-medium text-fg-muted", isRequired(field) && "after:ml-0.5 after:text-danger after:content-['*']");
+  const requiredProps = (field: ConnectionField) => (isRequired(field) ? { "aria-required": true as const } : {});
+  /**
    * Whether the dialog draws a field: the engine takes it, and the condition it declares on another field's value
    * holds (`fieldShownWhen`), the rule `buildConnection` writes by. Read from the form's own values, never the type.
    */
@@ -529,12 +540,13 @@ export function ConnectionModal({
     <div className={passwordInUserRow && !takesConnectionField(type, "user") ? "space-y-2 md:col-span-2" : "space-y-2"}>
       <div className="flex items-center gap-2 mb-1">
         <ShieldCheck strokeWidth={1.5} className="w-3 h-3 text-fg-muted" />
-        <Label htmlFor="password" className="text-xs font-medium text-fg-muted">
+        <Label htmlFor="password" className={labelClass("password")}>
           {connectionFieldLabel(uiConfig, "password", passwordFieldLabel)}
         </Label>
       </div>
       <Input
         id="password"
+        {...requiredProps("password")}
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
@@ -608,6 +620,8 @@ export function ConnectionModal({
         onChange={(e) => setWarehouse(e.target.value)}
         autoComplete="off"
         spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="off"
         aria-describedby={describedByHint(uiConfig, "warehouse")}
         className="h-10 bg-panel border-hairline focus:border-brand-tint/50 transition-all text-xs font-mono"
       />
@@ -626,8 +640,11 @@ export function ConnectionModal({
         />
       </div>
 
-      {/* Scrollable body */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+      {/*
+        Scrollable body. A change to any field in it withdraws the result banner (SF-043): a Test result describes the
+        fields it ran on, and stood beside a changed key or user as if it still did.
+      */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-8" onChangeCapture={withdrawResult}>
         <div className="mb-4 md:mb-8">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 rounded-xl bg-brand-tint/10 border border-brand-tint/20">
@@ -965,13 +982,14 @@ export function ConnectionModal({
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 mb-1">
                         <Globe strokeWidth={1.5} className="w-3 h-3 text-fg-muted" />
-                        <Label htmlFor="host" className="text-xs font-medium text-fg-muted">
+                        <Label htmlFor="host" className={labelClass("host")}>
                           {connectionFieldLabel(uiConfig, "host", "Host & Instance")}
                         </Label>
                       </div>
                       <div className={cn("grid grid-cols-1 md:grid-cols-4 gap-3", portLabel !== "" && "items-end")}>
                         <Input
                           id="host"
+                          {...requiredProps("host")}
                           value={host}
                           onChange={(e) => setHost(e.target.value, (e.nativeEvent as InputEvent).inputType)}
                           onBlur={settleHost}
@@ -1075,16 +1093,21 @@ export function ConnectionModal({
                       <div className={passwordInUserRow ? "space-y-2" : "space-y-2 md:col-span-2"}>
                         <div className="flex items-center gap-2 mb-1">
                           <Key strokeWidth={1.5} className="w-3 h-3 text-fg-muted" />
-                          <Label htmlFor="user" className="text-xs font-medium text-fg-muted">
+                          <Label htmlFor="user" className={labelClass("user")}>
                             {connectionFieldLabel(uiConfig, "user", "Username")}
                           </Label>
                         </div>
                         <Input
                           id="user"
+                          {...requiredProps("user")}
                           value={user}
                           onChange={(e) => setUser(e.target.value)}
                           placeholder={connectionFieldPlaceholder(uiConfig, "user", "user")}
+                          // A login name, not prose (SF-043), as Account, Warehouse and Role already are.
                           autoComplete="off"
+                          spellCheck={false}
+                          autoCorrect="off"
+                          autoCapitalize="off"
                           aria-describedby={describedByHint(uiConfig, "user")}
                           className="h-10 bg-panel border-hairline focus:border-brand-tint/50 transition-all text-xs"
                         />
@@ -1113,7 +1136,7 @@ export function ConnectionModal({
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 mb-1">
                         <Key strokeWidth={1.5} className="w-3 h-3 text-fg-muted" />
-                        <Label htmlFor="privateKey" className="text-xs font-medium text-fg-muted">
+                        <Label htmlFor="privateKey" className={labelClass("privateKey")}>
                           {connectionFieldLabel(uiConfig, "privateKey", "Private key")}
                         </Label>
                       </div>
@@ -1168,6 +1191,11 @@ export function ConnectionModal({
                         value={database}
                         onChange={(e) => setDatabase(e.target.value)}
                         placeholder={connectionFieldPlaceholder(uiConfig, "database", databaseFieldPlaceholder)}
+                        // An object name, not prose (SF-043).
+                        autoComplete="off"
+                        spellCheck={false}
+                        autoCorrect="off"
+                        autoCapitalize="off"
                         aria-describedby={describedByHint(uiConfig, "database")}
                         className="h-10 bg-panel border-hairline focus:border-brand-tint/50 transition-all text-xs font-mono"
                       />
@@ -1444,6 +1472,10 @@ export function ConnectionModal({
                         value={schema}
                         onChange={(e) => setSchema(e.target.value)}
                         placeholder={connectionFieldPlaceholder(uiConfig, "schema", "default")}
+                        autoComplete="off"
+                        spellCheck={false}
+                        autoCorrect="off"
+                        autoCapitalize="off"
                         aria-describedby={describedByHint(uiConfig, "schema")}
                         className="h-10 bg-panel border-hairline focus:border-brand-tint/50 transition-all text-xs font-mono"
                       />
@@ -1466,16 +1498,19 @@ export function ConnectionModal({
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 mb-1">
                         <ShieldCheck strokeWidth={1.5} className="w-3 h-3 text-fg-muted" />
-                        <Label htmlFor="role" className="text-xs font-medium text-fg-muted">
+                        <Label htmlFor="role" className={labelClass("role")}>
                           {connectionFieldLabel(uiConfig, "role", "Role")}
                         </Label>
                       </div>
                       <Input
                         id="role"
+                        {...requiredProps("role")}
                         value={role}
                         onChange={(e) => setRole(e.target.value)}
                         autoComplete="off"
                         spellCheck={false}
+                        autoCorrect="off"
+                        autoCapitalize="off"
                         aria-describedby={describedByHint(uiConfig, "role")}
                         className="h-10 bg-panel border-hairline focus:border-brand-tint/50 transition-all text-xs font-mono"
                       />

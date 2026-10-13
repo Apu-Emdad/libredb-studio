@@ -1004,6 +1004,16 @@ export function useConnectionForm({ isOpen, onConnect, editConnection, onTestCon
     }
   }
 
+  /**
+   * Withdraws the result banner and the save acknowledgement when any field changes (SF-043): a Test result describes
+   * the fields it was run on, so it must not stand beside different ones, and a caution clicked past for them must not
+   * save these on the first click.
+   */
+  const withdrawResult = useCallback(() => {
+    setTestResult(null);
+    setAcknowledgedCaution(null);
+  }, []);
+
   /** The refusal of the Host box's address the dialog is showing, if it is showing one, so an edit can clear it. */
   const [hostRefusal, setHostRefusal] = useState<{ tone: TestResultTone; message: string } | null>(null);
   const showHostRefusal = useCallback((sentence: string) => {
@@ -1766,6 +1776,7 @@ export function useConnectionForm({ isOpen, onConnect, editConnection, onTestCon
     isTesting,
     testResult,
     setTestResult,
+    withdrawResult,
     pasteInput,
     setPasteInput,
     showPasteInput,

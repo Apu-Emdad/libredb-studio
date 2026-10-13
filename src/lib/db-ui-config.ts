@@ -269,6 +269,8 @@ export const DATABEND_FIELD_HINTS: Readonly<Partial<Record<ConnectionField, stri
  * The sentences the connection dialog draws under Snowflake's fields, exported so the docs can be held to them.
  */
 export const SNOWFLAKE_FIELD_HINTS: Readonly<Partial<Record<ConnectionField, string>>> = Object.freeze({
+  // Drawn while the Account text does not read yet; once it reads, the derived "Studio connects to" hint replaces it.
+  host: "An account identifier such as myorg-myaccount, or its https:// URL.",
   user: "The user's login name (LOGIN_NAME).",
   privateKey: "Paste the private key's contents. Studio reads no key file.",
   privateKeyPassphrase: "Only for an encrypted key.",
@@ -1009,7 +1011,8 @@ export const DB_UI_CONFIG: Record<DatabaseType, DatabaseUIConfig> = {
       ],
     },
     fieldPlaceholders: {
-      host: "myorg-myaccount or https://myorg-myaccount.snowflakecomputing.com",
+      // The identifier alone: the URL form was cut at "snowflakecomputing.c" at 1440 px (SF-043), and the hint says it.
+      host: "myorg-myaccount",
       privateKey: "-----BEGIN PRIVATE KEY-----",
       // No example for these three: a name such as user or default reads as a value already typed, and each box's
       // hint says what it takes.
