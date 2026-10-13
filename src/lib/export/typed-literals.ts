@@ -677,7 +677,7 @@ const SNOWFLAKE_SEMI_STRUCTURED = /^(VARIANT|OBJECT|ARRAY|MAP)$/;
 const SNOWFLAKE_CAST_TYPE = /^[A-Z_]+\([A-Z0-9_, ()]*\)$/i;
 /** One element of a VECTOR's text: a number, or a non-finite word, which only a FLOAT vector holds. */
 const SNOWFLAKE_VECTOR_ELEMENT = /^-?(?:(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|inf|infinity|nan)$/i;
-/** A NUMBER or DECFLOAT text written bare, as the decoder hands over its exact text. */
+/** A NUMBER text written bare, and a DECFLOAT text quoted and cast, as the decoder hands over its exact text. */
 const SNOWFLAKE_NUMERIC_TEXT = /^-?\d+(\.\d+)?(e[+-]?\d+)?$/i;
 
 /** The decoder's text for each temporal type, its conversion function, and its mask without the fraction. */
@@ -747,8 +747,15 @@ function snowflakeValue(value: unknown, declared: string, scalar: ScalarLiteral)
     const mask = `${temporal.mask}${fraction}${temporal.zoned ? "TZH:TZM" : ""}`;
     return `${temporal.convert}(${quoteLiteral(value as string, "snowflake")}, '${mask}')`;
   }
-  if ((name === "NUMBER" || name === "DECFLOAT") && typeof value === "string") {
+  if (name === "NUMBER" && typeof value === "string") {
     return SNOWFLAKE_NUMERIC_TEXT.test(value) ? value : scalar(value);
+  }
+  // A bare numeric literal is a NUMBER or a FLOAT before it is a DECFLOAT, which Snowflake's own
+  // numeric-types page warns about: replayed on 2026-10-14, `1.23e40` came back
+  // `1.22999999999999995e40`, `-4.2e-5432` came back 0 and `1e16384` failed as
+  // `TO_DECFLOAT(inf)`. A quoted text cast to DECFLOAT is parsed by DECFLOAT itself, exactly.
+  if (name === "DECFLOAT" && typeof value === "string") {
+    return SNOWFLAKE_NUMERIC_TEXT.test(value) ? `${quoteLiteral(value, "snowflake")}::DECFLOAT` : scalar(value);
   }
   return undefined;
 }

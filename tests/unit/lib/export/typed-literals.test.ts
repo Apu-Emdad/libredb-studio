@@ -386,12 +386,20 @@ describe("typedLiteral: snowflake (provisional until a replay on an account)", (
     expect(() => typedLiteral("2026-10-12 01:02:03", "TIMESTAMP_TZ(0)", "snowflake", scalar)).toThrow(UnwritableValue);
   });
 
-  test("a NUMBER or DECFLOAT text is written bare; anything else falls to the generic writer", () => {
+  test("a DECFLOAT text is a quoted literal cast to DECFLOAT, never a bare number (SF-003)", () => {
+    expect(typedLiteral("1.23e40", "DECFLOAT", "snowflake", scalar)).toBe("'1.23e40'::DECFLOAT");
+    expect(typedLiteral("-4.2e-5432", "DECFLOAT", "snowflake", scalar)).toBe("'-4.2e-5432'::DECFLOAT");
+    expect(typedLiteral("1e16384", "DECFLOAT", "snowflake", scalar)).toBe("'1e16384'::DECFLOAT");
+    expect(typedLiteral("0.1", "DECFLOAT", "snowflake", scalar)).toBe("'0.1'::DECFLOAT");
+    expect(typedLiteral("x", "DECFLOAT", "snowflake", scalar)).toBe("<x>");
+  });
+
+  test("a NUMBER text is written bare; anything else falls to the generic writer", () => {
     expect(typedLiteral("12.50", "NUMBER(10,2)", "snowflake", scalar)).toBe("12.50");
     expect(typedLiteral("123456789012345678901234567890", "NUMBER(38,0)", "snowflake", scalar)).toBe(
       "123456789012345678901234567890",
     );
-    expect(typedLiteral("-1.5e-300", "DECFLOAT", "snowflake", scalar)).toBe("-1.5e-300");
+    expect(typedLiteral("-1.5e-300", "DECFLOAT", "snowflake", scalar)).toBe("'-1.5e-300'::DECFLOAT");
     expect(typedLiteral("x", "NUMBER(10,2)", "snowflake", scalar)).toBe("<x>");
     expect(typedLiteral(7, "NUMBER(38,0)", "snowflake", scalar)).toBeUndefined();
     expect(typedLiteral(1.5, "FLOAT", "snowflake", scalar)).toBeUndefined();
