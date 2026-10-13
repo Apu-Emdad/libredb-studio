@@ -41,8 +41,8 @@ import type { HostUriScheme } from "@/lib/connection-host-uri";
 import type { ConnectionImportDeclaration } from "@/lib/connection-import";
 import { CREDENTIAL_WARNINGS, type CredentialWarning } from "@/lib/db/credential-warnings";
 import {
-  SNOWFLAKE_ACCOUNT_PATTERN,
   SNOWFLAKE_FIELD_SENTENCES,
+  snowflakeAccountRefusal,
   snowflakeHostHint,
   snowflakeHostIdentity,
 } from "@/lib/db/providers/sql/snowflake/account-host";
@@ -224,6 +224,12 @@ export interface ConnectionFieldRule {
   readonly format?: { readonly pattern: RegExp; readonly sentence: string };
   /** A field that is not blank and passes `format` must hold `min` to `max` characters, or `sentence` is the refusal. */
   readonly charRange?: { readonly min: number; readonly max: number; readonly sentence: string };
+  /**
+   * A field that is not blank and passes the two above is read by this function, whose answer is the refusal, or
+   * undefined where it passes: for a check a pattern cannot state, such as Snowflake's Account, which the dialog reads
+   * with the very function `connect()` reads it with.
+   */
+  readonly check?: (value: string) => string | undefined;
 }
 
 /**
@@ -278,10 +284,9 @@ export const SNOWFLAKE_FIELD_HINTS: Readonly<Partial<Record<ConnectionField, str
  * so the dialog reads its pattern and sentences directly rather than a copy.
  */
 export const SNOWFLAKE_FIELD_RULES: Readonly<Partial<Record<ConnectionField, ConnectionFieldRule>>> = Object.freeze({
-  host: {
-    required: SNOWFLAKE_FIELD_SENTENCES.accountEmpty,
-    format: { pattern: SNOWFLAKE_ACCOUNT_PATTERN, sentence: SNOWFLAKE_FIELD_SENTENCES.accountFormat },
-  },
+  // connect()'s own reading of the text (SF-025), so the dialog refuses exactly what Test would, a padded account
+  // passes, and the hint under the box appears only for a text both take.
+  host: { required: SNOWFLAKE_FIELD_SENTENCES.accountEmpty, check: snowflakeAccountRefusal },
   user: { required: SNOWFLAKE_FIELD_SENTENCES.userEmpty },
   // Each credential is required only under its own sign-in method: `fieldShownWhen` hides the other one, and a
   // hidden field's rules are not checked.
@@ -1401,6 +1406,8 @@ export function connectionFieldRefusal(config: DatabaseUIConfig, connection: Dat
     ) {
       return rule.charRange.sentence;
     }
+    const checked = rule.check?.(String(value));
+    if (checked !== undefined) return checked;
   }
   return undefined;
 }

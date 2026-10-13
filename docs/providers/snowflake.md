@@ -91,6 +91,8 @@ Account takes:
 - a Snowsight URL `https://app.snowflake.com/<org>/<account>/...`, read as `<org>-<account>`, with no query, fragment, user part or port; Studio never sends a request to `app.snowflake.com`.
 
 Studio builds the origin itself as `https://<identifier>.snowflakecomputing.com:443` and accepts a host only under `.snowflakecomputing.com` or `.snowflakecomputing.cn`, with at most five labels before the suffix, no IP literal, no other port, and no path, query or user part.
+Each label is at most 63 characters and neither starts nor ends with a hyphen, and spaces around the text are ignored.
+The dialog's hint ("Studio connects to `<host>`.") appears only for a text `connect()` takes, since the hint, the dialog's check and `connect()` read the text with one function; a text it refuses is named under Account when Test connection or Save refuses it, and editing Account clears that sentence.
 The suffix comes off once, and an identifier whose labels still name a Snowflake domain is refused, such as a doubled suffix or `app.snowflake.com`; labels are compared whole, so `snowflake.community` reads as a locator and its region.
 For an account name with an underscore, prefer the hyphen form (`myorg-my-account`): Node's certificate checker accepts both, but OpenSSL-based validators on a proxy or gateway can refuse the underscore form.
 

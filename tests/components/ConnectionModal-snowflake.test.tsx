@@ -500,3 +500,25 @@ describe("the paste box's hint and its refusal name the same formats (SF-024)", 
     );
   });
 });
+
+describe("the Account hint and Test agree (SF-025)", () => {
+  test("a text Test refuses gets no hint, and its refusal is drawn under the box until the box is edited", async () => {
+    const { probe } = openSnowflake();
+    fireEvent.change(field("host"), { target: { value: "https://myorg-myacct.snowflakecomputing.com/console" } });
+    fireEvent.change(field("user"), { target: { value: "studio_svc" } });
+    fireEvent.change(field("role"), { target: { value: "STUDIO_RO" } });
+    fireEvent.change(field("privateKey"), { target: { value: pemArmour("BEGIN") } });
+    expect(screen.queryByTestId("host-hint")?.textContent ?? "").not.toContain("Studio connects to");
+    await click("Test Connection");
+    expect(probe).toHaveBeenCalledTimes(0);
+    const sentence =
+      "Enter an account identifier such as myorg-myaccount, or its https URL; a jdbc: or snowflake:// URL goes into Paste URL instead. Nothing was sent.";
+    expect(screen.getByTestId("host-error").textContent).toBe(sentence);
+    expect(field("host").getAttribute("aria-invalid")).toBe("true");
+    fireEvent.change(field("host"), { target: { value: "  myorg-myacct " } });
+    expect(screen.queryByTestId("host-error")).toBeNull();
+    expect(screen.getByTestId("host-hint").textContent).toBe("Studio connects to myorg-myacct.snowflakecomputing.com.");
+    await click("Test Connection");
+    expect(probe).toHaveBeenCalledTimes(1);
+  });
+});

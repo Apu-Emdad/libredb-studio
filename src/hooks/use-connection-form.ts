@@ -1342,11 +1342,19 @@ export function useConnectionForm({ isOpen, onConnect, editConnection, onTestCon
    * judged is the value written; the refusal names the field and never the value, as the timeout's does.
    */
   const validateFieldRules = useCallback(() => {
-    const refusal = connectionFieldRefusal(getDBConfig(type), buildConnection());
+    const config = getDBConfig(type);
+    const connection = buildConnection();
+    const refusal = connectionFieldRefusal(config, connection);
     if (refusal === undefined) return true;
-    setTestResult({ tone: "error", message: refusal });
+    // A refusal of the Host box's own text is drawn under the box too, as a refused address is, and an edit of the box
+    // takes it away (SF-025): a Snowflake Account the check refuses was otherwise named only in the result banner.
+    if (connectionFieldRefusal({ ...config, connectionFields: ["host"] }, connection) === refusal) {
+      showHostRefusal(refusal);
+    } else {
+      setTestResult({ tone: "error", message: refusal });
+    }
     return false;
-  }, [type, buildConnection]);
+  }, [type, buildConnection, showHostRefusal]);
 
   const handleTestConnection = useCallback(async () => {
     if (!validateQueryTimeout() || !validateHostAddress() || !validateFieldRules()) return;

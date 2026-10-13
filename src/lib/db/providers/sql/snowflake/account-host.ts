@@ -31,13 +31,6 @@ export const SNOWFLAKE_FIELD_SENTENCES = {
   method: "Choose Key pair or Programmatic access token for Sign-in. Nothing was sent.",
 } as const;
 
-/**
- * The dialog's `fieldRules.host.format.pattern`: the shapes `readSnowflakeAccount` reads, loosely; connect() is exact.
- * It refuses a `jdbc:` or `snowflake://` text, and every text it accepts is then read exactly by connect().
- */
-export const SNOWFLAKE_ACCOUNT_PATTERN =
-  /^(?:[a-z0-9_-]+(?:\.[a-z0-9_-]+)*\.?|https:\/\/[a-z0-9_.-]+\.snowflakecomputing\.(?:com|cn)\.?(?::443)?\/?|https:\/\/app\.snowflake\.com\/[a-z0-9_-]+\/[a-z0-9_-]+(?:\/[^\s]*)?)$/i;
-
 /** What an account URL carried besides its host, for `account.ts` to refuse; empty strings when absent. */
 export interface SnowflakeUrlParts {
   readonly port: string;
@@ -176,9 +169,49 @@ export function readSnowflakeAccount(text: string): SnowflakeAccountReading {
   };
 }
 
-/** The Account field's hint once the text reads: "Studio connects to <host>.", or undefined. */
-export function snowflakeHostHint(text: string): string | undefined {
+const IPV4_LITERAL = /^\d{1,3}(\.\d{1,3}){3}$/;
+/** A DNS name's limits, which `validateHost` in src/lib/db/http/endpoint.ts holds every host to. */
+const MAX_HOST_LENGTH = 253;
+const MAX_LABEL_LENGTH = 63;
+
+/**
+ * The Account text as `connect()` takes it: `readSnowflakeAccount`'s reading, further refused with the format sentence
+ * for an account URL carrying a port other than 443, a path, a query, a fragment or userinfo (any of which can carry
+ * a secret, and none of which Studio sends), an IPv4 literal as the identifier, and a label a DNS name cannot hold
+ * (longer than 63 characters, or starting or ending with a hyphen) or a host longer than 253. The dialog's hint, the
+ * dialog's check and `connect()` all read this one function, so a text the hint names a host for is never refused by
+ * Test (SF-025).
+ */
+export function checkSnowflakeAccount(text: string): SnowflakeAccountReading {
   const reading = readSnowflakeAccount(text);
+  if (!reading.ok) return reading;
+  const { url, host } = reading;
+  const urlExtra =
+    url !== null &&
+    ((url.port !== "" && url.port !== "443") ||
+      (url.path !== "" && url.path !== "/") ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      url.userinfo);
+  const identifier = host.slice(0, host.lastIndexOf(".snowflakecomputing."));
+  const badLabel = identifier
+    .split(".")
+    .some((label) => label.length > MAX_LABEL_LENGTH || label.startsWith("-") || label.endsWith("-"));
+  if (urlExtra || IPV4_LITERAL.test(identifier) || badLabel || host.length > MAX_HOST_LENGTH) {
+    return refusal(SNOWFLAKE_FIELD_SENTENCES.accountFormat);
+  }
+  return reading;
+}
+
+/** The dialog's check of the Account field: `connect()`'s own refusal of the text, or undefined when it reads. */
+export function snowflakeAccountRefusal(text: string): string | undefined {
+  const reading = checkSnowflakeAccount(text);
+  return reading.ok ? undefined : reading.refusal;
+}
+
+/** The Account field's hint once `connect()` would take the text: "Studio connects to <host>.", or undefined. */
+export function snowflakeHostHint(text: string): string | undefined {
+  const reading = checkSnowflakeAccount(text);
   return reading.ok ? `Studio connects to ${reading.host}.` : undefined;
 }
 

@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   isSnowflakeHost,
   readSnowflakeAccount,
-  SNOWFLAKE_ACCOUNT_PATTERN,
   SNOWFLAKE_MAX_HOST_LABELS,
   SNOWFLAKE_FIELD_SENTENCES,
+  snowflakeAccountRefusal,
   snowflakeHostHint,
   snowflakeHostIdentity,
 } from "@/lib/db/providers/sql/snowflake/account-host";
@@ -35,7 +35,7 @@ describe("readSnowflakeAccount accepts", () => {
   ])("%s", (text, host, claim) => {
     const reading = readSnowflakeAccount(text);
     expect(reading).toMatchObject({ ok: true, host, accountClaim: claim });
-    expect(SNOWFLAKE_ACCOUNT_PATTERN.test(text.trim())).toBe(true);
+    expect(snowflakeAccountRefusal(text)).toBeUndefined();
   });
 
   test("a bare identifier and a Snowsight URL carry no URL parts; an account URL carries its own", () => {
@@ -86,10 +86,11 @@ describe("readSnowflakeAccount refuses", () => {
     expect(readSnowflakeAccount(text)).toEqual({ ok: false, refusal });
   });
 
-  test("the dialog pattern refuses the two URL forms that belong in Paste URL", () => {
-    expect(SNOWFLAKE_ACCOUNT_PATTERN.test("jdbc:snowflake://xy12345.snowflakecomputing.com/")).toBe(false);
-    expect(SNOWFLAKE_ACCOUNT_PATTERN.test("snowflake://u@xy12345/db")).toBe(false);
-    expect(SNOWFLAKE_ACCOUNT_PATTERN.test("https://evil.example.com/")).toBe(false);
+  test("the dialog check refuses the two URL forms that belong in Paste URL", () => {
+    const format = SNOWFLAKE_FIELD_SENTENCES.accountFormat;
+    expect(snowflakeAccountRefusal("jdbc:snowflake://xy12345.snowflakecomputing.com/")).toBe(format);
+    expect(snowflakeAccountRefusal("snowflake://u@xy12345/db")).toBe(format);
+    expect(snowflakeAccountRefusal("https://evil.example.com/")).toBe(format);
   });
 });
 
@@ -224,5 +225,65 @@ describe("snowflakeEndpoint", () => {
     } catch (error) {
       expect(String(error)).not.toContain("SECRET-S");
     }
+  });
+});
+
+describe("the Account hint, the dialog's check and connect() agree on every text (SF-025)", () => {
+  const LONG_LABEL = "a".repeat(64);
+  const texts = [
+    "myorg-myacct",
+    "  myorg-myacct ",
+    "\tmyorg-myacct\n",
+    "https://myorg-myacct.snowflakecomputing.com",
+    "https://myorg-myacct.snowflakecomputing.com/",
+    "https://myorg-myacct.snowflakecomputing.com:443/",
+    "https://myorg-myacct.snowflakecomputing.com:8443",
+    "https://myorg-myacct.snowflakecomputing.com/console",
+    "https://myorg-myacct.snowflakecomputing.com/?x=1",
+    "https://myorg-myacct.snowflakecomputing.com/#f",
+    "https://u:pw@myorg-myacct.snowflakecomputing.com",
+    "https://app.snowflake.com/myorg/myacct/worksheets",
+    "1.2.3.4",
+    "169.254.169.254",
+    "10.0.0.1.snowflakecomputing.com",
+    "-zzlibredb",
+    "zzlibredb-",
+    "myorg.-x",
+    LONG_LABEL,
+    "a".repeat(63),
+    `${"a".repeat(60)}.${"b".repeat(60)}.${"c".repeat(60)}.${"d".repeat(60)}`,
+    "xy12345.privatelink",
+    "jdbc:snowflake://myorg-myacct.snowflakecomputing.com",
+    "",
+    "   ",
+  ];
+
+  test.each(texts)("%p", (text) => {
+    let endpointRefusal: string | undefined;
+    try {
+      snowflakeEndpoint(text);
+    } catch (error) {
+      endpointRefusal = (error as Error).message;
+    }
+    expect(snowflakeAccountRefusal(text)).toBe(endpointRefusal);
+    expect(snowflakeHostHint(text) === undefined).toBe(endpointRefusal !== undefined);
+  });
+
+  test("the texts the report found hinted are refused by all three, and a padded account is accepted by all three", () => {
+    for (const text of [
+      "https://myorg-myacct.snowflakecomputing.com:8443",
+      "https://myorg-myacct.snowflakecomputing.com/console",
+      "https://myorg-myacct.snowflakecomputing.com/?x=1",
+      "https://u:pw@myorg-myacct.snowflakecomputing.com",
+      "1.2.3.4",
+      "169.254.169.254",
+      "-zzlibredb",
+      LONG_LABEL,
+    ]) {
+      expect(snowflakeHostHint(text)).toBeUndefined();
+      expect(snowflakeAccountRefusal(text)).toBe(SNOWFLAKE_FIELD_SENTENCES.accountFormat);
+    }
+    expect(snowflakeHostHint("  myorg-myacct ")).toBe("Studio connects to myorg-myacct.snowflakecomputing.com.");
+    expect(snowflakeAccountRefusal("  myorg-myacct ")).toBeUndefined();
   });
 });

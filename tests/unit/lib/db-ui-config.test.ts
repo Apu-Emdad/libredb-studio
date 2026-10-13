@@ -53,7 +53,7 @@ import {
 import { S3_ACCESS_KEY_ID_MAX_CHARS, S3_ACCESS_KEY_ID_MIN_CHARS } from "@/lib/db/providers/objectstore/s3/constants";
 import { DatabendIcon, FirestoreIcon, InfluxDBIcon, S3Icon, SnowflakeIcon } from "@/components/icons/db-icons";
 import {
-  SNOWFLAKE_ACCOUNT_PATTERN,
+  snowflakeAccountRefusal,
   SNOWFLAKE_FIELD_SENTENCES,
   snowflakeHostHint,
 } from "@/lib/db/providers/sql/snowflake/account-host";
@@ -1666,7 +1666,12 @@ describe("the Snowflake entry", () => {
 
   test("checks the account, the user and the role in the provider's own sentences", () => {
     expect(snowflake.fieldRules).toBe(SNOWFLAKE_FIELD_RULES);
-    expect(SNOWFLAKE_FIELD_RULES.host?.format?.pattern).toBe(SNOWFLAKE_ACCOUNT_PATTERN);
+    expect(SNOWFLAKE_FIELD_RULES.host?.check).toBe(snowflakeAccountRefusal);
+    // connect()'s reading, so a padded account passes and an account URL with a path is refused (SF-025).
+    expect(connectionFieldRefusal(snowflake, connection({ host: "  myorg-myaccount " }))).toBeUndefined();
+    expect(
+      connectionFieldRefusal(snowflake, connection({ host: "https://myorg-myaccount.snowflakecomputing.com/console" })),
+    ).toBe(SNOWFLAKE_FIELD_SENTENCES.accountFormat);
     expect(connectionFieldRefusal(snowflake, connection({}))).toBeUndefined();
     expect(connectionFieldRefusal(snowflake, connection({ host: "" }))).toBe(SNOWFLAKE_FIELD_SENTENCES.accountEmpty);
     expect(connectionFieldRefusal(snowflake, connection({ host: "jdbc:snowflake://myorg-myaccount" }))).toBe(
