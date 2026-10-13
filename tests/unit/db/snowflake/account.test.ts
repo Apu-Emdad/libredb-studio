@@ -31,6 +31,16 @@ describe("readSnowflakeAccount accepts", () => {
     ["HTTPS://xy12345.cn-north-1.snowflakecomputing.cn/", "xy12345.cn-north-1.snowflakecomputing.cn", "XY12345"],
     ["https://app.snowflake.com/myorg/myacct/worksheets", "myorg-myacct.snowflakecomputing.com", "MYORG-MYACCT"],
     ["https://app.snowflake.com/MyOrg/My_Acct", "myorg-my_acct.snowflakecomputing.com", "MYORG-MY_ACCT"],
+    // The region and locator path (SF-020, D341): the locator form, AWS Oregon's without its region.
+    ["https://app.snowflake.com/eu-central-1/xy12345/", "xy12345.eu-central-1.snowflakecomputing.com", "XY12345"],
+    [
+      "https://app.snowflake.com/US-East-2.aws/XY12345/worksheets",
+      "xy12345.us-east-2.aws.snowflakecomputing.com",
+      "XY12345",
+    ],
+    ["https://app.snowflake.com/east-us-2.azure/xy12345", "xy12345.east-us-2.azure.snowflakecomputing.com", "XY12345"],
+    ["https://app.snowflake.com/us-west-2/xy12345/", "xy12345.snowflakecomputing.com", "XY12345"],
+    ["https://app.snowflake.com/us-west-2.aws/xy12345/", "xy12345.snowflakecomputing.com", "XY12345"],
     ["  xy12345  ", "xy12345.snowflakecomputing.com", "XY12345"],
   ])("%s", (text, host, claim) => {
     const reading = readSnowflakeAccount(text);
@@ -66,6 +76,8 @@ describe("readSnowflakeAccount refuses", () => {
     ["https://snowflakecomputing.com.attacker.net/", SNOWFLAKE_FIELD_SENTENCES.accountFormat],
     ["https://app.snowflake.com/myorg", SNOWFLAKE_FIELD_SENTENCES.accountFormat],
     ["https://app.snowflake.com/my.org/acct", SNOWFLAKE_FIELD_SENTENCES.accountFormat],
+    ["https://app.snowflake.com/eu-central-1/xy_12345/", SNOWFLAKE_FIELD_SENTENCES.accountFormat],
+    ["https://app.snowflake.com/eu-central-1.oracle/xy12345/", SNOWFLAKE_FIELD_SENTENCES.accountFormat],
     // A Snowsight URL is stored in the public host field, so one carrying a query, a fragment, userinfo or a port is refused.
     ["https://app.snowflake.com/myorg/myacct/worksheets?x=1", SNOWFLAKE_FIELD_SENTENCES.accountFormat],
     ["https://app.snowflake.com/myorg/myacct/#y", SNOWFLAKE_FIELD_SENTENCES.accountFormat],

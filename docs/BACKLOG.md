@@ -28,7 +28,7 @@ None of it is a GitHub issue.
 **Sections**
 
 - [SQL statement reading](#sql-statement-reading) — S2-S9 · 6
-- [Drivers and connections](#drivers-and-connections) — D1-D348, U17 · 248
+- [Drivers and connections](#drivers-and-connections) — D1-D348, U17 · 247
 - [Value interpolation](#value-interpolation) — V1
 - [Row editing](#row-editing) — R1–R3 · 3
 - [Studio UI and query execution](#studio-ui-and-query-execution) — X2-X27, U2-U139 · 127
@@ -3481,15 +3481,6 @@ The provider doc's section 7 states the gap.
 Found 2026-10-12 while building the Snowflake provider.
 
 **Done when:** a listing can carry a truncation field (a cap reached, with its sentence), Snowflake's `listObjects` fills it from its stop reason, the tree renders the sentence under the cut folder, and the provider doc's tree section says the tree names the cut, with tests on the provider answer and the rendered folder.
-
-### D341. A region and locator Snowsight URL is read as an organisation account
-
-`readUrl` in `src/lib/db/providers/sql/snowflake/account-host.ts` reads any `https://app.snowflake.com/<a>/<b>/...` as the identifier `<a>-<b>`, so a path such as `us-west-2/xy12345` becomes the host `us-west-2-xy12345.snowflakecomputing.com`, which does not exist.
-Whether Snowsight still issues that region and locator path shape is not established, and the failure is loud: the connect fails with the unreachable-host sentence.
-
-Found 2026-10-12 in the external review of the Snowflake provider (#1714).
-
-**Done when:** the path shape is confirmed on a live account, and a region and locator Snowsight URL is either read as `<locator>.<region>` or refused with the Account format sentence, with a case in `tests/unit/db/snowflake/account.test.ts` and the doc's section 2.2 updated.
 
 ### D342. A failed Snowflake monitoring panel's QueryError carries no SQL
 

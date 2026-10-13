@@ -16,6 +16,15 @@ const SUFFIX_CN = ".snowflakecomputing.cn";
 const SNOWSIGHT_HOST = "app.snowflake.com";
 const LABEL = /^[a-z0-9_-]+$/;
 const SNOWSIGHT_SEGMENT = /^[A-Za-z0-9_-]+$/;
+/**
+ * A Snowsight path's first segment when it is a region, `eu-central-1` or `east-us-2.azure`: a region id always holds
+ * a hyphen, which an organisation name never does, since the hyphen is what separates it in `orgname-account_name`.
+ */
+const SNOWSIGHT_REGION = /^[a-z]+(?:-[a-z0-9]+)+(?:\.(?:aws|azure|gcp))?$/i;
+/** An account locator, the second segment after a region. */
+const SNOWSIGHT_LOCATOR = /^[a-z0-9]+$/i;
+/** AWS Oregon, the one region whose locator takes no region. */
+const OREGON = /^us-west-2(?:\.aws)?$/i;
 
 /** The sentences of the Snowflake fields, shown by the dialog's rules and again by `connect()` before any socket. */
 export const SNOWFLAKE_FIELD_SENTENCES = {
@@ -90,10 +99,16 @@ function readUrl(text: string): { identifier: string; cn: boolean; url: Snowflak
     // public host field, so a query, a fragment, userinfo or a port, any of which can carry a secret, is refused.
     if (parsed.search !== "" || parsed.hash !== "" || parsed.port !== "") return null;
     if (parsed.username !== "" || parsed.password !== "") return null;
-    const [, org, account] = parsed.pathname.split("/");
-    if (org === undefined || account === undefined) return null;
-    if (!SNOWSIGHT_SEGMENT.test(org) || !SNOWSIGHT_SEGMENT.test(account)) return null;
-    return { identifier: `${org}-${account}`.toLowerCase(), cn: false, url: null };
+    const [, first, second] = parsed.pathname.split("/");
+    if (first === undefined || second === undefined) return null;
+    // `/<region>/<locator>/`, which Snowsight still issues (seen live 2026-10-13), is the locator form of the account.
+    if (SNOWSIGHT_REGION.test(first)) {
+      if (!SNOWSIGHT_LOCATOR.test(second)) return null;
+      const identifier = OREGON.test(first) ? second : `${second}.${first}`;
+      return { identifier: identifier.toLowerCase(), cn: false, url: null };
+    }
+    if (!SNOWSIGHT_SEGMENT.test(first) || !SNOWSIGHT_SEGMENT.test(second)) return null;
+    return { identifier: `${first}-${second}`.toLowerCase(), cn: false, url: null };
   }
   if (!isSnowflakeHost(parsed.hostname)) return null;
   const name = canonical(parsed.hostname);
