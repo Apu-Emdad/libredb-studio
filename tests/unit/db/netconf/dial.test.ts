@@ -5,9 +5,16 @@
  * network: the pin is read before anything is dialled, the address is checked before it is
  * connected, the host key is checked before any credential leaves, and none of the three has a
  * second path.
+ *
+ * The last two tests are the exception, and a narrow one: they resolve the name `localhost` through
+ * the lookup the dial installed, because the address rule cannot be read off the lookup's identity.
+ * No socket is opened even there.
  */
-import { test } from "bun:test";
+import { afterEach, test } from "bun:test";
+import type { LookupAddress } from "node:dns";
+import type { LookupFunction } from "node:net";
 import { expectBe, expectEqual, expectMatch, expectRejects, expectTruthy } from "./helpers";
+import { BLOCKED_HOST } from "@/lib/db/http/egress-policy";
 import {
   DialError,
   dialNetconf,
@@ -201,4 +208,67 @@ test("the credential reaches ssh2 only as the connection supplied it", async () 
   expectBe(seen.connects[0]?.privateKey, "a key");
   expectBe(seen.connects[0]?.passphrase, "secret");
   expectBe(seen.connects[0]?.password, undefined);
+});
+
+/**
+ * The seam above says a lookup reached the socket. It cannot say which lookup: one is installed
+ * whatever DB_HTTP_BLOCK_PRIVATE_HOSTS says, so that assertion would pass even if this dial always
+ * installed the strictest check it could find. The question the provider has to answer is the other
+ * one: with the flag off, is a device named by name on a local network still reachable?
+ *
+ * It has to be. The flag is opt-in, and `egress-policy.ts:63` says why: unset and false preserve
+ * local-first connections. A NETCONF device sits on a management network nearly by definition, so a
+ * provider that hardened past the flag would refuse the ordinary case. This dial asks `socketEgress`
+ * for the rule and installs its answer, and the flag is read inside it (`egress-policy.ts:130`), so
+ * the pair below drives the lookup the dial actually installed and shows the decision follows the
+ * flag rather than this provider.
+ *
+ * `localhost` is resolved for real, as the shared policy's own test does: its answers are loopback,
+ * which the guard refuses and the link-local rule does not, which is what separates the two cases.
+ * No socket is opened to it; only the name is resolved.
+ */
+const EGRESS_FLAG = "DB_HTTP_BLOCK_PRIVATE_HOSTS";
+const flagBefore = process.env[EGRESS_FLAG];
+
+afterEach(() => {
+  if (flagBefore === undefined) delete process.env[EGRESS_FLAG];
+  else process.env[EGRESS_FLAG] = flagBefore;
+});
+
+async function lookupInstalledFor(host: string, flag: "on" | "off"): Promise<LookupFunction> {
+  if (flag === "on") process.env[EGRESS_FLAG] = "true";
+  else delete process.env[EGRESS_FLAG];
+  const { ssh, socket, seen } = ports();
+  await dialNetconf(config({ host }), ssh, socket);
+  const lookup = seen.dialled[0]?.lookup;
+  expectBe(typeof lookup, "function", `no lookup was installed for ${host} with the flag ${flag}`);
+  return lookup as LookupFunction;
+}
+
+/** The answer the installed lookup gives for `name`: the addresses it accepted, or its refusal. */
+function answerFor(lookup: LookupFunction, name: string): Promise<LookupAddress[] | Error> {
+  return new Promise((resolve) => {
+    lookup(name, { all: true }, (error, address) => {
+      if (error) resolve(error);
+      else if (Array.isArray(address)) resolve(address);
+      else resolve(new Error(`the lookup answered a single address, ${address}, not a list`));
+    });
+  });
+}
+
+test("with the flag off, the installed lookup accepts a name that resolves to a local address", async () => {
+  const lookup = await lookupInstalledFor("localhost", "off");
+  const answer = await answerFor(lookup, "localhost");
+  expectTruthy(Array.isArray(answer), `localhost was refused with the flag off: ${String(answer)}`);
+  expectTruthy(answer.length > 0);
+  // Every answer is loopback, so nothing here is public: the dial allowed it because the flag is
+  // off, not because the addresses happened to pass a public-address check.
+  expectTruthy(answer.every(({ address }) => address === "127.0.0.1" || address === "::1"));
+});
+
+test("with the flag on, the same dial's lookup refuses that name, and the sentence is the guard's", async () => {
+  const lookup = await lookupInstalledFor("localhost", "on");
+  const answer = await answerFor(lookup, "localhost");
+  expectTruthy(answer instanceof Error, `localhost was accepted with the flag on: ${String(answer)}`);
+  expectBe(answer.message, BLOCKED_HOST);
 });

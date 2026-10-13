@@ -95,6 +95,17 @@ and the hello carries a session-id, and the read-only account answers `access-de
 `discard-changes`, `kill-session` and `create-subscription`, while `get-config` and `get-schema`
 still return data.
 
+## The address it dials, and the branch that leaves unmeasured
+
+`verify.mjs` dials the literal `127.0.0.1`, not the name `localhost`, because `verify.sh` publishes
+the port on `127.0.0.1` alone: `localhost` resolves to `::1` first on macOS, where nothing is
+listening, so a name here would fail for a reason that has nothing to do with the server.
+
+That means this fixture never exercises the egress rule's name branch, where the lookup checks the
+DNS answers rather than a literal. Those two cases are measured instead in
+`tests/unit/db/netconf/dial.test.ts`, against the real egress policy and both states of
+`DB_HTTP_BLOCK_PRIVATE_HOSTS`. The branch is covered; it is just not covered here.
+
 ## Not here yet
 
 The compose service lives in `compose-service.yml` until the provider PR merges it into
