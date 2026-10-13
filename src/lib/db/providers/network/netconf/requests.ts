@@ -1,3 +1,4 @@
+import { QueryError } from "@/lib/db/errors";
 /**
  * The closed operation set of the `netconf` provider, phase 1 (issue #1724), requirement NC-S1.
  *
@@ -71,7 +72,8 @@ export function rememberNamespace(module: string, namespace: string): void {
 
 export function moduleNamespace(module: string): string {
   const known = NAMESPACES.get(module);
-  if (!known) throw new Error(`the YANG library of this connection does not name module ${module}`);
+  // A refusal the user reads, so it is a QueryError: see the note in keypath.ts.
+  if (!known) throw new QueryError(`the YANG library of this connection does not name module ${module}`);
   return known;
 }
 
@@ -134,6 +136,7 @@ export const ALLOWED_OPERATIONS = Object.freeze([
 /** Builds the `<rpc>` for one request. The only way this module produces element text. */
 export function buildRpc(request: NetconfRequest, messageId: number): string {
   if (!Number.isInteger(messageId) || messageId < 1) {
+    // Not a QueryError: no user can cause this. It is this provider counting wrongly.
     throw new Error("a message-id is a positive integer");
   }
   const body = buildOperation(request);
@@ -178,7 +181,7 @@ function buildOperation(request: NetconfRequest): string {
 function assertDepth(depth: number): number {
   if (!Number.isInteger(depth) || depth < 2) {
     // 0 is refused by the server and 1 answers an empty document, so neither is ever sent.
-    throw new Error("max-depth is an integer of 2 or more");
+    throw new QueryError("max-depth is an integer of 2 or more");
   }
   return depth;
 }

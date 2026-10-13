@@ -11,6 +11,9 @@ import { test } from "bun:test";
 import { expectBe, expectEqual, expectRejects, expectTruthy } from "./helpers";
 import { NetconfProvider, parseReadRequest, type DeviceReader } from "@/lib/db/providers/network/netconf/index";
 import type { DatabaseConnection } from "@/lib/db/types";
+import { QueryError } from "@/lib/db/errors";
+import { encodeSegment } from "@/lib/db/providers/network/netconf/keypath";
+import { buildRpc } from "@/lib/db/providers/network/netconf/requests";
 
 const facts = {
   datastores: ["running", "candidate", "startup", "operational"],
@@ -208,4 +211,62 @@ function expectRejectsSync(fn: () => unknown, pattern: RegExp): void {
 test("nothing answers before connect", async () => {
   const provider = new NetconfProvider(connection, {}, async () => reader());
   await expectRejects(provider.listContainers(), /not open/);
+});
+
+/**
+ * Every refusal a user can reach is a `QueryError`, and this test asserts the TYPE rather than the
+ * message, because a message can be reworded and a type cannot.
+ *
+ * MEASURED on `origin/main`: the surfaces that turn a failure into a stated refusal check
+ * `error instanceof QueryError` (`providers/platform/kubernetes/objects.ts:348`,
+ * `errors.ts:244`). A refusal thrown as a plain `Error` is not converted: it passes as an
+ * unexpected failure and the sentence it carries never reaches the user. The first version of this
+ * provider had three such refusals, in `keypath.ts`, `yangkeys.ts` and `requests.ts`.
+ */
+test("every refusal a user can reach is a QueryError, measured by type and not by message", async () => {
+  const provider = await open();
+  const reached: unknown[] = [];
+  const collect = async (run: () => Promise<unknown>): Promise<void> => {
+    try {
+      await run();
+    } catch (error) {
+      reached.push(error);
+    }
+  };
+  await collect(() => provider.query("edit-config running"));
+  await collect(() => provider.query("not json"));
+  await collect(() => provider.query('{"datastore":"running"}'));
+  await collect(() => provider.listContainers(["a", "b", "c"]));
+  await collect(() => provider.listObjects(["running", "ietf-interfaces"], "key"));
+  await collect(() => provider.getPerformanceMetrics());
+  await collect(() => provider.getActiveSessions());
+  await collect(() => provider.runMaintenance());
+  expectBe(reached.length, 8);
+  for (const error of reached) expectTruthy(error instanceof QueryError);
+});
+
+/**
+ * The unknown-module refusal lives in the request builder rather than in the class, and a mutation
+ * showed it had no test at all: turning it into a plain Error failed nothing. It is reachable
+ * whenever a filter names a module the device's YANG library did not, which is the case the
+ * sentence exists for, so a wrong namespace is not sent and answered with an empty document.
+ */
+test("a filter naming a module the library does not know is refused as a QueryError", () => {
+  let caught: unknown;
+  try {
+    buildRpc({ operation: "get", filter: { nodes: [{ module: "no-such-module", name: "x" }] } }, 1);
+  } catch (error) {
+    caught = error;
+  }
+  expectTruthy(caught instanceof QueryError);
+});
+
+test("a key value that cannot be spelled as a path is refused as a QueryError too", () => {
+  let caught: unknown;
+  try {
+    encodeSegment("\uD800");
+  } catch (error) {
+    caught = error;
+  }
+  expectTruthy(caught instanceof QueryError);
 });

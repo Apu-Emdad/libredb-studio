@@ -1,3 +1,5 @@
+import { QueryError } from "@/lib/db/errors";
+
 /**
  * The key path of the `netconf` provider, phase 1 (issue #1724).
  *
@@ -21,8 +23,19 @@
  * So a level page sorts DECODED values with `compareUtf8` and escapes afterwards.
  */
 
-/** Thrown for a key value that cannot be spelled as a path at all. */
-export class KeyPathError extends Error {}
+/**
+ * Refusals here are `QueryError`, not a class of this file's own.
+ *
+ * MEASURED on `origin/main`: only a `QueryError` or a `TimeoutError` is turned into a stated
+ * refusal by the surfaces that catch one (`providers/platform/kubernetes/objects.ts:348`,
+ * `errors.ts:244`). A refusal thrown as a plain `Error` passes as an unexpected failure and the
+ * sentence it carries never reaches the user, which for this file means a key value the user typed
+ * is rejected with no explanation of what is wrong with it.
+ *
+ * It is not a subclass either: the shared error constructors end with
+ * `Object.setPrototypeOf(this, <Base>.prototype)`, so a class extending one is not an instance of
+ * itself. The base type is what the house reads, so the base type is what is thrown.
+ */
 
 /**
  * Percent encodes one segment or key value.
@@ -33,7 +46,7 @@ export class KeyPathError extends Error {}
  */
 export function encodeSegment(text: string): string {
   if (!text.isWellFormed()) {
-    throw new KeyPathError("a key value has to be text: this one holds an unpaired surrogate");
+    throw new QueryError("a key value has to be text: this one holds an unpaired surrogate");
   }
   return encodeURIComponent(text).replace(/[!'()*]/g, (mark) => `%${mark.charCodeAt(0).toString(16).toUpperCase()}`);
 }
@@ -42,7 +55,7 @@ export function decodeSegment(text: string): string {
   try {
     return decodeURIComponent(text);
   } catch {
-    throw new KeyPathError("a key path segment holds a percent escape that is not valid");
+    throw new QueryError("a key path segment holds a percent escape that is not valid");
   }
 }
 
@@ -140,7 +153,7 @@ export interface LevelPage {
  * a level are what the server already answers and this function never trims a subtree.
  */
 export function levelPage(all: readonly LevelEntry[], cursor: string | null, count: number): LevelPage {
-  if (count < 1) throw new KeyPathError("a level page holds at least one entry");
+  if (count < 1) throw new QueryError("a level page holds at least one entry");
   const seen = new Set<string>();
   const unique: LevelEntry[] = [];
   for (const entry of all) {

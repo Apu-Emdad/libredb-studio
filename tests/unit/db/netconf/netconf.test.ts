@@ -5,6 +5,7 @@
  * from a device from a rule that came from taste.
  */
 import { test } from "bun:test";
+import { QueryError } from "@/lib/db/errors";
 import { expectBe, expectEqual, expectMatch, expectNotBe, expectNotEqual, expectThrows, expectTruthy } from "./helpers";
 import { readFile } from "node:fs/promises";
 import { EOM, FrameReader, frame } from "@/lib/db/providers/network/netconf/framing";
@@ -13,7 +14,6 @@ import {
   compareUtf8,
   decodeSegment,
   encodeSegment,
-  KeyPathError,
   levelPage,
   parseKeyPath,
 } from "@/lib/db/providers/network/netconf/keypath";
@@ -125,7 +125,7 @@ test("every measured key value round trips and none keeps the separator", () => 
 });
 
 test("an unpaired surrogate is refused rather than encoded", () => {
-  expectThrows(() => encodeSegment("\uD800"), KeyPathError);
+  expectThrows(() => encodeSegment("\uD800"));
 });
 
 test("the built path matches the one issue #1724 section 3 writes", () => {

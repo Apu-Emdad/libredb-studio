@@ -1,3 +1,5 @@
+import { QueryError } from "@/lib/db/errors";
+
 /**
  * The key names of a YANG list, read from module text (issue #1724).
  *
@@ -41,7 +43,11 @@ export interface YangLimits {
 
 export const YANG_LIMITS: YangLimits = Object.freeze({ maxBytes: 4 * 1024 * 1024, maxDepth: 64 });
 
-export class YangTextError extends Error {}
+/**
+ * Refusals here are `QueryError` for the reason given in `keypath.ts`: only that type, or a
+ * `TimeoutError`, becomes a stated refusal, and module text arrives from a device, so its refusal
+ * is a thing the user has to be told.
+ */
 
 /**
  * Removes comments and neutralises quoted text.
@@ -105,7 +111,7 @@ function neutralise(text: string): string {
  */
 export function scanYangModule(text: string, limits: YangLimits = YANG_LIMITS): YangScan {
   if (text.length > limits.maxBytes) {
-    throw new YangTextError(`this module's text is larger than the ${limits.maxBytes} byte cap`);
+    throw new QueryError(`this module's text is larger than the ${limits.maxBytes} byte cap`);
   }
   const clean = neutralise(text);
   const lists: YangList[] = [];
@@ -120,7 +126,7 @@ export function scanYangModule(text: string, limits: YangLimits = YANG_LIMITS): 
   for (let match = token.exec(clean); match !== null; match = token.exec(clean)) {
     const [whole] = match;
     if (whole === "{") {
-      if (stack.length >= limits.maxDepth) throw new YangTextError("this module nests deeper than the depth cap");
+      if (stack.length >= limits.maxDepth) throw new QueryError("this module nests deeper than the depth cap");
       const keyword = pending?.keyword ?? "";
       stack.push(keyword);
       if (keyword === "list") {

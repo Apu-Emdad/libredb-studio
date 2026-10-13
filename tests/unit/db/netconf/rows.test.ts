@@ -6,7 +6,8 @@
 import { test } from "bun:test";
 import { expectBe, expectEqual, expectMatch, expectThrows } from "./helpers";
 import { buildRows, rowForWriting, ROW_LIMITS } from "@/lib/db/providers/network/netconf/rows";
-import { keyNamesOf, scanYangModule, YangTextError } from "@/lib/db/providers/network/netconf/yangkeys";
+import { keyNamesOf, scanYangModule } from "@/lib/db/providers/network/netconf/yangkeys";
+import { QueryError } from "@/lib/db/errors";
 import type { XmlElement } from "@/lib/db/providers/network/netconf/reader-port";
 
 /** A tree the way the reader port will answer one. */
@@ -158,5 +159,5 @@ module q {
 });
 
 test("module text past the byte cap is refused rather than scanned", () => {
-  expectThrows(() => scanYangModule("x".repeat(100), { maxBytes: 10, maxDepth: 8 }), YangTextError);
+  expectThrows(() => scanYangModule("x".repeat(100), { maxBytes: 10, maxDepth: 8 }), QueryError);
 });
