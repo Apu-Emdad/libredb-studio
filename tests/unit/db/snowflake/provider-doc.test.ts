@@ -12,6 +12,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { INVENTORY_LIMIT, INVENTORY_TRUNCATION_REASON } from "@/lib/db/inventory-bounds";
+import { IMPORT_NO_TARGET, importRefusal } from "@/components/DataImportModal";
 import { SOURCE_BILLED_COMPUTE_HOLD } from "@/components/object-source/ObjectSourceView";
 import { DB_UI_CONFIG, SNOWFLAKE_FIELD_HINTS } from "@/lib/db-ui-config";
 import { MCP_EXPOSABLE } from "@/lib/db/compatibility";
@@ -341,12 +343,15 @@ describe("docs/providers/snowflake.md", () => {
     if (capabilities.supportsInlineRowEdit === false) off.push("Inline row edit");
     if (capabilities.supportsColumnProfiling === false) off.push("Column profiler");
     if (contract.buildObjectEdit === undefined) off.push("Object edit");
+    if (capabilities.supportsCreateTable === false) off.push("Create table");
+    if (importRefusal(capabilities) !== null) off.push("Data import");
     if (capabilities.supportsTestDataGeneration === false) off.push("Test data generation");
     if (capabilities.supportsTransactions === false) off.push("Transactions");
     if (capabilities.supportsMaintenance === false && capabilities.maintenanceOperations?.length === 0)
       off.push("Maintenance");
     if (contract.queryReadOnly === undefined) off.push("Agent execute mode, MCP `run_read_query`");
     expect(firstCells(sectionOf(DOC, "### 8.5 Off in v1"))).toEqual(off);
+    expect(flat(sectionOf(DOC, "### 8.5 Off in v1"))).toContain(`\`${IMPORT_NO_TARGET}\``);
   });
 
   test("states the capabilities the features section describes", () => {
@@ -528,7 +533,7 @@ describe("docs/providers/snowflake.md", () => {
     expect(FLAT_DOC).toContain(`${SNOWFLAKE_JWT_RENEW_AFTER_S / 60} minutes`);
     const { perProvider, perEngine, queueDepth } = SNOWFLAKE_LIMITER_OPTIONS;
     expect(FLAT_DOC).toContain(
-      `${perProvider} statements per connection, ${perEngine} per Studio process, and a queue of ${queueDepth}`,
+      `${perProvider} statements per connection, ${perEngine} across all Snowflake connections of the Studio process, and a queue of ${queueDepth} shared by them`,
     );
   });
 
@@ -650,7 +655,7 @@ describe("every other number and sentence the doc states is the code's", () => {
     expect(FLAT_DOC).toContain(`setting \`client_result_chunk_size\` to ${SNOWFLAKE_CHUNK_SIZE_MB}`);
     expect(SNOWFLAKE_USER_AGENT).toMatch(/^LibreDB-Studio(\/.+)?$/);
     expect(FLAT_DOC).toContain(
-      "Every request sends the User-Agent `LibreDB-Studio/<version>`, or `LibreDB-Studio` in the embedded package, whose build injects no version.",
+      "Every request sends the User-Agent `LibreDB-Studio/<version>`, or `LibreDB-Studio` in the embedded package, whose build injects no version, unless the host sets `NEXT_PUBLIC_APP_VERSION`.",
     );
   });
 
@@ -676,9 +681,10 @@ describe("every other number and sentence the doc states is the code's", () => {
     expect(SNOWFLAKE_OBJECT_KINDS.map((kind) => kind.id)).toEqual([...SNOWFLAKE_KIND_IDS]);
   });
 
-  test("the tree's cut is stated as silent, since listObjects carries no truncation", () => {
+  test("the tree's cut is stated as silent, and the inventory's bound comes before it", () => {
+    expect(INVENTORY_LIMIT).toBeLessThan(SNOWFLAKE_SHOW_PAGE_ROWS);
     expect(FLAT_DOC).toContain(
-      "The tree has no place for a listing's sentence, so it shows the first 50,000 objects of a pageable kind without one; the object inventory, which the agent and the inventory route read, carries that sentence.",
+      `The tree has no place for a listing's sentence, so it shows the first 50,000 objects of a pageable kind without one; the object inventory, which the agent and the inventory route read, reads at most ${n(INVENTORY_LIMIT)} objects, so it stops at its own \`${INVENTORY_TRUNCATION_REASON}\` before that cap.`,
     );
   });
 
@@ -691,7 +697,7 @@ describe("every other number and sentence the doc states is the code's", () => {
       "Studio still sends `LIMIT 10000` wherever Snowflake offers paging, so each answer stays bounded:",
       "each from the previous page's last name with `FROM`, which starts after the name it is given (a page with nothing past that name ends the listing), up to five pages",
       "Any other listing has no paging and is sent with no `LIMIT`: `SHOW SEQUENCES` answered all 10,250 rows with and without `LIMIT` and `FROM`, since it ignores both, and the 10,000 rows Snowflake's reference gives as the most the other listings answer is not measured.",
-      "A count of exactly 10,000, Studio's own `LIMIT`: `Studio counts at most 10,000 objects here, so this is a floor.`",
+      "When the `SHOW TERSE OBJECTS` answer reaches 10,000 rows, Studio's own `LIMIT`, both the table and the view count carry: `Studio counts at most 10,000 objects here, so this is a floor.`",
     ]) {
       expect(tree).toContain(pinned);
     }

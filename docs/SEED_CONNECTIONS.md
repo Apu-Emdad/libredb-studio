@@ -86,6 +86,8 @@ To fix a refused file, move the value into `host`, `port`, `user`, `password` an
 A Firestore seed names the project in `database` and, optionally, a named database in `schema`; `password` holds a service-account key, an authorized-user file or an access token, or stays empty to use the server's own Google identity ([providers/firestore.md](providers/firestore.md)).
 
 ```yaml
+version: "1"
+
 connections:
   - id: "firestore-production"
     name: "Firestore production"
@@ -105,6 +107,8 @@ A Snowflake seed names the account in `host` and the role every statement runs a
 Each of the four fields takes an `${ENV}` reference, so no key or token is written in the file.
 
 ```yaml
+version: "1"
+
 connections:
   - id: "snowflake-analytics"
     name: "Snowflake analytics"
