@@ -122,6 +122,7 @@ const ALL_TYPES: DatabaseType[] = [
   "rabbitmq",
   "opcua",
   "mtconnect",
+  "netconf",
 ];
 
 describe("db-ui-config", () => {
@@ -729,6 +730,7 @@ const FIELD_CHECKLIST: Record<ConnectionField, true> = {
   role: true,
   securityMode: true,
   serverCertificateThumbprint: true,
+  hostKeyFingerprint: true,
 };
 const EVERY_FIELD = Object.keys(FIELD_CHECKLIST) as ConnectionField[];
 
@@ -1567,6 +1569,8 @@ describe("db-showcase", () => {
         // name on a page of databases, so no existing engine moves for it (#1677).
         "opcua",
         "mtconnect",
+        // network engineers rather than by the readers a page of databases is written for (#1724).
+        "netconf",
       ]);
     });
   });

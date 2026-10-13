@@ -127,4 +127,3 @@ export function buildRows(
     : undefined;
   return warning === undefined ? { columns, rows } : { columns, rows, warning };
 }
-

@@ -214,6 +214,7 @@ spends it on the fence tag the deliverable must carry, and since the Operate-eng
 spends it twice: on the rule that binds the readings it may name to the engine it is planning
 against, and on the fence tag for a reading that engine happens to express as a statement. It is
 a server-side enum with thirty-eight members, so what it discloses is which of thirty-eight engines this
+a server-side enum with thirty-nine members, so what it discloses is which of thirty-nine engines this
 connection is — never its host, its database name or its credentials, none of which reach a prompt at
 all (see [What never leaves](#what-never-leaves)).
 
@@ -290,6 +291,9 @@ your objects, and composes no statement at all.
 thirty-eight, `CATALOG_PLANS` serves two of them, and the remainder is what this second reading covers.
 Every other count said about grounding in these docs counts the same thing. libSQL is one of the
 thirty-six and not one of the two: it speaks SQLite's dialect, but the read-only catalog path
+thirty-nine, `CATALOG_PLANS` serves two of them, and the remainder is what this second reading covers.
+Every other count said about grounding in these docs counts the same thing. libSQL is one of the
+thirty-seven and not one of the two: it speaks SQLite's dialect, but the read-only catalog path
 `CATALOG_PLANS` serves needs a database-native read-only profile, and `PRAGMA query_only` is refused
 by a libSQL server (see [`providers/libsql.md`](./providers/libsql.md)). Two things it does
 NOT count. The wire-compatible engines of

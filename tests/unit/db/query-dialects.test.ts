@@ -147,6 +147,12 @@ describe("QUERY_DIALECTS", () => {
         offersCodeGeneration: false,
         offersCountQuery: false,
       },
+      netconf: {
+        tabType: "netconf",
+        offersColumnProfiling: false,
+        offersCodeGeneration: false,
+        offersCountQuery: false,
+      },
     });
   });
 

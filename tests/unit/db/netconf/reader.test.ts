@@ -17,15 +17,16 @@ function el(name: string, text?: string, children: XmlElement[] = []): XmlElemen
   return text === undefined ? base : { ...base, text };
 }
 
+/** The same element, resolved into a namespace, which is what this provider's XML port adds. */
+function inNamespace(element: XmlElement, namespace: string): XmlElement {
+  return { ...element, namespace };
+}
+
 const reply = (children: XmlElement[]): XmlElement => el("rpc-reply", undefined, children);
 const data = (children: XmlElement[]): XmlElement => el("data", undefined, children);
 
 function moduleEntry(name: string, conformance: "implement" | "import", namespace = `urn:x:${name}`): XmlElement {
-  return el("module", undefined, [
-    el("name", name),
-    el("namespace", namespace),
-    el("conformance-type", conformance),
-  ]);
+  return el("module", undefined, [el("name", name), el("namespace", namespace), el("conformance-type", conformance)]);
 }
 
 /** The fixture's own library, cut to what the facts are derived from. */
@@ -101,13 +102,86 @@ test("NMDA is decided by the library and not by the hello", async () => {
 });
 
 test("a library without the NMDA module leaves its datastores out", async () => {
-  const h = harness([
-    reply([data([el("modules-state", undefined, [moduleEntry("ietf-interfaces", "implement")])])]),
-  ]);
+  const h = harness([reply([data([el("modules-state", undefined, [moduleEntry("ietf-interfaces", "implement")])])])]);
   const reader = await open(h, []);
   expectBe(reader.facts.nmda, false);
   expectEqual(reader.facts.datastores, ["running"]);
-  await expectRejects(reader.rows("operational", [{ name: "interfaces", module: "ietf-interfaces" }], 10), /does not serve/);
+  await expectRejects(
+    reader.rows("operational", [{ name: "interfaces", module: "ietf-interfaces" }], 10),
+    /does not serve/,
+  );
+});
+
+/**
+ * A DEFECT THE TESTS COULD NOT SEE, found by connecting the provider to the fixture.
+ *
+ * `topLevelNodes` reads the whole datastore, because a subtree filter selects elements BY NAME and
+ * this read names none. Before the namespace check it then returned every child of `<data>` for
+ * whichever module was asked, so on the fixture `ietf-interfaces`, `ietf-keystore` and
+ * `ietf-netconf-server` all answered the same three nodes and choosing a module changed nothing.
+ *
+ * The assertion is in both directions on purpose. The first alone would pass on code that returned
+ * the first child whatever its namespace; the second alone would pass on code that returned
+ * nothing at all. A module with no node of its own in the datastore is the control, and it has to
+ * answer the empty list rather than its neighbour's nodes.
+ */
+test("a module's nodes are the ones in its own namespace, and a module with none gets none", async () => {
+  const h = harness([LIBRARY]);
+  const reader = await open(h);
+  const mixed = reply([
+    data([
+      inNamespace(
+        el("interfaces", undefined, [el("interface", undefined, [el("name", "ge-0/0/0")])]),
+        "urn:x:ietf-interfaces",
+      ),
+      inNamespace(el("keystore", undefined, [el("asymmetric-keys")]), "urn:x:some-other-module"),
+    ]),
+  ]);
+  const schema = (name: string): XmlElement => reply([el("data", `module ${name} { list interface { key name; } }`)]);
+  h.answer(mixed);
+  h.answer(schema("ietf-interfaces"));
+  expectEqual(
+    (await reader.topLevelNodes("running", "ietf-interfaces")).map((node) => node.name),
+    ["interfaces"],
+  );
+  h.answer(mixed);
+  h.answer(schema("iana-if-type"));
+  expectEqual(await reader.topLevelNodes("running", "iana-if-type"), []);
+});
+
+/**
+ * ANOTHER DEFECT THE TESTS COULD NOT SEE, and this one was the shipped click.
+ *
+ * `listObjects` answers a module's top level nodes, and in `ietf-interfaces` that is the CONTAINER
+ * `interfaces`, not the list `interface` inside it. MEASURED on the fixture before the descent:
+ * clicking it answered ONE row with ONE column holding the JSON of all 5,000 entries, cut at the
+ * cell bound, while the typed path `ietf-interfaces:interfaces/interface` answered 3 rows with
+ * four columns. The shipped click was the bad one and the hand-typed path was right.
+ *
+ * Both directions, because the rule is narrow on purpose. `keystore` is the control and it is a
+ * real one: it holds exactly one child name too, and that name is a CONTAINER rather than a list
+ * the module gives keys, so it must keep the old reading. A rule that descended on "one child
+ * name" alone would pass the first assertion and fail this one.
+ */
+test("a container whose only child is a keyed list is read as that list, and one whose child is not stays as it was", async () => {
+  const h = harness([LIBRARY]);
+  const reader = await open(h);
+  const schema = reply([
+    el("data", "module ietf-interfaces { container interfaces { list interface { key name; } } }"),
+  ]);
+  const entry = (name: string): XmlElement => el("interface", undefined, [el("name", name), el("enabled", "true")]);
+  h.answer(reply([data([el("interfaces", undefined, [entry("ge-0/0/0"), entry("ge-0/0/1")])])]));
+  h.answer(schema);
+  const descended = await reader.rows("running", [{ name: "interfaces", module: "ietf-interfaces" }], 10);
+  expectEqual(descended.fields, ["name", "enabled"]);
+  expectBe(descended.rows.length, 2);
+  expectBe(descended.rows[0]?.name, "ge-0/0/0");
+
+  h.answer(reply([data([el("keystore", undefined, [el("asymmetric-keys", undefined, [el("name", "genkey")])])])]));
+  const held = await reader.rows("running", [{ name: "keystore", module: "ietf-interfaces" }], 10);
+  // `keystore`'s one child is a container, not a list the module gives keys, so the old reading stands.
+  expectEqual(held.fields, ["asymmetric-keys"]);
+  expectBe(held.rows.length, 1);
 });
 
 test("the datastores are running plus the ones the hello and the library allow", async () => {
@@ -149,7 +223,10 @@ test("an unknown datastore is refused by name, before anything is asked of the d
   const h = harness([LIBRARY]);
   const reader = await open(h);
   const asked = h.asked.length;
-  await expectRejects(reader.children("archive", [{ name: "interfaces", module: "ietf-interfaces" }]), /no datastore named archive/);
+  await expectRejects(
+    reader.children("archive", [{ name: "interfaces", module: "ietf-interfaces" }]),
+    /no datastore named archive/,
+  );
   expectBe(h.asked.length, asked, "a refusal by name sends nothing");
 });
 
@@ -225,10 +302,7 @@ test("rows carry the list's key columns first and the row count is what was retu
   );
   const result = await reader.rows(
     "running",
-    [
-      { name: "interfaces", module: "ietf-interfaces" },
-      { name: "interface" },
-    ],
+    [{ name: "interfaces", module: "ietf-interfaces" }, { name: "interface" }],
     10,
   );
   expectEqual(result.fields, ["name", "description"]);
@@ -254,10 +328,7 @@ test("a limit smaller than the answer cuts the rows and the count follows the ro
   );
   const result = await reader.rows(
     "running",
-    [
-      { name: "interfaces", module: "ietf-interfaces" },
-      { name: "interface" },
-    ],
+    [{ name: "interfaces", module: "ietf-interfaces" }, { name: "interface" }],
     7,
   );
   expectBe(result.rows.length, 7);
@@ -333,7 +404,10 @@ test("the source text is the bytes between the data element's tags, and an empty
   const path = [{ name: "interfaces", module: "ietf-interfaces" }];
   const body = "<interfaces><interface><name>ge-0/0/1</name></interface></interfaces>";
 
-  h.answer(el("rpc-reply", undefined, [el("data", undefined, [])]), `<rpc-reply message-id="1"><data>${body}</data></rpc-reply>`);
+  h.answer(
+    el("rpc-reply", undefined, [el("data", undefined, [])]),
+    `<rpc-reply message-id="1"><data>${body}</data></rpc-reply>`,
+  );
   expectBe(await reader.sourceXml("running", path), body);
 
   h.answer(el("rpc-reply", undefined, [el("data", undefined, [])]), '<rpc-reply message-id="2"><data/></rpc-reply>');

@@ -116,7 +116,8 @@ export class FrameReader {
 
   feed(chunk: string): FrameStep {
     if (this.faulted) return { messages: [] };
-    this.buffer = this.buffer.length === 0 ? Buffer.from(chunk, "utf8") : Buffer.concat([this.buffer, Buffer.from(chunk, "utf8")]);
+    this.buffer =
+      this.buffer.length === 0 ? Buffer.from(chunk, "utf8") : Buffer.concat([this.buffer, Buffer.from(chunk, "utf8")]);
     if (this.buffer.length > this.limits.maxBufferBytes) {
       return this.fail({ kind: "buffer-too-large", bytes: this.buffer.length, cap: this.limits.maxBufferBytes });
     }
@@ -207,4 +208,3 @@ const HEADER_MAX = 16;
 function startsWith(buffer: Buffer, prefix: Buffer): boolean {
   return buffer.length >= prefix.length && buffer.subarray(0, prefix.length).equals(prefix);
 }
-

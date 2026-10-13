@@ -45,7 +45,14 @@ export const NETCONF_OBJECT_KINDS: readonly ObjectKindSpec[] = Object.freeze([
     labelPlural: "Nodes",
     hasColumns: true,
     hasSource: true,
-    sourceLanguage: "yang",
+    // NOT "yang": the installed editor registers 89 basic languages and YANG is not one of them,
+    // measured against the bundle, and the fleet's gate refuses a language id the bundle does not
+    // register (`tests/isolated/monaco-language-ids.test.ts`). The house's answer where a language
+    // is unregistered is to declare the nearest REGISTERED id - Oracle renders under `sql` rather
+    // than `plsql` - and YANG has no near relative among the 89, so highlighting it as `ini` or
+    // `sql` would colour it wrongly. `plaintext`, which the editor core registers, says what is
+    // true: this product shows the module's text and does not pretend to understand it.
+    sourceLanguage: "plaintext",
   },
   {
     id: "key",

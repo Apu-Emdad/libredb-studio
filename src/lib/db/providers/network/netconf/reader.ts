@@ -16,7 +16,7 @@ import { QueryError } from "@/lib/db/errors";
 import type { QueryResult } from "@/lib/types";
 import type { LevelEntry, PathNode } from "./keypath";
 import { READER_LIMITS, type XmlElement, type XmlReaderPort } from "./reader-port";
-import { rememberNamespace, type NetconfRequest, type NmdaDatastore } from "./requests";
+import { moduleNamespace, rememberNamespace, type NetconfRequest, type NmdaDatastore } from "./requests";
 import { buildRows } from "./rows";
 import { keyNamesOf, scanYangModule, type YangScan } from "./yangkeys";
 
@@ -142,14 +142,31 @@ export class DeviceReaderImpl {
    * The read is bounded by depth rather than by a filter on each node: depth 2 answers every top
    * level node with its key leaf alone, measured at 234,120 bytes for a list of 5,000, where the
    * unfiltered read of the same list is 987,957.
+   *
+   * THE MODULE IS SELECTED BY NAMESPACE, AND IT HAS TO BE, because the read cannot carry the
+   * module in its filter. A subtree filter selects ELEMENTS by name, and this read names no
+   * element - it is the whole datastore at depth 2 - so `readOf` drops the nameless node and sends
+   * no filter at all. MEASURED on the fixture before this was written: `ietf-interfaces`,
+   * `ietf-keystore` and `ietf-netconf-server` each answered the SAME three nodes, the datastore's
+   * whole top level, so choosing a module in the tree changed nothing. The namespace the YANG
+   * library gave for the module is what tells the three apart, and resolving it is exactly what
+   * this provider's XML port adds over the inherited reader (`xml.ts`).
+   *
+   * KNOWN COST, stated rather than hidden: `maxDepth` is an NMDA parameter, so it binds on
+   * `operational` and `intended` and NOT on `running`, `candidate` or `startup`, which are read
+   * with `<get-config>`. Opening a module under `running` therefore pulls the whole datastore -
+   * 987,956 bytes on this fixture - and discards what belongs to other modules. The bound that
+   * applies there is the framing's byte cap, not this one.
    */
   async topLevelNodes(datastore: string, module: string): Promise<readonly TopLevelNode[]> {
     const reply = await this.session.request(this.readOf(datastore, [{ name: "", module }], 2));
     const data = elementAt(parseReply(this.xml, reply), []);
     if (data === undefined) return [];
+    const namespace = moduleNamespace(module);
     const scan = await this.scanOf(module);
     const nodes: TopLevelNode[] = [];
     for (const child of data.children) {
+      if (child.namespace !== namespace) continue;
       const keys = keyNamesOf(scan, child.name);
       nodes.push(keys.length === 0 ? { module, name: child.name } : { module, name: child.name, keys });
     }
@@ -160,7 +177,10 @@ export class DeviceReaderImpl {
   async children(datastore: string, path: readonly PathNode[]): Promise<readonly LevelEntry[]> {
     if (path.length === 0) throw new QueryError("a key level names a node, so the path cannot be empty");
     const reply = await this.session.request(this.readOf(datastore, path, path.length + 2));
-    const parent = elementAt(parseReply(this.xml, reply), path.map((node) => node.name));
+    const parent = elementAt(
+      parseReply(this.xml, reply),
+      path.map((node) => node.name),
+    );
     if (parent === undefined) return [];
     // A folder is a node the panel can descend and a key is a terminal. The tree itself says
     // which: an element holding elements is a container, a list or a list entry, and an element
@@ -188,8 +208,13 @@ export class DeviceReaderImpl {
     if (parent === undefined) {
       return { rows: [], fields: [], rowCount: 0, executionTime: Date.now() - started };
     }
-    const keyNames = keyNamesOf(await this.scanOf(moduleName), last.name);
-    const built = buildRows(parent, last.name, keyNames);
+    const scan = await this.scanOf(moduleName);
+    const keyNames = keyNamesOf(scan, last.name);
+    const descended = keyNames.length === 0 ? listInside(scan, elementAt(parent, [last.name])) : undefined;
+    const built =
+      descended === undefined
+        ? buildRows(parent, last.name, keyNames)
+        : buildRows(descended.holder, descended.list, keyNamesOf(scan, descended.list));
     const rows = built.rows.slice(0, limit);
     return {
       rows: rows as Record<string, unknown>[],
@@ -279,6 +304,34 @@ function parseReply(xml: XmlReaderPort, reply: string): XmlElement {
   const data = root.children.find((child) => child.name === "data");
   if (data === undefined) throw new QueryError("this device answered neither data nor an error");
   return data;
+}
+
+/**
+ * The list a container holds, where the tree's own click lands on the container rather than on it.
+ *
+ * MEASURED, and the reason this exists: `listObjects` answers a module's TOP LEVEL nodes, and in
+ * `ietf-interfaces` that is the container `interfaces`, not the list `interface` inside it. A click
+ * therefore asks for the container, and `buildRows` read it as a list of its own name: ONE row with
+ * ONE column, holding the JSON of all 5,000 entries, cut at the cell bound of 64 KB. Addressed
+ * directly, `ietf-interfaces:interfaces/interface` answered 3 rows with the columns `name`,
+ * `description`, `type` and `enabled`. So the shipped click was the bad one and the typed path was
+ * right, which is the wrong way round.
+ *
+ * The rule is deliberately NARROW and is the one the module's own text supports: the addressed node
+ * declares no `key` statement, so it is not a list, AND its children carry exactly one distinct
+ * name, AND the module declares THAT name as a list with keys. Anything looser would be a guess
+ * about what a reader meant. A container holding several child names keeps the old reading, and so
+ * does one whose single child name the module does not call a list, which includes a keyless list
+ * (RFC 8040 section 3.5.3) - that case is left alone rather than handled, because no measurement of
+ * this fixture reaches it.
+ */
+function listInside(scan: YangScan, node: XmlElement | undefined): { holder: XmlElement; list: string } | undefined {
+  if (node === undefined) return undefined;
+  const names = new Set(node.children.map((child) => child.name));
+  if (names.size !== 1) return undefined;
+  const only = [...names][0];
+  if (only === undefined || keyNamesOf(scan, only).length === 0) return undefined;
+  return { holder: node, list: only };
 }
 
 /** The element at a chain of names below `from`, or undefined where the chain breaks. */

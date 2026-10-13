@@ -14,7 +14,7 @@ import { QueryError } from "@/lib/db/errors";
  * half that does not depend on the device.
  */
 
-import { buildKeyPath, encodeSegment, type PathNode } from "./keypath";
+import type { PathNode } from "./keypath";
 
 const BASE_NS = "urn:ietf:params:xml:ns:netconf:base:1.0";
 const NMDA_NS = "urn:ietf:params:xml:ns:yang:ietf-netconf-nmda";
@@ -90,7 +90,7 @@ export function rememberNamespace(module: string, namespace: string): void {
   NAMESPACES.set(module, namespace);
 }
 
-function moduleNamespace(module: string): string {
+export function moduleNamespace(module: string): string {
   const known = NAMESPACES.get(module);
   // A refusal the user reads, so it is a QueryError: see the note in keypath.ts.
   if (!known) throw new QueryError(`the YANG library of this connection does not name module ${module}`);
@@ -205,4 +205,3 @@ function assertDepth(depth: number): number {
   }
   return depth;
 }
-

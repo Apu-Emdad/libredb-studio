@@ -117,6 +117,7 @@ const EXPECTED: Readonly<Record<DatabaseType, SurfaceRow>> = {
   opcua: NONE,
   // The same: every route this provider sends is a GET (#1722).
   mtconnect: NONE,
+  netconf: NONE,
   libredb: NONE,
 };
 

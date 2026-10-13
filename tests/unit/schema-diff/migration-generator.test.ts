@@ -1120,6 +1120,7 @@ describe("generateMigrationSQL: SQLite's grammar declares a foreign key only ins
     rabbitmq: "engine-has-no-foreign-key",
     opcua: "engine-has-no-foreign-key",
     mtconnect: "engine-has-no-foreign-key",
+    netconf: "engine-has-no-foreign-key",
   };
 
   for (const [dialectId, entry] of Object.entries(GRAMMAR)) {
@@ -1286,6 +1287,11 @@ const MODIFIED_COLUMN_COVERAGE: Record<
     label: "MTConnect",
     reason:
       "An MTConnect data item's shape is declared in the agent's own device model, not in columns a client can change, and every request this provider sends is a GET, so there is no column definition to change.",
+  },
+  netconf: {
+    label: "NETCONF",
+    reason:
+      "A NETCONF node's shape is declared in the device's YANG module, which the device serves and a client reads, and this provider sends five read operations and nothing else, so there is no column definition here for anything to change.",
   },
   opcua: {
     label: "OPC UA",
@@ -1698,6 +1704,7 @@ const TRANSACTION_WRAPPER_COVERAGE: Record<DatabaseType, "BEGIN;" | "BEGIN TRANS
   opcua: false,
   // No wrapper: every request this provider sends is a GET, so there is no statement to wrap (#1722).
   mtconnect: false, // one JSON read request, not SQL text (`NON_SQL_DIALECTS`), and no table DDL to wrap (`NO_TABLE_DDL`)
+  netconf: false, // one JSON read request, not SQL text (`NON_SQL_DIALECTS`), and no table DDL to wrap (`NO_TABLE_DDL`)
 };
 
 // Both creation and modification paths must use the same wrapper policy.

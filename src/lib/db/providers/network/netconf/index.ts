@@ -2,17 +2,15 @@
  * The `netconf` provider class (issue #1724, phase 1).
  *
  * It extends the repository's base class and answers the seventeen members that class declares
- * abstract. What it deliberately does NOT do is give its type-id to any shared union: there is no
- * `queryDialect` here, no `QueryError(..., "netconf")`, and no member added to `DatabaseType`.
- * Those three lines land in the registration change, together with the factory case, because a
- * registration without them leaves the tree red (measured by a sibling session: 27 type errors and
- * three broken factory tests).
+ * abstract. Its type-id is now in the shared unions - `DatabaseType`, `QueryDialect`, and the
+ * factory's switch - because this file landed together with the registration.
  *
- * THE COST OF THAT, STATED RATHER THAN HIDDEN. `resolveTabType` gives every provider whose
- * `queryLanguage` is `"json"` and which declares no dialect of its own MongoDB's tab type. So
- * until the registration lands, this provider's console reads as MongoDB's. A test holds
- * `getCapabilities().queryDialect` undefined, so the day a dialect appears here before the
- * registration is ready, the suite goes red rather than the console going quietly wrong.
+ * WHAT THE DIALECT IS FOR, MEASURED RATHER THAN ARGUED. `resolveTabType` gives every provider
+ * whose `queryLanguage` is `"json"` and which declares no dialect of its own MongoDB's tab type.
+ * Run without a dialect, this engine's console read as MongoDB's and `offersCountQuery`,
+ * `offersCodeGeneration` and `offersColumnProfiling` all answered TRUE, because those readers
+ * consult a dialect spec only when one is declared: a read-only device with no columns was
+ * offering column profiling and a count query. The declaration below is what turns those off.
  *
  * Three kinds of answer appear below and the difference is deliberate:
  *   a read this engine performs            the device layer is asked and rows come back
@@ -25,6 +23,8 @@
 import { BaseDatabaseProvider } from "@/lib/db/base-provider";
 import { QueryError, TimeoutError } from "@/lib/db/errors";
 import type {
+  KeyScanOptions,
+  KeyScanPage,
   ObjectSourceDocument,
   ObjectSourcePart,
   ActiveSessionDetails,
@@ -51,6 +51,7 @@ import { NETCONF_PORT } from "./dial";
 import { buildKeyPath, levelPage, parseKeyPath, type LevelEntry, type PathNode } from "./keypath";
 import { NETCONF_KEY_SCAN, NETCONF_OBJECT_KINDS, assertDeclarationIsSound } from "./objectkinds";
 import { NETCONF_LABELS } from "./labels";
+import type { TopLevelNode } from "./reader";
 
 /** What the provider learns from the device when the session opens. */
 export interface DeviceFacts {
@@ -62,11 +63,19 @@ export interface DeviceFacts {
   readonly sessionId: string;
 }
 
-export interface TopLevelNode {
-  readonly module: string;
-  readonly name: string;
-  readonly isList: boolean;
-}
+/**
+ * A node of a module, as the device layer answers it.
+ *
+ * IMPORTED rather than redeclared, and the difference was a defect rather than a style point.
+ * This file used to declare its own `{module, name, isList}`, and `reader.ts` answers
+ * `{module, name, keys?}`. The two never met, because nothing assigned the implementation to this
+ * interface until the provider was wired to its real device layer; the compiler then refused the
+ * assignment at once. `isList` was read by NOTHING in this provider: the only values of it in the
+ * tree were the ones a test double made up, so the field asked the device layer for an answer it
+ * never computes and no caller ever wanted. `keys` is the honest shape: it names the key leaves
+ * the module declares, and a list with no key statement is still a list, which is why its absence
+ * is not "this is not a list" (RFC 8040 section 3.5.3).
+ */
 
 /** What this class needs from the layer that talks to the device. */
 export interface DeviceReader {
@@ -95,9 +104,11 @@ const SENTENCES = Object.freeze({
   readsOnly:
     "This provider reads a device and does not write to it: it sends get, get-config, get-data, get-schema and close-session, and nothing else. A read request names a datastore and a path.",
   notJson: "A NETCONF read request is JSON: it names a datastore, a path and a limit.",
-  sourceNodePath:
-    "A node's source is addressed by its datastore, its module and the node, so the path is three names.",
-  sourceKeyPath: "A key's source is addressed by its datastore and then the key path, so the path is two names.",
+  keyPrefix:
+    "A key walk starts from a datastore and a node, so its prefix reads datastore/module:node and then one name per level.",
+  sourceNodePath: "A node's source is addressed by its datastore, its module and the node, so the path is three names.",
+  sourceKeyPath:
+    "A key's source is addressed by its key path, which begins with the datastore, so the path is one name.",
   noDatastore: "This read names no datastore, and this provider sends no unfiltered read.",
   noPath: "This read names no path, and this provider sends no unfiltered read.",
   badLimit: "A limit is a whole number of rows, one or more.",
@@ -106,6 +117,21 @@ const SENTENCES = Object.freeze({
 /** The words a write looks like, so a user who types one is told what this provider is. */
 const WRITE_WORDS =
   /\b(edit-config|copy-config|delete-config|commit|lock|unlock|discard-changes|kill-session|set|write|create|update|delete)\b/i;
+
+/**
+ * The default device layer: the real ports, reached by a dynamic import.
+ *
+ * The import is dynamic and not static for one mechanical reason: `open.ts` pulls in
+ * `node-ports.ts`, which holds `ssh2` and `node:net`, and this module is reachable from code that
+ * is bundled for the browser. The factory imports this file the same way and for the same reason.
+ *
+ * `openNetconfReader` already defaults the SSH and socket ports, so the only port named here is
+ * the XML reader, which is the one decision this provider makes about its own parsing (K-10).
+ */
+async function openWithNodePorts(config: DatabaseConnection): Promise<DeviceReader> {
+  const [{ openNetconfReader }, { netconfXmlPort }] = await Promise.all([import("./open"), import("./xml")]);
+  return openNetconfReader(config, { xml: netconfXmlPort });
+}
 
 export class NetconfProvider extends BaseDatabaseProvider {
   private reader: DeviceReader | null = null;
@@ -124,19 +150,15 @@ export class NetconfProvider extends BaseDatabaseProvider {
   ) {
     super(config, options);
     assertDeclarationIsSound();
-    this.openReader =
-      openReader ??
-      ((): Promise<DeviceReader> => {
-        throw new QueryError("This build has no NETCONF transport wired in yet.");
-      });
+    this.openReader = openReader ?? openWithNodePorts;
   }
 
   public override getCapabilities(): ProviderCapabilities {
     return {
       queryLanguage: "json",
-      // No `queryDialect` on purpose: see the note at the top of this file. The console reads as
-      // MongoDB's until the registration lands, and a test holds this field undefined so that the
-      // day it changes, it changes deliberately.
+      // Its own dialect, so the tab type and the three `offers*` flags are this engine's and not
+      // MongoDB's (see the note at the top of this file for what was measured without it).
+      queryDialect: "netconf",
       supportsExplain: false,
       supportsExternalQueryLimiting: false,
       supportsCreateTable: false,
@@ -279,70 +301,95 @@ export class NetconfProvider extends BaseDatabaseProvider {
   }
 
   /** One level of the Keys panel, built from what the server already answers. */
-  public async scanKeysPage(
-    datastore: string,
-    path: readonly PathNode[],
-    cursor: string | null,
-    count: number,
-  ): Promise<{ readonly keys: readonly string[]; readonly cursor: string | null }> {
+  /**
+   * One level of the Keys panel, against the shared contract.
+   *
+   * The contract is what settled a question this provider had left open. A key scan arrives as ONE
+   * options object carrying a `pattern`, which under `pattern: "prefix"` is the literal prefix every
+   * walked key begins with, plus a `cursor` and a `count`; its `database` field is a NUMBER, for an
+   * engine that names a numbered database, and a datastore is a name. So there is nowhere else for
+   * the datastore to travel: it has to be the first segment of the key path itself, and it is.
+   *
+   * A key here therefore reads `running/ietf-interfaces:interfaces/ge-0%2F0%2F1`: the datastore,
+   * then the module-qualified node, then one segment per level. That makes a key self-addressing,
+   * which is what the Source tab needs too.
+   *
+   * `cursor` is a string in both directions and `"0"` is its own value at each end: it means start
+   * here on the way in and no more pages on the way out. The level walk's own cursor is the last
+   * entry returned, so a level whose order changes between calls neither skips nor repeats.
+   */
+  public async scanKeysPage(options: KeyScanOptions): Promise<KeyScanPage> {
     const reader = this.open();
-    const page = levelPage(await reader.children(datastore, path), cursor, count);
-    const prefix = buildKeyPath(path);
+    const prefix = options.pattern ?? "";
+    const [datastore, ...rest] = prefix.split("/");
+    if (datastore === undefined || datastore === "") throw new QueryError(SENTENCES.keyPrefix);
+    const nodes = parseKeyPath(rest.join("/"));
+    if (nodes.length === 0) throw new QueryError(SENTENCES.keyPrefix);
+    const page = levelPage(
+      await reader.children(datastore, nodes),
+      options.cursor === "0" ? null : options.cursor,
+      options.count,
+    );
+    const head = `${datastore}/${buildKeyPath(nodes)}`;
     return {
-      keys: page.entries.map((entry) => (prefix === "" ? entry.name : `${prefix}/${entry.name}`)),
-      cursor: page.cursor,
+      keys: page.entries.map((entry) => `${head}/${entry.name}`),
+      // `"0"` and not an empty string: the contract gives that value one meaning at each end, and a
+      // walk that answered `""` would read as a cursor nobody can use rather than as the end.
+      cursor: page.cursor ?? "0",
+      // Empty, and the contract says what that means: a key absent from this map is one whose type
+      // could not be read, and the honest thing to draw is nothing. A level walk reads names and
+      // nothing else, and a YANG node's type lives in the module text, which this page has not
+      // fetched. Filling it with the entry's folder-or-leaf shape would answer a different question
+      // in the field a reader believes is the value's type.
+      types: {},
+      // Zero, because this engine declares `totalScope: "none"`, and the contract says the field is
+      // not read under it. A device publishes no count of the nodes below a path and NETCONF has no
+      // request that asks for one, so any other number here would be invented.
+      total: 0,
     };
   }
 
   /**
-   * The Source tab's text (#789), which the declaration promises and nothing served until now.
+   * The Source tab's text (#789), which the declaration promises.
    *
    * `readObjectSource` is optional on the provider interface, so omitting it compiles; what it does
    * NOT do is stay invisible. MEASURED in `src/lib/api/object-route.ts:549`: the route answers 400,
    * `netconf declares no readable source for kind "node"`, for a provider that declares the kind
-   * and omits the method, and its docblock names that exact case. So the tree drew a Source tab and
-   * the tab answered that the engine has none, while section 1 of the specification promises a
-   * module's YANG text there.
+   * and omits the method, and its docblock names that exact case.
    *
-   * The two kinds answer two different texts, which is why `sourceLanguage` differs between them:
-   * a `node` answers the module's YANG, which is the schema the node belongs to, and a `key`
-   * answers the entry's own XML as the device sent it.
+   * The two kinds answer two different texts. A node answers the module's YANG, which the editor
+   * does not highlight, so the declaration says `plaintext` rather than inventing a language id.
+   * A key answers the entry's own XML as the device sent it.
    *
-   * The path shape is this provider's own contract and is written here because it is the one thing
-   * NOT measured: a node is `[datastore, module, node]`, the shape `describeObject` already
-   * receives, and a key is `[datastore, keyPath]`, the key path as `scanKeysPage` spelled it, with
-   * the datastore in front because a key path carries a module and not a datastore. A path of
-   * another shape is refused with a sentence that says what was expected rather than reading the
-   * wrong segment. This is the first thing to check against the live client once this type id is
-   * registered, and it is in the specification's open list.
+   * The paths differ because the two kinds are addressed differently, and that is the shared key
+   * contract's doing rather than a choice here: a node is `[datastore, module, node]`, the shape
+   * `describeObject` already receives, and a key is ONE segment, the key path, which begins with
+   * the datastore because the key scan's prefix has nowhere else to carry it.
    */
   public async readObjectSource(path: readonly string[], kind: string, limit?: number): Promise<ObjectSourceDocument> {
     const reader = this.open();
     const bound = limit !== undefined && limit > 0 ? limit : undefined;
     if (kind === "node") {
       const [datastore, moduleName, node] = path;
-      if (datastore === undefined || moduleName === undefined || node === undefined) {
+      if (datastore === undefined || moduleName === undefined || node === undefined || path.length !== 3) {
         throw new QueryError(SENTENCES.sourceNodePath);
       }
       const text = await reader.moduleText(moduleName);
       return {
         path: [...path],
         kind,
-        parts: [part(`${moduleName}.yang`, moduleName, cut(text, bound), "yang")],
+        parts: [part(`${moduleName}.yang`, moduleName, cut(text, bound), "plaintext")],
       };
     }
     if (kind !== "key") throw new QueryError(`This engine publishes no source text for the kind ${kind}.`);
-    const [datastore, keyPath] = path;
-    if (datastore === undefined || keyPath === undefined || path.length !== 2) {
+    const [keyPath] = path;
+    if (keyPath === undefined || path.length !== 1) throw new QueryError(SENTENCES.sourceKeyPath);
+    const [datastore, ...rest] = keyPath.split("/");
+    if (datastore === undefined || datastore === "" || rest.length === 0) {
       throw new QueryError(SENTENCES.sourceKeyPath);
     }
-    const nodes = parseKeyPath(keyPath);
-    const text = await reader.sourceXml(datastore, nodes);
-    return {
-      path: [...path],
-      kind,
-      parts: [part(keyPath, keyPath, cut(text, bound), "xml")],
-    };
+    const text = await reader.sourceXml(datastore, parseKeyPath(rest.join("/")));
+    return { path: [...path], kind, parts: [part(keyPath, keyPath, cut(text, bound), "xml")] };
   }
 
   public async getHealth(): Promise<HealthInfo> {
@@ -499,7 +546,7 @@ function part(
   id: string,
   label: string,
   body: { text: string; truncated?: { limit: number; reason: string } },
-  language: "yang" | "xml",
+  language: "plaintext" | "xml",
 ): ObjectSourcePart {
   return {
     id,

@@ -9,6 +9,7 @@ import {
   MSSQLIcon,
   LibreDBIcon,
   MtconnectIcon,
+  NetconfIcon,
   OpcuaIcon,
   CouchbaseIcon,
   ClickHouseIcon,
@@ -120,6 +121,11 @@ export interface DatabaseUIConfig {
     // Studio's SSL modes, which have no meaning to a server offering None, Sign and SignAndEncrypt.
     | "securityMode"
     | "serverCertificateThumbprint"
+    // NETCONF only: the device's SSH host key fingerprint, pasted from `ssh-keygen -lf`. A field of
+    // its own rather than `serverCertificateThumbprint`: a host key is not a certificate, the two
+    // are checked by different code, and one box for both would carry a label that is wrong half
+    // the time.
+    | "hostKeyFingerprint"
   )[];
   /**
    * The connection dialog's label for a field, where this engine names the field differently from
@@ -1357,6 +1363,32 @@ export const DB_UI_CONFIG: Record<DatabaseType, DatabaseUIConfig> = {
     // The dialog's own sentence says the mode can be turned off, which is false here.
     readOnlyHint:
       "MTConnect connections are read-only whether or not this is ticked: Studio sends the agent GET requests from a closed table and nothing else.",
+  },
+  netconf: {
+    // A mark drawn for Studio, never a vendor's: a device with the configuration tree it serves
+    // above it, forking once, because a datastore holds modules and a module holds nodes and those
+    // two levels are what the browser draws.
+    icon: NetconfIcon,
+    // A NEW hue, and the step was chosen by SEPARATION rather than contrast. `neutral-600`, `-700`
+    // and `-800` all clear AA in light by a wide margin (6.85, 9.12, 13.27), so contrast alone would
+    // have allowed any of them; in OKLab distance `neutral-700` sits 0.0166 from Snowflake's
+    // `mist-700`, nearer than the closest identity pair this palette had (0.0205), while
+    // `neutral-600` stands 0.0368 from its own nearest.
+    color: "text-hue-neutral",
+    label: "NETCONF",
+    // IANA registers 830/tcp as `netconf-ssh` and RFC 6242 section 3 names it. Port 22 is the other
+    // thing a device may listen on, and it is the user's to type.
+    defaultPort: "830",
+    // `netconf://` is not a scheme this product parses, and inventing one would be ours rather than
+    // the protocol's. MEASURED: every address a reader would paste here, `netconf://host:830`,
+    // `ssh://host:830` and a bare `host:830`, is answered `null` by the shared parser, so the box
+    // would offer a reading nothing can do.
+    showConnectionStringToggle: false,
+    // The device's key or its password, and the device's host key fingerprint, which is what makes
+    // the dial refuse an unknown device rather than trust whatever answers on the port. The
+    // fingerprint has a field of its own rather than borrowing `serverCertificateThumbprint`: a
+    // host key is not a certificate, and the two are checked by different code.
+    connectionFields: ["host", "port", "user", "password", "privateKey", "privateKeyPassphrase", "hostKeyFingerprint"],
   },
   libredb: {
     icon: LibreDBIcon,

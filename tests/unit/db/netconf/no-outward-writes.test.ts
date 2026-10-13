@@ -21,7 +21,6 @@ import { expectEqual, strippedSource } from "./helpers";
 
 const DIR = join(import.meta.dir, "../../../../src/lib/db/providers/network/netconf");
 
-
 const OUTWARD = [
   /\bconsole\s*\./,
   /\blogger\b/,

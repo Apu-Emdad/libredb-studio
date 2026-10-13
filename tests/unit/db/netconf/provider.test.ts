@@ -35,7 +35,7 @@ const facts = {
 function reader(over: Partial<DeviceReader> = {}): DeviceReader {
   return {
     facts,
-    topLevelNodes: async () => [{ module: "ietf-interfaces", name: "interfaces", isList: false }],
+    topLevelNodes: async () => [{ module: "ietf-interfaces", name: "interfaces" }],
     children: async () => [
       { name: "ge-0%2F0%2F2", kind: "key" as const },
       { name: "ge-0%2F0%2F1", kind: "key" as const },
@@ -43,13 +43,13 @@ function reader(over: Partial<DeviceReader> = {}): DeviceReader {
     ],
     rows: async () => ({ columns: ["name"], rows: [{ name: "ge-0/0/0" }], rowCount: 1 }) as never,
     moduleText: async () => "module ietf-interfaces { }",
-    sourceXml: async () => '<interface><name>ge-0/0/1</name><description>port 1</description></interface>',
+    sourceXml: async () => "<interface><name>ge-0/0/1</name><description>port 1</description></interface>",
     close: async () => {},
     ...over,
   };
 }
 
-const connection = { type: "mongodb", name: "n", host: "h" } as unknown as DatabaseConnection;
+const connection = { type: "netconf", name: "n", host: "h" } as unknown as DatabaseConnection;
 
 async function open(device: DeviceReader = reader()): Promise<NetconfProvider> {
   const provider = new NetconfProvider(connection, {}, async () => device);
@@ -57,9 +57,12 @@ async function open(device: DeviceReader = reader()): Promise<NetconfProvider> {
   return provider;
 }
 
-test("no query dialect is declared yet, and the cost of that is stated rather than hidden", () => {
+test("the engine declares its own query dialect, so it does not inherit MongoDB's tab", () => {
   const capabilities = new NetconfProvider(connection).getCapabilities();
-  expectBe(capabilities.queryDialect, undefined);
+  // Not merely "a dialect is declared": the one measured consequence of leaving it out was that
+  // `resolveTabType` handed this JSON-language engine MongoDB's tab type, with column profiling
+  // and a count query offered on a read-only device that has neither.
+  expectBe(capabilities.queryDialect, "netconf");
   expectBe(capabilities.queryLanguage, "json");
   expectBe(capabilities.enforcesReadOnly, true);
   expectBe(capabilities.supportsMaintenance, false);
@@ -209,9 +212,21 @@ test("health omits what it cannot measure instead of sending a fabricated zero",
 
 test("a key page removes repeats, sorts, and carries a start-after cursor", async () => {
   const provider = await open();
-  const page = await provider.scanKeysPage("running", [{ module: "ietf-interfaces", name: "interfaces" }], null, 10);
-  expectEqual(page.keys, ["ietf-interfaces:interfaces/ge-0%2F0%2F1", "ietf-interfaces:interfaces/ge-0%2F0%2F2"]);
+  // The shared contract: one options object, the prefix carrying the datastore, `"0"` meaning start.
+  const page = await provider.scanKeysPage({
+    cursor: "0",
+    pattern: "running/ietf-interfaces:interfaces",
+    count: 10,
+    level: true,
+  });
+  expectEqual(page.keys, [
+    "running/ietf-interfaces:interfaces/ge-0%2F0%2F1",
+    "running/ietf-interfaces:interfaces/ge-0%2F0%2F2",
+  ]);
   expectBe(page.cursor, "ge-0%2F0%2F2");
+  // `total` is not read under `totalScope: "none"`, and an unread field still has to be honest.
+  expectBe(page.total, 0);
+  expectEqual(page.types, {});
 });
 
 test("a description carries no leaf value, because a read only account still reads secrets", async () => {
@@ -349,7 +364,9 @@ test("a node's source is the module's YANG text, and it says the text is the dev
   // check, and the refusal arm reaching an editor buffer is the failure it was built against.
   const part = document.parts[0];
   expectTruthy(part !== undefined && "text" in part);
-  expectBe(part.language, "yang");
+  // `plaintext` rather than `yang`: the editor registers no YANG language, the fleet's gate refuses
+  // an unregistered id, and mis-declaring it as a near relative would colour the text wrongly.
+  expectBe(part.language, "plaintext");
   expectBe(part.origin, "stored");
   expectBe(part.form, "complete");
   expectMatch(part.text, /module ietf-interfaces/);
@@ -357,7 +374,7 @@ test("a node's source is the module's YANG text, and it says the text is the dev
 
 test("a key's source is the entry's own XML, sliced from the reply rather than reprinted", async () => {
   const provider = await open();
-  const document = await provider.readObjectSource(["running", "ietf-interfaces:interfaces/ge-0%2F0%2F1"], "key");
+  const document = await provider.readObjectSource(["running/ietf-interfaces:interfaces/ge-0%2F0%2F1"], "key");
   const part = document.parts[0];
   expectTruthy(part !== undefined && "text" in part);
   expectBe(part.language, "xml");
@@ -379,7 +396,7 @@ test("a bound is applied and declared, so a cut text never reads as the whole te
 test("a path of the wrong shape is refused with what was expected, not read wrongly", async () => {
   const provider = await open();
   await expectRejects(provider.readObjectSource(["running"], "node"), /three names/);
-  await expectRejects(provider.readObjectSource(["running", "a", "b"], "key"), /two names/);
+  await expectRejects(provider.readObjectSource(["running", "a"], "key"), /one name/);
   await expectRejects(provider.readObjectSource(["running", "x", "y"], "folder"), /no source text for the kind folder/);
 });
 

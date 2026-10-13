@@ -20,7 +20,7 @@
 
 > 📖 **Full documentation, source, and issues:** <https://github.com/libredb/libredb-studio>
 
-Query **PostgreSQL, MySQL, SQLite, libSQL, DuckDB, Oracle, Db2 LUW, SQL Server, MongoDB, Redis, Couchbase, Firestore, ClickHouse, Apache Druid, Elasticsearch, OpenSearch, Trino, BigQuery, Databend, Snowflake, Apache Spark, Apache Cassandra, Prometheus, InfluxDB, Apache Kafka, MQTT, RabbitMQ, OPC UA, etcd, Neo4j, Milvus, Qdrant, Oxia, S3-compatible object storage and Kubernetes** from your browser, with AI query assistance, RBAC and OIDC SSO.
+Query **PostgreSQL, MySQL, SQLite, libSQL, DuckDB, Oracle, Db2 LUW, SQL Server, MongoDB, Redis, Couchbase, Firestore, ClickHouse, Apache Druid, Elasticsearch, OpenSearch, Trino, BigQuery, Databend, Snowflake, Apache Spark, Apache Cassandra, Prometheus, InfluxDB, Apache Kafka, MQTT, RabbitMQ, OPC UA, MTConnect, NETCONF, etcd, Neo4j, Milvus, Qdrant, Oxia, S3-compatible object storage and Kubernetes** from your browser, with AI query assistance, RBAC and OIDC SSO.
 
 ---
 

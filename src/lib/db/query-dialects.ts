@@ -189,6 +189,12 @@ export const QUERY_DIALECTS: Readonly<Record<QueryDialect, DialectSpec>> = Objec
     offersCodeGeneration: false,
     offersCountQuery: false,
   }),
+  netconf: Object.freeze({
+    tabType: "netconf",
+    offersColumnProfiling: false,
+    offersCodeGeneration: false,
+    offersCountQuery: false,
+  }),
 });
 
 /**

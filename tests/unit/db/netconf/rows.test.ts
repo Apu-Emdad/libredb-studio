@@ -66,8 +66,6 @@ test("a list past the row cap is cut and the cut is stated, not silent", () => {
   expectMatch(rows.warning ?? "", /first 2 are shown/);
 });
 
-
-
 const moduleText = `
 module example {
   namespace "urn:example";
@@ -236,8 +234,7 @@ test("the cell cap keeps 65,536 characters and cuts 65,537", () => {
 
 test("the nesting cap allows 64 levels and refuses 65", () => {
   // The module's own brace is one level, so 63 containers reach 64 and 64 containers reach 65.
-  const nested = (containers: number) =>
-    `module m { ${"container c {".repeat(containers)}${"}".repeat(containers)} }`;
+  const nested = (containers: number) => `module m { ${"container c {".repeat(containers)}${"}".repeat(containers)} }`;
   expectBe(scanYangModule(nested(63)).lists.length, 0, "63 containers inside the module is 64 levels");
   expectThrows(() => scanYangModule(nested(64)), QueryError);
 });

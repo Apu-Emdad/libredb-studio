@@ -77,7 +77,9 @@ test("every export that carries a requirement is reachable from src", () => {
   // The set has to be non-empty or the band is asserting nothing, which is how a scan like this
   // dies: a pattern stops matching, the list goes empty, and empty passes.
   expectTruthy(bound.length >= 3, `only ${bound.length} requirement-bound exports were found`);
-  const unreachable = bound.filter((b) => callersInSrc(b.name) === 0).map((b) => `${b.file}: ${b.name} (${b.requirement})`);
+  const unreachable = bound
+    .filter((b) => callersInSrc(b.name) === 0)
+    .map((b) => `${b.file}: ${b.name} (${b.requirement})`);
   expectEqual(unreachable, []);
 });
 

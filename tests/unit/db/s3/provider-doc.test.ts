@@ -1777,7 +1777,7 @@ describe("the architecture, provider, editor and guide docs", () => {
     const nonSql = SHIPPED_DATABASE_TYPES.filter((type) => !readsSqlText(type)).length;
     const optimization = read("docs/editor/query-optimization.md");
     expect(optimization).toContain(
-      `Qdrant, Oxia, S3-compatible object storage, Kubernetes, OPC UA and MTConnect are the ${word(nonSql)} types whose query text is not SQL at all**`,
+      `Qdrant, Oxia, S3-compatible object storage, Kubernetes, OPC UA, MTConnect and NETCONF are the ${word(nonSql)} types whose query text is not SQL at all**`,
     );
     expect(optimization).toContain(`holds exactly those ${word(nonSql)},`);
     expect(provider.getCapabilities().supportsResultPagination).toBe(false);
@@ -1785,7 +1785,7 @@ describe("the architecture, provider, editor and guide docs", () => {
     expect(optimization).toContain("Qdrant, Oxia and S3-compatible object storage answer it with page one.");
     expect(optimization).toContain("The S3 row names no operation and, like the Oxia row, is the gate's whole answer:");
     expect(optimization).toContain(
-      "a Qdrant request, an `oxia client` read command, an AWS CLI read command or a kubectl statement is not judged by a SQL reader",
+      "a Qdrant request, an `oxia client` read command, an AWS CLI read command, a kubectl statement or a NETCONF read request is not judged by a SQL reader",
     );
     expect(flat(read("docs/SCHEMA_DIFF.md"))).toContain(
       "Qdrant, Oxia, S3-compatible object storage and Kubernetes receive an explanatory",

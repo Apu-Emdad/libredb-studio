@@ -23,7 +23,7 @@
  * replies to 12 requests. A notification is not a reply, and only the `message-id` says so.
  */
 
-import { EOM, FrameReader, frame, type Framing, type FrameLimits, type FrameFault } from "./framing";
+import { FrameReader, frame, type Framing, type FrameLimits, type FrameFault } from "./framing";
 import { buildRpc, type NetconfRequest } from "./requests";
 
 /** What a session needs from whatever carries its bytes. */
@@ -412,4 +412,3 @@ export class NetconfSession {
     }
   }
 }
-

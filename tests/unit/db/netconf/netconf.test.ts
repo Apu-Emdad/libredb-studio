@@ -341,8 +341,6 @@ test("a mismatch names both fingerprints and both causes, and says nothing was s
   expectBe(checkHostKey(Buffer.from("the pinned key"), pin), null);
 });
 
-
-
 test("the operation set is five, and each of the five builds", () => {
   expectEqual([...ALLOWED_OPERATIONS].sort(), ["close-session", "get", "get-config", "get-data", "get-schema"]);
   rememberNamespace("ietf-interfaces", "urn:ietf:params:xml:ns:yang:ietf-interfaces");
@@ -610,7 +608,7 @@ test("the message-id is read from the first start tag, in either quote style, ne
     "the data answered instead of the reply",
   );
   expectBe(messageIdOf('<rpc-reply><data><note>message-id="999"</note></data></rpc-reply>'), null);
-  expectBe(messageIdOf('<notification><eventTime>2026-10-13T20:00:00Z</eventTime></notification>'), null);
+  expectBe(messageIdOf("<notification><eventTime>2026-10-13T20:00:00Z</eventTime></notification>"), null);
   // An attribute whose NAME ends in message-id is a different attribute.
   expectBe(messageIdOf('<rpc-reply x-message-id="9" message-id="7"><data/></rpc-reply>'), "7");
 });
@@ -701,7 +699,10 @@ test("a prefixed reply's message-id is read, and a prefixed notification is stil
 test("a hello is read whether its tags carry prefixes, attributes or spaces", () => {
   const forms = [
     ["<session-id>4</session-id>", "<capability>urn:ietf:params:netconf:base:1.1</capability>"],
-    ['<session-id xmlns="urn:x">4</session-id>', '<capability xmlns="urn:y">urn:ietf:params:netconf:base:1.1</capability>'],
+    [
+      '<session-id xmlns="urn:x">4</session-id>',
+      '<capability xmlns="urn:y">urn:ietf:params:netconf:base:1.1</capability>',
+    ],
     ["<session-id >4</session-id >", "<capability >urn:ietf:params:netconf:base:1.1</capability >"],
     ['<n:session-id n:a="1">4</n:session-id>', '<n:capability n:a="1">urn:ietf:params:netconf:base:1.1</n:capability>'],
   ] as const;
@@ -715,7 +716,10 @@ test("a hello is read whether its tags carry prefixes, attributes or spaces", ()
 
 test("a hello that really carries no session-id is still refused, and that is the device's fault", () => {
   expectThrows(
-    () => readHello('<hello xmlns="urn:x"><capabilities><capability>urn:ietf:params:netconf:base:1.1</capability></capabilities></hello>'),
+    () =>
+      readHello(
+        '<hello xmlns="urn:x"><capabilities><capability>urn:ietf:params:netconf:base:1.1</capability></capabilities></hello>',
+      ),
     /no session-id/,
   );
 });

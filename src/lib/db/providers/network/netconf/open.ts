@@ -46,24 +46,23 @@ export interface OpenPorts {
 }
 
 /**
- * The credential this provider dials with.
+ * The credential this provider dials with, read from the connection.
  *
- * Declared here rather than read off `DatabaseConnection`, and that is a measured constraint rather
- * than a preference. The house carries an engine's own settings as optional fields on that type
- * (`serviceName` for Oracle, `instanceName` for MSSQL, `securityMode` for OPC UA), so a key, its
- * passphrase and a host key fingerprint would be three new fields there, and that file is shared.
- * They belong to the registration commit, with every other shared surface, so until then this
- * function takes them and invents nothing.
+ * It used to be a parameter, and the reason is worth keeping because it has now expired: the fields
+ * did not exist. The house carries an engine's own settings as optional fields on
+ * `DatabaseConnection`, and a key, its passphrase and a host key fingerprint were three the type did
+ * not have, so taking them as an argument was how this file avoided inventing a shared surface
+ * before the registration that owns it. The registration landed, the fields exist, and a provider
+ * that still took them by hand would be declaring boxes in the connection form that nothing reads.
  *
- * `sshTunnel` already holds fields of exactly these names and is NOT reused: it describes a bastion
- * to reach a target THROUGH, its docblock says so, and a device behind a bastion is a real case
- * that would then have nowhere left to put the bastion.
+ * `sshTunnel` is NOT where these come from: it describes a bastion to reach a target THROUGH, its
+ * own docblock says so, and a device behind a bastion has two identities to check.
  *
- * A key and a password are both allowed, because a device may be configured for either, and both
- * reach ssh2 as the caller supplied them. Neither is refused here. MEASURED 2026-10-13 against the
- * fixture: with no credential, with an empty password and with a wrong password, all three were
- * refused by the device with the same single sentence and the same kind, so dialling with nothing
- * spends an attempt on the device's auth log to learn what is already known here.
+ * A key and a password are both allowed, because a device may be configured for either. Neither is
+ * required to be present at the same time as the other, and both are rejected together: MEASURED on
+ * the fixture, no credential, an empty password and a wrong password are refused by the device with
+ * one sentence and one kind, so dialling with nothing cannot learn anything and leaves a line in
+ * the device's auth log.
  */
 export interface NetconfCredential {
   readonly username: string;
@@ -73,11 +72,37 @@ export interface NetconfCredential {
   readonly password?: string;
 }
 
+const text = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim() !== "" ? value : undefined;
+
+/**
+ * Not exported: `openNetconfReader` below is its only caller, and knip reported the export as a
+ * leftover. The shape it builds is what `checked` then refuses or passes, and both doors run the
+ * same check, which is the property the two tests hold.
+ */
+function credentialOf(config: DatabaseConnection): NetconfCredential {
+  return checked({
+    username: config.user ?? "",
+    hostKeyFingerprint: typeof config.hostKeyFingerprint === "string" ? config.hostKeyFingerprint : "",
+    ...(text(config.privateKey) === undefined ? {} : { privateKey: config.privateKey }),
+    ...(text(config.privateKeyPassphrase) === undefined ? {} : { passphrase: config.privateKeyPassphrase }),
+    ...(text(config.password) === undefined ? {} : { password: config.password }),
+  });
+}
+
+/**
+ * The same two refusals whichever way the credential arrived.
+ *
+ * A caller may hand one in instead of letting it be read off the connection, and a check that ran
+ * only on the read path would let the handed-in one through unexamined. MEASURED by two tests that
+ * passed an unusable credential and were answered a connection: the refusals had moved into the
+ * reader and the other door had none.
+ */
 function checked(credential: NetconfCredential): NetconfCredential {
-  if (credential.username === "") {
+  if (text(credential.username) === undefined) {
     throw new DatabaseConfigError("this connection needs the device's account name");
   }
-  if (credential.privateKey === undefined && credential.password === undefined) {
+  if (text(credential.privateKey) === undefined && text(credential.password) === undefined) {
     throw new DatabaseConfigError("this connection needs the device's key or its password");
   }
   return credential;
@@ -85,14 +110,15 @@ function checked(credential: NetconfCredential): NetconfCredential {
 
 export async function openNetconfReader(
   config: DatabaseConnection,
-  credential: NetconfCredential,
   ports: OpenPorts,
+  override?: NetconfCredential,
 ): Promise<DeviceReaderImpl> {
   const host = config.host;
   if (typeof host !== "string" || host === "") {
     throw new DatabaseConfigError("this connection needs the device's address");
   }
-  const { username, hostKeyFingerprint, privateKey, passphrase, password } = checked(credential);
+  const { username, hostKeyFingerprint, privateKey, passphrase, password } =
+    override === undefined ? credentialOf(config) : checked(override);
   const limits = ports.limits ?? NETCONF_SESSION_LIMITS;
   const transport = await dialNetconf(
     {

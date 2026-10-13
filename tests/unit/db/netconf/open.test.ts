@@ -8,7 +8,11 @@
  */
 import { test } from "bun:test";
 import { expectBe, expectEqual, expectRejects, expectTruthy } from "./helpers";
-import { NETCONF_SESSION_LIMITS, openNetconfReader, type NetconfCredential } from "@/lib/db/providers/network/netconf/open";
+import {
+  NETCONF_SESSION_LIMITS,
+  openNetconfReader,
+  type NetconfCredential,
+} from "@/lib/db/providers/network/netconf/open";
 import type { SocketPort, SshPort, SshConnectOptions } from "@/lib/db/providers/network/netconf/dial";
 import type { Transport } from "@/lib/db/providers/network/netconf/session";
 import type { XmlElement, XmlReaderPort } from "@/lib/db/providers/network/netconf/reader-port";
@@ -19,7 +23,13 @@ import { DatabaseConfigError } from "@/lib/db/errors";
 const DEVICE_KEY = Buffer.from("the device's host key");
 const PIN = fingerprintOf(DEVICE_KEY);
 
-const connection = { id: "c", name: "lab switch", type: "netconf", host: "198.51.100.7", createdAt: new Date() } as unknown as DatabaseConnection;
+const connection = {
+  id: "c",
+  name: "lab switch",
+  type: "netconf",
+  host: "198.51.100.7",
+  createdAt: new Date(),
+} as unknown as DatabaseConnection;
 const credential: NetconfCredential = { username: "ro-key", hostKeyFingerprint: PIN, privateKey: "a key" };
 
 function el(name: string, text?: string, children: XmlElement[] = []): XmlElement {
@@ -30,7 +40,11 @@ function el(name: string, text?: string, children: XmlElement[] = []): XmlElemen
 const LIBRARY = el("rpc-reply", undefined, [
   el("data", undefined, [
     el("modules-state", undefined, [
-      el("module", undefined, [el("name", "ietf-interfaces"), el("namespace", "urn:x:if"), el("conformance-type", "implement")]),
+      el("module", undefined, [
+        el("name", "ietf-interfaces"),
+        el("namespace", "urn:x:if"),
+        el("conformance-type", "implement"),
+      ]),
     ]),
   ]),
 ]);
@@ -42,7 +56,10 @@ interface Seen {
   readonly closed: { count: number };
 }
 
-function ports(over: { library?: XmlElement; parseThrows?: boolean } = {}): { ports: { xml: XmlReaderPort; ssh: SshPort; socket: SocketPort }; seen: Seen } {
+function ports(over: { library?: XmlElement; parseThrows?: boolean } = {}): {
+  ports: { xml: XmlReaderPort; ssh: SshPort; socket: SocketPort };
+  seen: Seen;
+} {
   const seen: Seen = { dialled: [], connects: [], written: [], closed: { count: 0 } };
   let onData: ((chunk: string) => void) | null = null;
   const SERVER_HELLO =
@@ -107,7 +124,7 @@ function ports(over: { library?: XmlElement; parseThrows?: boolean } = {}): { po
 
 test("a connection and a credential become a reader, and the device's facts come back", async () => {
   const { ports: p, seen } = ports();
-  const reader = await openNetconfReader(connection, credential, p);
+  const reader = await openNetconfReader(connection, p, credential);
   expectEqual(seen.dialled, [{ host: "198.51.100.7", port: 830 }]);
   expectBe(seen.connects[0]?.username, "ro-key");
   expectBe(seen.connects[0]?.privateKey, "a key");
@@ -123,21 +140,21 @@ test("a connection and a credential become a reader, and the device's facts come
  */
 test("the port dialled is the one the connection names, and 830 when it names none", async () => {
   const named = ports();
-  await openNetconfReader({ ...connection, port: 2830 } as DatabaseConnection, credential, named.ports);
+  await openNetconfReader({ ...connection, port: 2830 } as DatabaseConnection, named.ports, credential);
   expectBe(named.seen.dialled[0]?.port, 2830);
 
   const unnamed = ports();
-  await openNetconfReader(connection, credential, unnamed.ports);
+  await openNetconfReader(connection, unnamed.ports, credential);
   expectBe(unnamed.seen.dialled[0]?.port, 830);
 
   const zero = ports();
-  await openNetconfReader({ ...connection, port: 0 } as DatabaseConnection, credential, zero.ports);
+  await openNetconfReader({ ...connection, port: 0 } as DatabaseConnection, zero.ports, credential);
   expectBe(zero.seen.dialled[0]?.port, 830, "a port of zero is no port, not port zero");
 });
 
 test("the published session limits are what the dial and the session run under", async () => {
   const { ports: p, seen } = ports();
-  await openNetconfReader(connection, credential, p);
+  await openNetconfReader(connection, p, credential);
   expectBe(seen.connects[0]?.readyTimeout, NETCONF_SESSION_LIMITS.helloMs);
   expectBe(NETCONF_SESSION_LIMITS.helloMs, 15_000);
   expectBe(NETCONF_SESSION_LIMITS.requestMs, 120_000);
@@ -152,7 +169,7 @@ test("the published session limits are what the dial and the session run under",
 test("a connection with neither a key nor a password is refused before anything is dialled", async () => {
   const { ports: p, seen } = ports();
   await expectRejects(
-    openNetconfReader(connection, { username: "ro-key", hostKeyFingerprint: PIN }, p),
+    openNetconfReader(connection, p, { username: "ro-key", hostKeyFingerprint: PIN }),
     DatabaseConfigError,
   );
   expectBe(seen.dialled.length, 0);
@@ -160,8 +177,11 @@ test("a connection with neither a key nor a password is refused before anything 
 
 test("an address or an account the connection does not carry is refused by name", async () => {
   const { ports: p, seen } = ports();
-  await expectRejects(openNetconfReader({ ...connection, host: "" } as DatabaseConnection, credential, p), /needs the device's address/);
-  await expectRejects(openNetconfReader(connection, { ...credential, username: "" }, p), /account name/);
+  await expectRejects(
+    openNetconfReader({ ...connection, host: "" } as DatabaseConnection, p, credential),
+    /needs the device's address/,
+  );
+  await expectRejects(openNetconfReader(connection, p, { ...credential, username: "" }), /account name/);
   expectBe(seen.dialled.length, 0);
 });
 
@@ -174,6 +194,6 @@ test("a failure after the session is open closes the session", async () => {
   const { ports: p, seen } = ports({ parseThrows: true });
   // The parser's own refusal has to be the one that comes out: a close that swallowed it and threw
   // its own error would still "reject", and the test would pass while the cause was lost.
-  await expectRejects(openNetconfReader(connection, credential, p), /the parser refused this message/);
+  await expectRejects(openNetconfReader(connection, p, credential), /the parser refused this message/);
   expectTruthy(seen.closed.count >= 1, "the session was left open after the reader failed");
 });
