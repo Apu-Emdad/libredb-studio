@@ -104,6 +104,38 @@ describe("decodeCell", () => {
     expect(decodeCell(col("timestamp_ltz", { scale: 3 }), "0.123")).toBe("1970-01-01 00:00:00.123+00:00");
   });
 
+  // Captured on the trial (2026-10-14) for one SELECT of an NTZ, a TZ, an LTZ, a TIME and a DATE literal under the
+  // session zones UTC, America/Los_Angeles (the user's default) and Asia/Kolkata: the cells are identical, so no
+  // decoded value depends on the session TIMEZONE Studio now leaves to the user (SF-009). Only `ltz::TIMESTAMP_TZ`
+  // moves, to the session's offset, which is how a user sees an LTZ instant at their own zone.
+  test("the temporal cells are the same in every session zone, and an LTZ cast to TZ carries the session offset", () => {
+    const decoded = (cells: readonly string[]) =>
+      ["timestamp_ntz", "timestamp_tz", "timestamp_ltz", "time", "date"].map((type, index) =>
+        decodeCell(col(type, { scale: 9 }), cells[index]),
+      );
+    const cells = [
+      "1780315200.500000000",
+      "1780308000.000000000 1560",
+      "1780308000.000000000",
+      "47655.000000000",
+      "20605",
+    ];
+    expect(decoded(cells)).toEqual([
+      "2026-06-01 12:00:00.500000000",
+      "2026-06-01 12:00:00.000000000+02:00",
+      "2026-06-01 10:00:00.000000000+00:00",
+      "13:14:15.000000000",
+      "2026-06-01",
+    ]);
+    const asTz = (offsetCell: string) =>
+      decodeCell(col("timestamp_tz", { scale: 9 }), `1780308000.000000000 ${offsetCell}`);
+    expect([asTz("1440"), asTz("1020"), asTz("1770")]).toEqual([
+      "2026-06-01 10:00:00.000000000+00:00",
+      "2026-06-01 03:00:00.000000000-07:00",
+      "2026-06-01 15:30:00.000000000+05:30",
+    ]);
+  });
+
   test("tz offsets beyond 720 to 2160 shift by 1440", () => {
     expect(decodeCell(col("timestamp_tz", { scale: 0 }), "0 2400")).toBe("1970-01-01 16:00:00+16:00");
     expect(decodeCell(col("timestamp_tz", { scale: 0 }), "0 0")).toBe("1969-12-31 00:00:00-24:00");

@@ -290,6 +290,8 @@ Every request is its own Snowflake session context: Studio sends Database, Schem
 Each of the four is read as a name in Snowflake SQL: an unquoted name is upper-cased, and double quotes keep its case, so `studio_ro` is sent as `STUDIO_RO` and `"Mixed Case"` as `Mixed Case`.
 The SQL API reads the four fields as exact names: a role it cannot resolve is refused, while a database, schema or warehouse name Snowflake cannot resolve leaves that context unset without an error: `CURRENT_DATABASE()`, `CURRENT_SCHEMA()` or `CURRENT_WAREHOUSE()` then answers NULL.
 The role check reads all three, so Test connection cautions on a configured name that answers NULL ([section 2.5](#25-test-connection)).
+Studio sends no `TIMEZONE`, so every statement is evaluated in the user's own Snowflake `TIMEZONE` parameter (the account's, `America/Los_Angeles` by default, unless the user sets another), as Snowsight evaluates it: `CURRENT_DATE`, a `TIMESTAMP_LTZ` literal, a `TIMESTAMP_TZ` written without an offset and `DATE_TRUNC` over an LTZ value give the same rows in both.
+How a result shows a `TIMESTAMP_LTZ` is in [section 6](#6-results).
 The SQL API does not run `USE` (it answers code 391911, `Command not supported by SQL API: USE`), so a statement whose operative keyword is `USE` is refused before anything is sent:
 
 `Snowflake's SQL API does not run USE. Set Database, Schema, Warehouse or Role on the connection instead, or use fully qualified names such as database.schema.table. Nothing was sent.`
@@ -425,11 +427,15 @@ In practice an unlimited run shows about 10,000 to 16,700 rows of typical widths
 | `date` | `YYYY-MM-DD` | `DATE` |
 | `time` | `HH:MM:SS[.f]` | `TIME(s)` |
 | `timestamp_ntz` | `YYYY-MM-DD HH:MM:SS[.f]` | `TIMESTAMP_NTZ(s)` |
-| `timestamp_ltz` | the UTC instant with `+00:00` (every request sends `timezone: "UTC"`) | `TIMESTAMP_LTZ(s)` |
+| `timestamp_ltz` | the instant at UTC, with `+00:00` | `TIMESTAMP_LTZ(s)` |
 | `timestamp_tz` | the wall time at its offset, with `+HH:MM` or `-HH:MM` | `TIMESTAMP_TZ(s)` |
 | `variant`, `object`, `array`, `map`, structured types | the JSON text, never parsed | the type name; an `object` with `extTypeName` `GEOGRAPHY` or `GEOMETRY` is typed by that name |
 | `vector` | the JSON array text | `VECTOR`: the SQL API reports `vector` with no element type or dimension |
 | `geography`, `geometry`, `uuid`, `file` and any other | the text | the reported name |
+
+Snowflake sends every date, time and timestamp as days or seconds since the epoch, a `TIMESTAMP_TZ` with its own offset, so no cell depends on the session's `TIMEZONE`; measured on the trial on 2026-10-14, the same `SELECT` answered identical cells under UTC, `America/Los_Angeles` and `Asia/Kolkata`.
+A `TIMESTAMP_LTZ` arrives as a bare instant, and the answer does not name the session's zone, so Studio shows the exact instant at UTC with `+00:00` rather than guess the zone: `'2026-06-01 12:00:00'::TIMESTAMP_LTZ` under `America/Los_Angeles` shows `2026-06-01 19:00:00.000000000+00:00`, the instant Snowsight shows as `2026-06-01 12:00:00.000 -0700`.
+To see an LTZ value at the session's own offset, cast it: `ltz_col::TIMESTAMP_TZ` carries that offset (`2026-06-01 12:00:00.000000000-07:00`).
 
 Dates and timestamps follow the proleptic Gregorian calendar with astronomical years, as Snowflake counts its days.
 Snowflake stores years outside 1 to 9999, and Studio shows such a value with every digit of its year and a `-` at or before year 0, never refusing it: `10000-01-01`, and `-0002-06-01` for 3 BC, which `'-0002-06-01'::DATE` reads back to the same day.

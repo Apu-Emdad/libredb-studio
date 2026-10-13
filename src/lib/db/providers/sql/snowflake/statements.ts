@@ -3,7 +3,9 @@
  * deadline, the engine limiter and the run registry, returned as one neutral result type.
  *
  * A statement is `POST /api/v2/statements?async=true` with the connection's context fields and fixed parameters, so
- * an account's own `MULTI_STATEMENT_COUNT`, `TIMEZONE` or result chunking never changes what Studio reads. Its answer
+ * an account's own `MULTI_STATEMENT_COUNT` or result chunking never changes what Studio reads. `TIMEZONE` is left to
+ * the user's own setting, as Snowsight leaves it, since every temporal cell arrives as epoch seconds or days (with
+ * its offset for `TIMESTAMP_TZ`) and decodes the same in any session zone. Its answer
  * carries the statement handle, which must have the UUID shape before anything else is sent; the status, partition
  * and cancel paths are built from it on the provider's origin, and a status link in an answer is checked and never
  * followed. The poll waits `SNOWFLAKE_POLL_FIRST_MS`, doubling to `SNOWFLAKE_POLL_MAX_MS`, until the 200 that carries
@@ -412,7 +414,6 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
         query_tag: run.tag,
         client_result_chunk_size: SNOWFLAKE_CHUNK_SIZE_MB,
         rows_per_resultset: SNOWFLAKE_ROWS_PER_RESULTSET,
-        timezone: "UTC",
       },
     });
   }

@@ -20,6 +20,8 @@
  * - the role check's columns past `R` and `S` (the user since SF-005, the database, schema and warehouse since SF-019): the capture sent the two-column check, so
  *   `load()` widens every captured role check to `SNOWFLAKE_ROLE_CHECK_SQL`, its added cells answered as the account
  *   answers that connection (`widenRoleCheck`);
+ * - every submit body without `parameters.timezone`: the capture sent `timezone: "UTC"`, which Studio stopped sending
+ *   so statements run in the user's own TIMEZONE (SF-009), so `load()` takes it out (`withoutTimezone`);
  * - the role check answering another role: the account refuses a role the credentials may not use at connect with
  *   390186 (`refusal-390186`, `role-restricted-pat-show`), so no captured role check answers another role;
  * - a role holding no warehouse (391920): the account answers it only with secondary roles off, which this capture
@@ -166,8 +168,24 @@ function widenRoleCheck(scenario: Scenario): Scenario {
   return { ...scenario, exchanges };
 }
 
+/**
+ * The scenario with `parameters.timezone` taken out of every captured request body: the trial captured
+ * `timezone: "UTC"`, which Studio no longer sends, so each statement runs in the user's own TIMEZONE (SF-009). Every
+ * other field is compared as recorded. BUILT.
+ */
+function withoutTimezone(scenario: Scenario): Scenario {
+  const exchanges = scenario.exchanges.map((exchange) => {
+    const body = exchange.request.body as { parameters?: Record<string, unknown> } | undefined;
+    if (body?.parameters === undefined || !("timezone" in body.parameters)) return exchange;
+    const parameters = { ...body.parameters };
+    delete parameters.timezone;
+    return { ...exchange, request: { ...exchange.request, body: { ...exchange.request.body, parameters } } };
+  });
+  return { ...scenario, exchanges };
+}
+
 const load = (name: string): Scenario =>
-  widenRoleCheck(JSON.parse(readFileSync(join(FIXTURES, `${name}.json`), "utf8")) as Scenario);
+  withoutTimezone(widenRoleCheck(JSON.parse(readFileSync(join(FIXTURES, `${name}.json`), "utf8")) as Scenario));
 
 /** A fixture's answer as the scripted transport gives it: a partition compressed again, a non-JSON body as text. */
 function answerOf(response: FixtureExchange["response"]): ScriptedAnswer {

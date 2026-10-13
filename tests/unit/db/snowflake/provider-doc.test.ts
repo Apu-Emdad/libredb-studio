@@ -650,6 +650,15 @@ describe("every other number and sentence the doc states is the code's", () => {
     expect(decodeCell(column("boolean"), "TRUE")).toBe(true);
     expect(decodeCell(column("date"), "0")).toBe("1970-01-01");
     expect(decodeCell(column("timestamp_ltz", 0), "0")).toBe("1970-01-01 00:00:00+00:00");
+    expect(decodeCell(column("timestamp_ltz", 9), "1780340400.000000000")).toBe("2026-06-01 19:00:00.000000000+00:00");
+    expect(decodeCell(column("timestamp_tz", 9), "1780340400.000000000 1020")).toBe(
+      "2026-06-01 12:00:00.000000000-07:00",
+    );
+    expect(FLAT_DOC).toContain("`2026-06-01 19:00:00.000000000+00:00`");
+    expect(FLAT_DOC).toContain("`2026-06-01 12:00:00.000000000-07:00`");
+    // SF-009: no request sets the session zone, and the doc says so.
+    expect(FLAT_DOC).toContain("Studio sends no `TIMEZONE`");
+    expect(FLAT_DOC).not.toContain('timezone: "UTC"');
     expect(decodeCell(column("variant"), '{"a": 1}')).toBe('{"a": 1}');
     expect(FLAT_DOC).toContain(`\`${SNOWFLAKE_DECODE_SENTENCES.unreadable("<type>", "<column>")}\``);
     expect(FLAT_DOC).toContain(`\`${SNOWFLAKE_DECODE_SENTENCES.columns}\``);

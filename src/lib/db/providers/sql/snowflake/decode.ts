@@ -13,8 +13,9 @@
  * - `date` is days since the epoch; `time`, `timestamp_ntz` and `timestamp_ltz` are seconds with up to 9 fraction
  *   digits, and `timestamp_tz` the same, one space and an offset carried as minutes plus 1440. The arithmetic is
  *   exact, in `BigInt` nanoseconds, the fraction printed with the digits received. A pre-1970 fraction is one signed
- *   decimal, so `-1.5` is 1.5 seconds before the epoch. `ltz` is the UTC instant with `+00:00`, since every request
- *   sends `timezone: "UTC"`. The calendar is proleptic Gregorian with astronomical years, as Snowflake counts days:
+ *   decimal, so `-1.5` is 1.5 seconds before the epoch. None of these depends on the session's TIMEZONE. `ltz` is
+ *   the UTC instant with `+00:00`: Snowflake sends it as bare epoch seconds and its answer does not name the session
+ *   zone, so the instant is shown exactly, at UTC, rather than at a guessed zone. The calendar is proleptic Gregorian with astronomical years, as Snowflake counts days:
  *   a year outside 1 to 9999, which Snowflake stores, is written with all its digits and a `-` at or before year 0
  *   (`10000-01-01`, `-0002-06-01` for 3 BC), never refused, so one such cell cannot fail a result.
  * - `variant`, `object`, `array`, `map`, `vector` and every other type are their text verbatim, never parsed, so a

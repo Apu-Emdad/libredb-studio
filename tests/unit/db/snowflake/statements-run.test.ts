@@ -125,10 +125,11 @@ describe("the request body", () => {
         query_tag: "libredb-studio:editor",
         client_result_chunk_size: 16,
         rows_per_resultset: 100_001,
-        timezone: "UTC",
       },
     });
     expect(sent[0].body).toContain('"role":"Mixed Role"');
+    // No timezone: every statement runs in the user's own TIMEZONE, as in Snowsight (SF-009).
+    expect((sent[0].body ?? "").toLowerCase()).not.toContain("timezone");
     expect(bodyOf(sent[1])).toMatchObject({
       statement: "SHOW DATABASES",
       timeout: 30,
