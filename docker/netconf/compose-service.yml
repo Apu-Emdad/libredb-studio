@@ -1,0 +1,29 @@
+# The service block for database-compose.yml, kept here until it is merged.
+#
+# It is NOT merged yet on purpose: database-compose.yml is one of the files every new provider
+# edits, so the merge happens as the last step of the provider PR rather than here, where it would
+# collide with every other provider in flight.
+#
+# The port is a spec decision, not a measurement: 1830 is 830 moved above the privileged range,
+# bound to loopback the way the other fixtures are.
+services:
+  netconf:
+    build: { context: ./docker/netconf }
+    image: libredb-fixture/netconf:2.8.7
+    pull_policy: build
+    container_name: libredb-netconf
+    profiles: ["netconf"]
+    environment:
+      # The size the provider's read sizes were measured at. A focused test can lower it.
+      LIBREDB_NETCONF_INTERFACES: "5000"
+    ports:
+      - "127.0.0.1:1830:830"
+    healthcheck:
+      # The setup script writes this marker once the accounts, the NACM rule-list and the
+      # interface list are all in the datastore, so the fixture is not reported healthy while
+      # it is still half configured.
+      test: ["CMD", "test", "-f", "/fixture/.ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
