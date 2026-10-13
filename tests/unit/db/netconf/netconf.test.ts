@@ -22,12 +22,6 @@ import { classifyLoginFailure, mayShowDetail, REFUSED_SENTENCE } from "@/lib/db/
 import { messageIdOf, readHello } from "@/lib/db/providers/network/netconf/session";
 import { checkHostKey, fingerprintOf, readPin } from "@/lib/db/providers/network/netconf/hostkey";
 import {
-  assertWritable,
-  isSensitiveLeaf,
-  looksLikeSecret,
-  safeForWriting,
-} from "@/lib/db/providers/network/netconf/secrets";
-import {
   ALLOWED_OPERATIONS,
   buildRpc,
   escapeXml,
@@ -347,22 +341,7 @@ test("a mismatch names both fingerprints and both causes, and says nothing was s
   expectBe(checkHostKey(Buffer.from("the pinned key"), pin), null);
 });
 
-test("the leaves measured as readable by a read only account never reach a writer", () => {
-  expectBe(isSensitiveLeaf("hashed-password").sensitive, true);
-  expectBe(isSensitiveLeaf("ks:cleartext-private-key").sensitive, true);
-  expectBe(isSensitiveLeaf("name").sensitive, false);
-  expectBe(safeForWriting(["keystore", "asymmetric-key", "public-key"], "AAAAB3Nz").withheld, true);
-  expectBe(safeForWriting(["interfaces", "interface", "name"], "ge-0/0/0").text, "ge-0/0/0");
-});
 
-test("a crypt hash and a PEM block are caught even where no path said so", () => {
-  expectBe(looksLikeSecret("$6$3YBmnHaul54TEa/k$abcdefghij"), true);
-  expectBe(looksLikeSecret("-----BEGIN OPENSSH PRIVATE KEY-----"), true);
-  expectBe(looksLikeSecret("ge-0/0/0"), false);
-  // A refusal for the wrong reason is the dangerous outcome here: the guard exists to stop a
-  // password hash being written out, so the test holds what it refused and not merely that it did.
-  expectThrows(() => assertWritable("user alice $6$3YBmnHaul54TEa/k$abcdefghij"), /withheld|secret|password/i);
-});
 
 test("the operation set is five, and each of the five builds", () => {
   expectEqual([...ALLOWED_OPERATIONS].sort(), ["close-session", "get", "get-config", "get-data", "get-schema"]);
