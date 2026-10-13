@@ -47,9 +47,13 @@ import {
 } from "./errors";
 import {
   partitionFailureText,
+  readOversizedFirstAnswer,
   readResultRows,
   SNOWFLAKE_FIRST_ANSWER_MAX_BYTES,
+  SNOWFLAKE_OVERSIZED_FIRST_READ_BYTES,
   SNOWFLAKE_ROWS_SENTENCES,
+  type SnowflakeOversizedFirst,
+  type SnowflakeRowsOutcome,
 } from "./rows";
 import {
   SNOWFLAKE_CONTROL_ANSWER_MAX_BYTES,
@@ -520,45 +524,61 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
     throw deadline ? deadlineError(run.timeoutS, run.deadlineBound) : cancelledError();
   }
 
-  /** A transport failure as a `SnowflakeError`; one that is not the transport's is returned unchanged. */
-  function transportError(error: unknown, request: "submit" | "status" | "partition"): unknown {
+  /**
+   * A transport failure as a `SnowflakeError`; one that is not the transport's is returned unchanged. A status answer
+   * too large to read never reaches here: the poll reads it again as a stream.
+   */
+  function transportError(error: unknown): unknown {
     const mapped = transportFailureError(error, options.failure.host);
     if (!(mapped instanceof TransportError)) return mapped;
-    if (mapped.kind === "too-large" && request === "status") {
-      return new SnowflakeError("query", SNOWFLAKE_ROWS_SENTENCES.firstTooLarge);
-    }
     return new SnowflakeError("unavailable", mapped.message);
   }
 
-  async function buildResult(run: Run, handle: string, answer: Record<string, unknown>): Promise<SnowflakeResult> {
-    const meta = isRecord(answer.resultSetMetaData) ? answer.resultSetMetaData : {};
+  /** One partition's bytes (`query` empty for the status answer itself); an answer that is not 200 is thrown. */
+  async function fetchBytes(run: Run, handle: string, query: string, maxResponseBytes: number, truncateAt: number) {
+    const part = await transport.partition(statusPath(handle), query, run.signal, maxResponseBytes, truncateAt);
+    if (part.status === 200) return part;
+    if (PARTITION_GAVE_UP.has(part.status)) await cancelOwn(handle);
+    throw failureError(
+      failureOf(part.status, await partitionFailureText(part, maxResponseBytes), "partition"),
+      failureContext(run, part.attempts, true),
+    );
+  }
+
+  /**
+   * The result of a finished statement: from its status answer, or, when that answer was too large to read whole,
+   * from `first`, partition 0 read again as a stream under the budget (SF-032).
+   */
+  async function buildResult(
+    run: Run,
+    handle: string,
+    answer: Record<string, unknown>,
+    first?: SnowflakeOversizedFirst,
+  ): Promise<SnowflakeResult> {
+    const metaOf = first?.meta ?? answer.resultSetMetaData;
+    const meta = isRecord(metaOf) ? metaOf : {};
     const columns = readColumns(meta.rowType);
     const names = columns.map((column) => column.name);
     const partitionInfo = meta.partitionInfo;
-    const outcome = await readResultRows({
-      columns: names,
-      firstData: answer.data,
-      partitionCount: Array.isArray(partitionInfo) ? Math.max(partitionInfo.length, 1) : 1,
-      fetchPartition: async (index, maxResponseBytes, truncateAt) => {
-        const part = await transport.partition(
-          statusPath(handle),
-          `partition=${index}`,
-          run.signal,
-          maxResponseBytes,
-          truncateAt,
-        );
-        if (part.status === 200) return part;
-        if (PARTITION_GAVE_UP.has(part.status)) await cancelOwn(handle);
-        throw failureError(
-          failureOf(part.status, await partitionFailureText(part, maxResponseBytes), "partition"),
-          failureContext(run, part.attempts, true),
-        );
-      },
-      signal: run.signal,
-    });
+    const outcome: SnowflakeRowsOutcome =
+      first !== undefined && first.outcome.cut !== null
+        ? first.outcome
+        : await readResultRows({
+            columns: names,
+            firstData: first === undefined ? answer.data : first.outcome.rows,
+            partitionCount: Array.isArray(partitionInfo) ? Math.max(partitionInfo.length, 1) : 1,
+            fetchPartition: (index, maxResponseBytes, truncateAt) =>
+              fetchBytes(run, handle, `partition=${index}`, maxResponseBytes, truncateAt),
+            signal: run.signal,
+          });
     const numRows = typeof meta.numRows === "number" ? meta.numRows : null;
     const warnings: QueryWarning[] = [];
-    if (outcome.cut === "bytes") warnings.push({ message: SNOWFLAKE_ROWS_SENTENCES.byteCut(numRows) });
+    if (outcome.cut === "bytes") {
+      warnings.push({
+        message:
+          outcome.rows.length === 0 ? SNOWFLAKE_ROWS_SENTENCES.firstRowCut : SNOWFLAKE_ROWS_SENTENCES.byteCut(numRows),
+      });
+    }
     if (outcome.cut === "rows") warnings.push({ message: SNOWFLAKE_ROWS_SENTENCES.rowCut });
     const snowflakeCut = answer.code === SNOWFLAKE_CUT_CODE;
     if (snowflakeCut) warnings.push({ message: SNOWFLAKE_ROWS_SENTENCES.snowflakeCut });
@@ -576,7 +596,6 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
   /** Submit, poll and read one statement; the caller holds its permit. */
   async function execute(run: Run): Promise<SnowflakeResult> {
     let handle: string | null = null;
-    let request: "submit" | "status" | "partition" = "submit";
     try {
       let answer: SnowflakeTextAnswer = await transport.submit(
         STATEMENTS_PATH,
@@ -595,13 +614,22 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
       if (!lifetime.signal.aborted) handles.add(handle);
       run.signal.throwIfAborted();
 
-      request = "status";
       let interval = SNOWFLAKE_POLL_FIRST_MS;
       while (answer.status !== 200) {
         // oxlint-disable-next-line no-await-in-loop -- each poll waits its interval before the next status read.
         await deps.sleep(interval, run.signal);
-        // oxlint-disable-next-line no-await-in-loop -- each status answer decides whether there is another poll.
-        answer = await transport.status(statusPath(handle), run.signal, SNOWFLAKE_FIRST_ANSWER_MAX_BYTES);
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- each status answer decides whether there is another poll.
+          answer = await transport.status(statusPath(handle), run.signal, SNOWFLAKE_FIRST_ANSWER_MAX_BYTES);
+        } catch (error) {
+          if (!(error instanceof TransportError && error.kind === "too-large")) throw error;
+          // Partition 0 is larger than the status read holds: read it again as a stream, under the budget.
+          const bound = SNOWFLAKE_OVERSIZED_FIRST_READ_BYTES;
+          // oxlint-disable-next-line no-await-in-loop -- the loop ends here, with this read.
+          const first = await readOversizedFirstAnswer(await fetchBytes(run, handle, "", bound, bound));
+          // oxlint-disable-next-line no-await-in-loop -- the loop ends here, with this read.
+          return await buildResult(run, handle, {}, first);
+        }
         if (answer.status === 202) {
           interval = Math.min(interval * 2, SNOWFLAKE_POLL_MAX_MS);
         } else if (answer.status === 429) {
@@ -619,11 +647,10 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
         }
       }
 
-      request = "partition";
       return await buildResult(run, handle, parsed);
     } catch (error) {
       if (run.signal.aborted) return await stopped(run, handle);
-      throw transportError(error, request);
+      throw transportError(error);
     } finally {
       if (handle !== null) handles.delete(handle);
     }

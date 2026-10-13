@@ -414,8 +414,13 @@ A cut keeps the rows before it, marks the result limited, and says so:
 
 - `The result reached Studio's statement budget of 16 MiB, so only the rows before it are shown. Snowflake reported <numRows> rows.`
   Studio asks Snowflake for at most 100,001 rows (`rows_per_resultset`), so Snowflake's count stops there; a result that reaches it ends `Snowflake reported more than 100,000 rows.` instead, since its true size is not known.
+- `The first row of this result is larger than Studio's statement budget of 16 MiB, so no row is shown. Select fewer columns, or part of a large value with LEFT or SUBSTR.` The grid then reads "No row is shown: the result was cut before its first row" rather than "Query returned no data".
 - `The result reached Studio's statement budget of 100,000 rows, so only the rows before it are shown.`
 - `Snowflake returned only part of this result because it is too large (391908), so only the rows it sent are shown. Add a LIMIT, or select fewer columns.`
+
+Snowflake decides the size of the first partition itself, so a wide result can send more than 24 MiB inline even with a `LIMIT` and a chunk size of 16 (measured on the trial: 4,096 rows of 10,000 characters, about 41 MB).
+Studio then reads that answer again as a stream, cut at the budget plus 64 KiB: Snowflake writes `resultSetMetaData` before `data`, so the column list is read whole and the rows that fit are kept, with the 16 MiB cut sentence.
+Only an answer whose column list alone does not fit in that read is refused, with the first sentence below.
 
 A partition Studio cannot take is refused:
 

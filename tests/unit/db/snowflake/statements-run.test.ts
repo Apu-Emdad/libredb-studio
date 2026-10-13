@@ -40,6 +40,7 @@ import {
   caught,
   cancels,
   closeOpened,
+  type Harness,
   HOST,
   ONE_COLUMN,
   one,
@@ -536,13 +537,67 @@ describe("failures", () => {
     expect(harness.transports.requests).toHaveLength(1);
   });
 
-  test("a status answer past 24 MiB throws the first-too-large sentence", async () => {
+  describe("a status answer past 24 MiB is read again as a stream, under the budget (SF-032)", () => {
+    const TOO_LARGE = { fail: new TransportError("too-large", "The response exceeded the limit") };
+    const metaText = (numRows: number, partitions = 1) =>
+      JSON.stringify({
+        numRows,
+        format: "jsonv2",
+        partitionInfo: Array.from({ length: partitions }, () => ({ rowCount: 1 })),
+        rowType: ONE_COLUMN,
+      });
+    const reread = (harness: Harness, text: string, truncated: boolean) => {
+      harness.transports.answer(SUBMIT, handleAnswer());
+      harness.transports.answer(STATUS, TOO_LARGE, { status: 200, bytes: Buffer.from(text), truncated });
+    };
+
+    test("the rows that fit are shown, cut, with the byte-cut sentence", async () => {
+      const harness = setup();
+      reread(harness, `{"resultSetMetaData":${metaText(5000, 3)},"data":[["1"],["2"],["3`, true);
+      const result = await harness.statements.runSurface("SELECT n FROM t LIMIT 5000", SNOWFLAKE_QUERY_TAGS.tree);
+      expect(result.rows).toEqual([{ N: 1 }, { N: 2 }]);
+      expect(result.cut).toBe(true);
+      expect(result.numRows).toBe(5000);
+      expect(result.warnings).toEqual([{ message: SNOWFLAKE_ROWS_SENTENCES.byteCut(5000) }]);
+      const reads = harness.transports.requests.filter((request) => request.method === "GET");
+      expect(reads.map((request) => new URL(request.url).pathname)).toEqual([STATUS_PATH, STATUS_PATH]);
+      expect(new URL(reads[1].url).search).toBe("");
+    });
+
+    test("a first row larger than the budget says so instead of showing an empty result", async () => {
+      const harness = setup();
+      reread(harness, `{"resultSetMetaData":${metaText(3)},"data":[["aaaa`, true);
+      const result = await harness.statements.runSurface("SELECT s FROM t", SNOWFLAKE_QUERY_TAGS.tree);
+      expect(result.rows).toEqual([]);
+      expect(result.cut).toBe(true);
+      expect(result.warnings).toEqual([{ message: SNOWFLAKE_ROWS_SENTENCES.firstRowCut }]);
+    });
+
+    test("a reread that came back whole continues with the later partitions", async () => {
+      const harness = setup();
+      reread(harness, `{"resultSetMetaData":${metaText(2, 2)},"data":[["1"]],"code":"090001"}`, false);
+      harness.transports.answer({ method: "GET", path: /./ }, { status: 200, bytes: Buffer.from('[["2"]]') });
+      const result = await harness.statements.runSurface("SELECT n FROM t", SNOWFLAKE_QUERY_TAGS.tree);
+      expect(result.rows).toEqual([{ N: 1 }, { N: 2 }]);
+      expect(result.cut).toBe(false);
+    });
+
+    test("a reread whose metadata did not fit is still the first-too-large sentence", async () => {
+      const harness = setup();
+      reread(harness, '{"resultSetMetaData":{"numRows":1,"rowType":[{"name":"N"', true);
+      const error = await caught(harness.statements.runSurface("SELECT 1", SNOWFLAKE_QUERY_TAGS.tree));
+      expect((error as SnowflakeError).category).toBe("query");
+      expect((error as SnowflakeError).message).toBe(SNOWFLAKE_ROWS_SENTENCES.firstTooLarge);
+    });
+  });
+
+  test("a status read that fails otherwise is not reread", async () => {
     const harness = setup();
     harness.transports.answer(SUBMIT, handleAnswer());
-    harness.transports.answer(STATUS, { fail: new TransportError("too-large", "The response exceeded the limit") });
+    harness.transports.answer(STATUS, { fail: new TransportError("network", "socket hang up") });
     const error = await caught(harness.statements.runSurface("SELECT 1", SNOWFLAKE_QUERY_TAGS.tree));
-    expect((error as SnowflakeError).category).toBe("query");
-    expect((error as SnowflakeError).message).toBe(SNOWFLAKE_ROWS_SENTENCES.firstTooLarge);
+    expect((error as SnowflakeError).category).toBe("unavailable");
+    expect(harness.transports.requests.filter((request) => request.method === "GET")).toHaveLength(1);
   });
 
   test("an answer that is not a JSON object is the unreadable sentence", async () => {

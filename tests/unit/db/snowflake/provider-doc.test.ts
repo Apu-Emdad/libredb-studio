@@ -51,6 +51,7 @@ import {
 } from "@/lib/db/providers/sql/snowflake/monitoring";
 import {
   SNOWFLAKE_FIRST_ANSWER_MAX_BYTES,
+  SNOWFLAKE_OVERSIZED_FIRST_READ_BYTES,
   SNOWFLAKE_RESULT_BYTE_BUDGET,
   SNOWFLAKE_ROWS_SENTENCES,
 } from "@/lib/db/providers/sql/snowflake/rows";
@@ -184,6 +185,7 @@ const QUOTED: Readonly<Record<string, { readonly keys: readonly string[]; readon
       SNOWFLAKE_ROWS_SENTENCES.encoding("<encoding>"),
       SNOWFLAKE_ROWS_SENTENCES.nonString("<column>"),
       SNOWFLAKE_ROWS_SENTENCES.byteCut(1234).replace("1,234", "<numRows>"),
+      SNOWFLAKE_ROWS_SENTENCES.firstRowCut,
       SNOWFLAKE_ROWS_SENTENCES.rowCut,
       SNOWFLAKE_ROWS_SENTENCES.snowflakeCut,
     ],
@@ -567,6 +569,15 @@ describe("every other number and sentence the doc states is the code's", () => {
     expect(FLAT_DOC).toContain(
       `The wait has its own bound of the same length (\`timeout\` plus ${seconds(SNOWFLAKE_DEADLINE_GRACE_MS)})`,
     );
+  });
+
+  test("an oversized first partition is reread under the budget plus the slack, not refused (SF-032)", () => {
+    expect(SNOWFLAKE_OVERSIZED_FIRST_READ_BYTES).toBe(SNOWFLAKE_RESULT_BYTE_BUDGET + 64 * 1024);
+    expect(FLAT_DOC).toContain(
+      `Studio then reads that answer again as a stream, cut at the budget plus ${(SNOWFLAKE_OVERSIZED_FIRST_READ_BYTES - SNOWFLAKE_RESULT_BYTE_BUDGET) / 1024} KiB`,
+    );
+    expect(FLAT_DOC).toContain(`more than ${SNOWFLAKE_FIRST_ANSWER_MAX_BYTES / MIB} MiB inline`);
+    expect(FLAT_DOC).toContain('"No row is shown: the result was cut before its first row"');
   });
 
   test("the byte cut's count is Snowflake's below the row request and 'more than' at it (SF-031)", () => {
