@@ -231,6 +231,16 @@ describe("typedLiteral: clickhouse", () => {
     expect(typedLiteral(["constructor"], "Array(Float32)", "clickhouse", scalar)).toBe("[<constructor>]");
   });
 
+  test("writes a scalar Float's non-finite word or number bare, wrappers included (SF-045)", () => {
+    expect(typedLiteral("Infinity", "Float64", "clickhouse", scalar)).toBe("inf");
+    expect(typedLiteral("-Infinity", "Nullable(Float32)", "clickhouse", scalar)).toBe("-inf");
+    expect(typedLiteral("NaN", "LowCardinality(Nullable(Float64))", "clickhouse", scalar)).toBe("nan");
+    expect(typedLiteral(Number.NEGATIVE_INFINITY, "BFloat16", "clickhouse", scalar)).toBe("-inf");
+    expect(typedLiteral(1.5, "Float64", "clickhouse", scalar)).toBeUndefined();
+    expect(typedLiteral("Infinity", "String", "clickhouse", scalar)).toBeUndefined();
+    expect(typedLiteral("inf", "Float64", "clickhouse", scalar)).toBeUndefined();
+  });
+
   test("writes a number-shaped string bare only under a numeric element type", () => {
     expect(typedLiteral(["1.5", "x"], "Array(Decimal(9, 2))", "clickhouse", scalar)).toBe("[1.5, <x>]");
     expect(typedLiteral(["1"], "Array(String)", "clickhouse", scalar)).toBe("[<1>]");

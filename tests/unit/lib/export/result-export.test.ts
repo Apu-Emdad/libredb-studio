@@ -214,6 +214,33 @@ describe("buildResultExport — sql-insert", () => {
     expect(buildResultExport("csv", source({ rows, fields })).content).toBe("a,b,c\nNaN,Infinity,-Infinity");
   });
 
+  test("writes a ClickHouse Float's NaN and infinities as its bare words, and plain in CSV (SF-045)", () => {
+    const rows = [
+      { id: 1, f: "Infinity", n: "-Infinity", g: "NaN" },
+      { id: 2, f: "-Infinity", n: null, g: 1.5 },
+    ];
+    const fields = ["id", "f", "n", "g"];
+    const columnTypes = { id: "Int32", f: "Float64", n: "Nullable(Float64)", g: "LowCardinality(Float32)" };
+    const insert = buildResultExport(
+      "sql-insert",
+      source({ rows, fields, columnTypes, dialect: "clickhouse", tabName: "t" }),
+    );
+    expect(insert.content).toBe(
+      [
+        `INSERT INTO t ("id", "f", "n", "g") VALUES (1, inf, -inf, nan);`,
+        `INSERT INTO t ("id", "f", "n", "g") VALUES (2, -inf, NULL, 1.5);`,
+      ].join("\n"),
+    );
+    // With no declared type, a number the host built itself still gets ClickHouse's spelling.
+    const undeclared = buildResultExport(
+      "sql-insert",
+      source({ rows: [{ f: Number.NEGATIVE_INFINITY }], fields: ["f"], dialect: "clickhouse", tabName: "t" }),
+    );
+    expect(undeclared.content).toBe(`INSERT INTO t ("f") VALUES (-inf);`);
+    const csv = buildResultExport("csv", source({ rows, fields, columnTypes, dialect: "clickhouse" }));
+    expect(csv.content).toBe("id,f,n,g\n1,Infinity,-Infinity,NaN\n2,-Infinity,,1.5");
+  });
+
   test("writes a -Infinity that crossed JSON as text plain in a numeric column, guarded in a text one", () => {
     const rows = [{ f: "-Infinity", n: "-Infinity", d: "-Infinity", t: "-Infinity", u: "-Infinity" }];
     const fields = ["f", "n", "d", "t", "u"];

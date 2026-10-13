@@ -1066,7 +1066,8 @@ function oracleZonedTextLiteral(text: string): string | undefined {
  * constants into `BINARY_DOUBLE` and `BINARY_FLOAT`; Databend (M08b, on the pinned image) inserted
  * `'NaN'::FLOAT`, `'inf'::DOUBLE` and `'-inf'::FLOAT` into its `FLOAT` and `DOUBLE` columns and read back NaN,
  * Infinity and -Infinity; Snowflake's trial setup (2026-10-12) created its FLOAT infinities with `'inf'::FLOAT` and
- * `'-inf'::FLOAT`, and `'NaN'::FLOAT` is the same documented form. Every other dialect, which either
+ * `'-inf'::FLOAT`, and `'NaN'::FLOAT` is the same documented form; ClickHouse 26.9.18.11 read the bare `nan`, `inf`
+ * and `-inf` back into `Float64` and `Float32` (2026-10-14). Every other dialect, which either
  * cannot store these values or was not replayed, keeps writing NULL.
  */
 const NON_FINITE_LITERALS: Partial<Record<DatabaseType, Readonly<Record<NonFiniteWord, string>>>> = {
@@ -1076,6 +1077,7 @@ const NON_FINITE_LITERALS: Partial<Record<DatabaseType, Readonly<Record<NonFinit
   oracle: { NaN: "BINARY_DOUBLE_NAN", Infinity: "BINARY_DOUBLE_INFINITY", "-Infinity": "-BINARY_DOUBLE_INFINITY" },
   databend: { NaN: "'NaN'::FLOAT", Infinity: "'inf'::DOUBLE", "-Infinity": "'-inf'::FLOAT" },
   snowflake: { NaN: "'NaN'::FLOAT", Infinity: "'inf'::FLOAT", "-Infinity": "'-inf'::FLOAT" },
+  clickhouse: { NaN: "nan", Infinity: "inf", "-Infinity": "-inf" },
 };
 
 function nonFiniteLiteral(word: NonFiniteWord, dialect: DatabaseType | undefined): string {
@@ -1102,8 +1104,16 @@ function isFloatColumn(declared: unknown): boolean {
  */
 const EXACT_NUMERIC_TYPE = /^(numeric|decimal|number|decfloat)(\s*\(\s*\d+\s*(,\s*-?\d+\s*)?\))?$/i;
 
+/** ClickHouse's wrappers, which change nothing about whether the column holds numbers. */
+const CLICKHOUSE_WRAPPER = /^\s*(?:Nullable|LowCardinality)\((.*)\)\s*$/;
+
 function isNumericColumn(declared: unknown): boolean {
-  return isFloatColumn(declared) || (typeof declared === "string" && EXACT_NUMERIC_TYPE.test(declared.trim()));
+  if (typeof declared !== "string") return false;
+  let type = declared;
+  for (let match = CLICKHOUSE_WRAPPER.exec(type); match !== null; match = CLICKHOUSE_WRAPPER.exec(type)) {
+    type = match[1];
+  }
+  return isFloatColumn(type) || EXACT_NUMERIC_TYPE.test(type.trim());
 }
 
 /**

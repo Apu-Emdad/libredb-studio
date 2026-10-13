@@ -311,9 +311,13 @@ function clickHouseValue(value: unknown, declared: string, scalar: ScalarLiteral
  * the generic writer, which ClickHouse already reads (a quoted `UInt64` included).
  */
 const clickhouseLiteral: TypedWriter = (value, declared, scalar) => {
-  if (declared === undefined || value === null || typeof value !== "object" || asBytes(value) !== undefined) {
-    return undefined;
-  }
+  if (declared === undefined) return undefined;
+  // A scalar float's NaN or infinity, `Nullable` and `LowCardinality` included: ClickHouse reads
+  // the bare `nan`, `inf` and `-inf` back into a `Float` column (SF-045), where the generic
+  // writer's quoted word is refused and NULL replays as 0 into a non-Nullable column.
+  const word = CLICKHOUSE_FLOAT.test(unwrapClickHouseType(declared).name) ? floatWord(value) : undefined;
+  if (word !== undefined) return CLICKHOUSE_NON_FINITE[word];
+  if (value === null || typeof value !== "object" || asBytes(value) !== undefined) return undefined;
   const name = unwrapClickHouseType(declared).name;
   if (name !== "Array" && name !== "Map" && name !== "Tuple") return undefined;
   return clickHouseValue(value, declared, scalar);
