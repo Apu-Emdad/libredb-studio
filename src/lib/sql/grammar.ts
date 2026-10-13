@@ -268,6 +268,19 @@ export interface SqlGrammar {
    * Absent means none.
    */
   readonly confirmCodeForms?: readonly ConfirmCodeForm[];
+  /**
+   * Keyword sequences that ask only when the code word `when` also appears in the statement's code after them, read
+   * where `confirmForms` is read. For a form harmless in one variant and not in the other, which a word of the
+   * statement tells apart: Snowflake's `CREATE STAGE` keeps files in the account unless it names a `URL`. Absent means
+   * none.
+   */
+  readonly confirmFormsWhen?: readonly ConfirmFormWhen[];
+}
+
+/** A form `SqlGrammar.confirmFormsWhen` looks for: a keyword sequence and the code word that makes it ask. */
+export interface ConfirmFormWhen {
+  readonly form: readonly string[];
+  readonly when: string;
 }
 
 /** A form `SqlGrammar.confirmCodeForms` looks for: a word sequence, or an identifier prefix. */
@@ -853,6 +866,21 @@ const SNOWFLAKE_GRAMMAR: SqlGrammar = {
     ["CREATE", "FAILOVER", "GROUP"],
     ["CREATE", "CORTEX", "SEARCH", "SERVICE"],
     ["CREATE", "DYNAMIC", "ICEBERG", "TABLE"],
+    // SF-013: a security integration changes who can sign in; a notification or storage integration and a share open
+    // a path out of the account; an account and a managed (reader) account are billed accounts of their own.
+    ["CREATE", "SECURITY", "INTEGRATION"],
+    ["CREATE", "NOTIFICATION", "INTEGRATION"],
+    ["CREATE", "STORAGE", "INTEGRATION"],
+    ["CREATE", "ACCOUNT"],
+    ["CREATE", "MANAGED", "ACCOUNT"],
+    ["CREATE", "SHARE"],
+  ],
+  // An external stage reads and writes files outside the account; an internal one, with no URL, keeps them inside, so
+  // only a stage that names a URL asks (SF-013). `CREATE OR REPLACE STAGE` already asks above.
+  confirmFormsWhen: [
+    { form: ["CREATE", "STAGE"], when: "URL" },
+    { form: ["CREATE", "TEMPORARY", "STAGE"], when: "URL" },
+    { form: ["CREATE", "TEMP", "STAGE"], when: "URL" },
   ],
   // An anonymous procedure (`WITH p AS PROCEDURE … CALL p()`) and any `SYSTEM$` function, wherever they are written.
   confirmCodeForms: [["AS", "PROCEDURE"], { prefix: "SYSTEM$" }],

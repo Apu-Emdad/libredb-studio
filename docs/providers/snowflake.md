@@ -509,9 +509,11 @@ On top of the shared destructive keywords it asks for these Snowflake forms, at 
 Forms that replace, overwrite, unload or delete: `CREATE OR REPLACE`, `CREATE OR ALTER` (which drops the columns its new definition leaves out), `INSERT OVERWRITE`, `MERGE`, `COPY`, `REMOVE` and `RM`.
 Forms that run text or work the gate cannot read: `EXECUTE IMMEDIATE`, `EXECUTE TASK`, `EXECUTE ALERT`, `EXECUTE NOTEBOOK`, `EXECUTE JOB SERVICE`, `EXECUTE DBT PROJECT` and `CALL`.
 Forms that spend credits on their own, once or on a schedule: `CREATE WAREHOUSE`, `CREATE TASK`, `CREATE ALERT`, `CREATE COMPUTE POOL`, `CREATE SERVICE`, `CREATE DYNAMIC TABLE`, `CREATE TRANSIENT DYNAMIC TABLE`, `CREATE MATERIALIZED VIEW`, `CREATE SECURE MATERIALIZED VIEW`, `CREATE PIPE`, `CREATE DYNAMIC ICEBERG TABLE` and `CREATE CORTEX SEARCH SERVICE`.
-Forms that change who gets in or what leaves the account: `CREATE USER`, `CREATE ROLE`, `CREATE NETWORK POLICY`, `CREATE NETWORK RULE`, `CREATE EXTERNAL ACCESS INTEGRATION`, `CREATE API INTEGRATION`, `CREATE REPLICATION GROUP` and `CREATE FAILOVER GROUP`.
+Forms that change who gets in or what leaves the account: `CREATE USER`, `CREATE ROLE`, `CREATE NETWORK POLICY`, `CREATE NETWORK RULE`, `CREATE EXTERNAL ACCESS INTEGRATION`, `CREATE API INTEGRATION`, `CREATE SECURITY INTEGRATION`, `CREATE NOTIFICATION INTEGRATION`, `CREATE STORAGE INTEGRATION`, `CREATE SHARE`, `CREATE REPLICATION GROUP` and `CREATE FAILOVER GROUP`.
+Forms that create a billed account: `CREATE ACCOUNT` and `CREATE MANAGED ACCOUNT`.
+An external stage, which reads and writes files outside the account, asks when its code names a `URL`: `CREATE STAGE ... URL`, `CREATE TEMPORARY STAGE ... URL` and `CREATE TEMP STAGE ... URL`; an internal stage, with no URL, keeps its files in the account and runs unconfirmed.
 It also asks wherever `AS PROCEDURE` (an anonymous procedure) or an identifier starting `SYSTEM$` appears in a statement's code, a quoted `"SYSTEM$..."` name included when it is called as a function.
-Still unconfirmed: every Snowflake form not named above, among them `CREATE STORAGE INTEGRATION` and `CREATE SHARE`; a statement whose effect hides behind an `IDENTIFIER()` target; and whatever a procedure created earlier does when a statement that does not name it reaches it.
+Still unconfirmed: every Snowflake form not named above, among them `CREATE CATALOG INTEGRATION`, `CREATE EXTERNAL VOLUME` and `CREATE LISTING`; a statement whose effect hides behind an `IDENTIFIER()` target; and whatever a procedure created earlier does when a statement that does not name it reaches it.
 
 ## 10. Security
 

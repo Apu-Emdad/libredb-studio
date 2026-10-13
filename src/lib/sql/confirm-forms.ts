@@ -8,7 +8,7 @@
  * strategy cannot drift apart.
  */
 
-import type { ConfirmCodeForm, SqlGrammar } from "@/lib/sql/grammar";
+import type { ConfirmCodeForm, ConfirmFormWhen, SqlGrammar } from "@/lib/sql/grammar";
 import { readSqlSpan } from "@/lib/sql/spans";
 import { findCodeWord, readSqlWord } from "@/lib/sql/words";
 
@@ -100,4 +100,32 @@ function codeFormInText(text: string, form: ConfirmCodeForm, grammar: SqlGrammar
 /** Whether any of `grammar`'s `confirmCodeForms` appears in the code of `text`; a grammar without them has none. */
 export function hasConfirmCodeForm(text: string, grammar: SqlGrammar): boolean {
   return (grammar.confirmCodeForms ?? []).some((form) => codeFormInText(text, form, grammar));
+}
+
+/**
+ * Whether a `confirmFormsWhen` form operates the statement whose operative keyword `keyword` ends at `end`: its words
+ * follow there and its `when` word appears in the code after them.
+ */
+export function conditionalFormOperates(
+  text: string,
+  keyword: string,
+  end: number,
+  form: ConfirmFormWhen,
+  grammar: SqlGrammar,
+): boolean {
+  return (
+    form.form[0].toUpperCase() === keyword &&
+    wordsFollow(text, end, form.form.slice(1), grammar) &&
+    findCodeWord(text, form.when, end, grammar) !== null
+  );
+}
+
+/** Whether a `confirmFormsWhen` form appears anywhere in the code of `text` with its `when` word after it. */
+export function conditionalFormInCode(text: string, form: ConfirmFormWhen, grammar: SqlGrammar): boolean {
+  let found = findCodeWord(text, form.form[0], 0, grammar);
+  while (found !== null) {
+    if (conditionalFormOperates(text, form.form[0].toUpperCase(), found.end, form, grammar)) return true;
+    found = findCodeWord(text, form.form[0], found.end, grammar);
+  }
+  return false;
 }

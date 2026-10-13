@@ -22,7 +22,13 @@ import {
   vocabularyTypedConfirmation,
 } from "@/lib/db/destructive-commands";
 import type { TypedConfirmationAsk } from "@/lib/db/types";
-import { hasConfirmCodeForm, sequenceInCode, wordsFollow } from "@/lib/sql/confirm-forms";
+import {
+  conditionalFormInCode,
+  conditionalFormOperates,
+  hasConfirmCodeForm,
+  sequenceInCode,
+  wordsFollow,
+} from "@/lib/sql/confirm-forms";
 import { readsSqlText, resolveSqlGrammar, type SqlGrammar } from "@/lib/sql/grammar";
 import { readOperativeKeyword } from "@/lib/sql/operative-keyword";
 import { hasUnterminatedSpan } from "@/lib/sql/spans";
@@ -624,6 +630,7 @@ const CONTROL_FLOW_KEYWORDS = new Set([
  */
 function blockWrites(text: string, grammar: SqlGrammar): boolean {
   if ((grammar.confirmForms ?? []).some((form) => sequenceInCode(text, form, grammar))) return true;
+  if ((grammar.confirmFormsWhen ?? []).some((form) => conditionalFormInCode(text, form, grammar))) return true;
 
   const execute = findCodeWord(text, "EXECUTE", 0, grammar);
   if (execute !== null && findCodeWord(text, "IMMEDIATE", execute.end, grammar) !== null) return true;
@@ -653,6 +660,14 @@ function writesUnderGrammar(text: string, grammar: SqlGrammar): boolean {
     reading !== null &&
     (grammar.confirmForms ?? []).some(
       (form) => form[0].toUpperCase() === reading.keyword && wordsFollow(text, reading.end, form.slice(1), grammar),
+    )
+  ) {
+    return true;
+  }
+  if (
+    reading !== null &&
+    (grammar.confirmFormsWhen ?? []).some((form) =>
+      conditionalFormOperates(text, reading.keyword, reading.end, form, grammar),
     )
   ) {
     return true;

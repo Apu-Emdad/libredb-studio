@@ -2297,6 +2297,17 @@ describe("Snowflake's confirmation forms", () => {
     "CREATE FAILOVER GROUP g OBJECT_TYPES = DATABASES ALLOWED_DATABASES = d ALLOWED_ACCOUNTS = o.a",
     "CREATE CORTEX SEARCH SERVICE s ON c WAREHOUSE = w TARGET_LAG = '1 hour' AS SELECT c FROM t",
     "CREATE DYNAMIC ICEBERG TABLE d TARGET_LAG = '1 minute' WAREHOUSE = w AS SELECT 1",
+    // SF-013: forms that change who can sign in, move data out of the account or create a billed account.
+    "CREATE SECURITY INTEGRATION D_GATE_SI TYPE = D_INVALID_NOPE",
+    "CREATE NOTIFICATION INTEGRATION n TYPE = QUEUE NOTIFICATION_PROVIDER = AWS_SNS ENABLED = TRUE",
+    "CREATE STORAGE INTEGRATION s TYPE = EXTERNAL_STAGE STORAGE_PROVIDER = 'S3' ENABLED = TRUE",
+    "CREATE ACCOUNT D_GATE_ACCT ADMIN_NAME = a ADMIN_PASSWORD = 'p' EMAIL = 'a@example.com' EDITION = STANDARD",
+    "CREATE MANAGED ACCOUNT r ADMIN_NAME = a, ADMIN_PASSWORD = 'p', TYPE = READER",
+    "CREATE SHARE sh",
+    "CREATE STAGE E_NO_STAGE_X URL = 's3://bucket/path/'",
+    "CREATE STAGE IF NOT EXISTS s STORAGE_INTEGRATION = i URL = 'azure://a.blob.core.windows.net/c'",
+    "CREATE TEMPORARY STAGE s URL = 'gcs://bucket/'",
+    "CREATE TEMP STAGE s /* external */ URL='s3://bucket/'",
   ];
 
   test.each(FORMS)("asks for %s, in any case and behind any comment", (sql) => {
@@ -2323,6 +2334,8 @@ describe("Snowflake's confirmation forms", () => {
     expect(isDangerousQuery("BEGIN CREATE OR ALTER TABLE t (a INT); END", "snowflake")).toBe(true);
     expect(isDangerousQuery("SELECT 1; EXECUTE ALERT a", "snowflake")).toBe(true);
     expect(isDangerousQuery("BEGIN CREATE API INTEGRATION i ENABLED = TRUE; END", "snowflake")).toBe(true);
+    expect(isDangerousQuery("BEGIN CREATE STAGE s URL = 's3://b/'; END", "snowflake")).toBe(true);
+    expect(isDangerousQuery("SELECT 1; CREATE SHARE sh", "snowflake")).toBe(true);
     expect(
       isDangerousQuery(
         "WITH p AS PROCEDURE () RETURNS INT LANGUAGE SQL AS $$ BEGIN RETURN 1; END $$ CALL p()",
@@ -2358,6 +2371,12 @@ describe("Snowflake's confirmation forms", () => {
     "// MERGE INTO t\nSELECT 1",
     "SELECT my_system$x FROM t",
     "BEGIN SELECT 1; END",
+    // An internal stage keeps its files in the account, so only a stage with a URL asks (SF-013).
+    "CREATE STAGE s",
+    "CREATE TEMPORARY STAGE s FILE_FORMAT = (TYPE = CSV) COMMENT = 'URL = s3://not/a/url'",
+    "CREATE STAGE s -- URL = 's3://b/'",
+    "BEGIN CREATE STAGE s; END",
+    "SELECT url FROM t",
   ])("does not ask for %s", (sql) => {
     expect(isDangerousQuery(sql, "snowflake")).toBe(false);
   });

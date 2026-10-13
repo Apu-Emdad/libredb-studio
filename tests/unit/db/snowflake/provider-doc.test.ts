@@ -375,6 +375,10 @@ describe("docs/providers/snowflake.md", () => {
     const unconfirmed = /Still unconfirmed:.*?\.(?=\s|$)/.exec(gate)?.[0] ?? "";
     expect(unconfirmed).not.toBe("");
     for (const form of forms) expect(unconfirmed).not.toContain(`\`${form.join(" ")}\``);
+    // A form that asks only with a word after it is named with that word (SF-013).
+    const whenForms = grammar.confirmFormsWhen ?? [];
+    expect(whenForms.length).toBeGreaterThan(0);
+    for (const { form, when } of whenForms) expect(gate).toContain(`\`${form.join(" ")} ... ${when}\``);
     expect(gate).toContain("a browser confirmation, not a boundary");
     expect(gate).toContain("`IDENTIFIER()`");
   });
