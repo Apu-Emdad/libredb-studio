@@ -358,10 +358,17 @@ describe("docs/providers/snowflake.md", () => {
     expect(FLAT_DOC).toContain(SNOWFLAKE_ROLE_CHECK_SQL);
   });
 
-  test("says which formatter language Format uses, as the grammar declares", () => {
+  test("says which formatter language Format uses and which words completion adds, as the grammar declares", () => {
     const editor = flat(sectionOf(DOC, "### 8.7 Editor"));
     expect(resolveSqlGrammar("snowflake").formatterLanguage).toBe("snowflake");
     expect(editor).toContain("sql-formatter's Snowflake language (the grammar's `formatterLanguage`)");
+    const words = resolveSqlGrammar("snowflake").completionWords;
+    expect(editor).toContain("(the grammar's `completionWords`");
+    for (const word of ["QUALIFY", "ARRAY_AGG", "PARSE_JSON", "FLATTEN", "CURRENT_ROLE", "CURRENT_WAREHOUSE"]) {
+      expect([...(words?.keywords ?? []), ...(words?.functions ?? [])]).toContain(word);
+      expect(editor).toContain(`\`${word}\``);
+    }
+    expect(words?.functions.some((name) => name.startsWith("SYSTEM$"))).toBe(false);
   });
 
   test("names every confirmation form the grammar declares", () => {

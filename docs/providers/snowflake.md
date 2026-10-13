@@ -505,6 +505,7 @@ The absence is `snowflake`'s entry in `EXPECTED_EDIT_ABSTAINERS` (`tests/helpers
 ### 8.7 Editor
 
 Format uses sql-formatter's Snowflake language (the grammar's `formatterLanguage`), so `QUALIFY` stays a clause on its own line; text that language cannot read, such as a `@stage` reference, is left as written.
+Completion offers Snowflake's own clauses and functions (the grammar's `completionWords`, among them `QUALIFY`, `ARRAY_AGG`, `PARSE_JSON`, `FLATTEN`, `CURRENT_ROLE` and `CURRENT_WAREHOUSE`) beside the shared SQL lists, a function inserted as a call; no `SYSTEM$` function is offered.
 
 ## 9. The confirmation gate
 

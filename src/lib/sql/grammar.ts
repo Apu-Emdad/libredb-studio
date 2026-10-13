@@ -294,6 +294,11 @@ export interface SqlGrammar {
    * every dialect formatted with before a dialect declared one (SF-041).
    */
   readonly formatterLanguage?: "snowflake";
+  /**
+   * Keywords and functions the editor's completion offers on this dialect beside the shared lists (SF-042). A function
+   * is inserted as a call. Absent means the shared lists alone.
+   */
+  readonly completionWords?: { readonly keywords: readonly string[]; readonly functions: readonly string[] };
 }
 
 /** A form `SqlGrammar.confirmFormsWhen` looks for: a keyword sequence and the code word that makes it ask. */
@@ -906,6 +911,76 @@ const SNOWFLAKE_GRAMMAR: SqlGrammar = {
   // (SF-041); sql-formatter's Snowflake language keeps the clause and refuses the stage reference, which leaves the
   // text as written.
   formatterLanguage: "snowflake",
+  // Snowflake's own clauses and the functions a session reaches for first (SF-042), from Snowflake's SQL reference.
+  completionWords: {
+    keywords: [
+      "QUALIFY",
+      "ILIKE",
+      "RLIKE",
+      "LATERAL",
+      "PIVOT",
+      "UNPIVOT",
+      "MATCH_RECOGNIZE",
+      "SAMPLE",
+      "TABLESAMPLE",
+      "EXCLUDE",
+      "MINUS",
+      "TOP",
+      "ASOF JOIN",
+      "CONNECT BY",
+      "START WITH",
+      "CHANGES",
+    ],
+    functions: [
+      "ARRAY_AGG",
+      "ARRAY_CONSTRUCT",
+      "ARRAY_CONTAINS",
+      "ARRAY_SIZE",
+      "OBJECT_CONSTRUCT",
+      "OBJECT_KEYS",
+      "PARSE_JSON",
+      "TRY_PARSE_JSON",
+      "TO_VARIANT",
+      "TO_JSON",
+      "FLATTEN",
+      "GET_PATH",
+      "TYPEOF",
+      "IFF",
+      "NVL",
+      "NVL2",
+      "ZEROIFNULL",
+      "DIV0",
+      "LISTAGG",
+      "TRY_CAST",
+      "TRY_TO_NUMBER",
+      "TRY_TO_DATE",
+      "TO_TIMESTAMP",
+      "DATEADD",
+      "DATEDIFF",
+      "CONVERT_TIMEZONE",
+      "SPLIT_PART",
+      "REGEXP_SUBSTR",
+      "REGEXP_REPLACE",
+      "APPROX_COUNT_DISTINCT",
+      "MEDIAN",
+      "CURRENT_ROLE",
+      "CURRENT_WAREHOUSE",
+      "CURRENT_DATABASE",
+      "CURRENT_SCHEMA",
+      "CURRENT_USER",
+      "CURRENT_ACCOUNT",
+      "CURRENT_REGION",
+      "CURRENT_DATE",
+      "LAST_QUERY_ID",
+      "RESULT_SCAN",
+      "GENERATOR",
+      "SEQ4",
+      "UNIFORM",
+      "RANDOM",
+      "HASH",
+      "SHA2",
+    ],
+  },
   // Each statement runs in its own session (see `snowflake/statements.ts`), so `ALTER SESSION SET | UNSET` cannot
   // outlive it, and the result already says the setting does not carry over (SF-030).
   confirmExemptForms: [["ALTER", "SESSION"]],
