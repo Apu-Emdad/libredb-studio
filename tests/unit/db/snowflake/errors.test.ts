@@ -211,6 +211,15 @@ describe("failureError: every row of the error table", () => {
       sentence:
         "Snowflake refused the TLS certificate of this request (522). Studio sends no client certificate, so a proxy or gateway between Studio and Snowflake may be presenting one.",
     },
+    ...(["000606", "391920"] as const).map((code) => ({
+      name: `a warehouse named on the connection that cannot be used, ${code} (SF-016)`,
+      failure: failure({ status: 422, code, message: "No active warehouse selected" }),
+      context: { warehouse: "D_NOWH" },
+      category: "query" as const,
+      house: QueryError,
+      sentence:
+        "Snowflake could not use warehouse D_NOWH for this statement: it does not exist, role STUDIO_RO has no USAGE on it, or its name differs in case. Check Warehouse in the connection settings. Browsing works without a warehouse; queries do not.",
+    })),
     {
       name: "headers too large, 431, as the gateway answers a 100,000-character token with a text/plain body",
       failure: failure({ status: 431 }),

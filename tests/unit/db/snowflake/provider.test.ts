@@ -751,6 +751,25 @@ describe("query()", () => {
     expect(entry.transports.requests).toHaveLength(0);
   });
 
+  test("a no-warehouse refusal names the Warehouse the connection set (SF-016)", async () => {
+    const entry = await connected({ warehouse: " d_nowh " }, warehouses());
+    entry.transports.answer(
+      SUBMIT,
+      failureAnswer(422, "000606", "No active warehouse selected in the current session."),
+    );
+    const error = await caught(entry.provider.query("SELECT 1"));
+    expect(error).toBeInstanceOf(QueryError);
+    expect((error as Error).message).toBe(SNOWFLAKE_ERROR_SENTENCES.warehouseUnusable("d_nowh", "STUDIO_RO"));
+  });
+
+  test("with Warehouse empty, the refusal still asks for one", async () => {
+    const entry = await connected({ warehouse: "  " }, warehouses());
+    entry.transports.answer(SUBMIT, failureAnswer(422, "391920", "Unable to run the command."));
+    expect(((await caught(entry.provider.query("SELECT 1"))) as Error).message).toBe(
+      SNOWFLAKE_ERROR_SENTENCES.noWarehouse,
+    );
+  });
+
   test("a result maps to the grid's shape, the statement sent alone", async () => {
     const entry = await connected();
     entry.transports.answer(

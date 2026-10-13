@@ -194,6 +194,7 @@ const QUOTED: Readonly<Record<string, { readonly keys: readonly string[]; readon
       SNOWFLAKE_ERROR_SENTENCES.roleMismatch("<r>", "<role>"),
       SNOWFLAKE_ERROR_SENTENCES.tokenUserMismatch("<u>", "<user>"),
       SNOWFLAKE_ERROR_SENTENCES.noWarehouse,
+      SNOWFLAKE_ERROR_SENTENCES.warehouseUnusable("<wh>", "<role>"),
       SNOWFLAKE_ERROR_SENTENCES.objectMissing("<role>", "'<role>'", ""),
       SNOWFLAKE_ERROR_SENTENCES.privileges("<role>", ""),
       SNOWFLAKE_ERROR_SENTENCES.forbidden,

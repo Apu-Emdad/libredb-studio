@@ -410,6 +410,7 @@ export class SnowflakeProvider extends SQLBaseProvider {
           host: endpoint.host,
           user,
           role,
+          ...(isBlank(warehouse) ? {} : { warehouse: (warehouse as string).trim() }),
           authMethod: settings.method,
           accountClaim: claim.account,
           userClaim: claim.user,

@@ -71,6 +71,8 @@ export interface SnowflakeFailureContext {
   readonly host: string;
   readonly user: string;
   readonly role: string;
+  /** The Warehouse field, absent when it is empty, so the no-warehouse sentence can name the one that failed. */
+  readonly warehouse?: string;
   readonly authMethod: "keypair" | "pat";
   readonly accountClaim: string;
   readonly userClaim: string;
@@ -146,6 +148,8 @@ export const SNOWFLAKE_ERROR_SENTENCES = Object.freeze({
     `Snowflake signed this access token in as user ${actual}, not ${user}. A token signs in only as the user it belongs to: enter ${actual} in User, or paste a token of user ${user}.`,
   noWarehouse:
     "No warehouse is selected for this connection. Enter one in the connection settings, or ask an administrator to set DEFAULT_WAREHOUSE on the user. Browsing works without one; queries do not.",
+  warehouseUnusable: (warehouse: string, role: string) =>
+    `Snowflake could not use warehouse ${warehouse} for this statement: it does not exist, role ${role} has no USAGE on it, or its name differs in case. Check Warehouse in the connection settings. Browsing works without a warehouse; queries do not.`,
   objectMissing: (role: string, roleLiteral: string, text: string) =>
     withText(
       `Snowflake says this object does not exist or role ${role} may not see it. Check the name, the database and schema, and the role; CALL EXPLAIN_PRIVILEGES(statement => '<statement>', missing_only => true) lists what is missing, and an administrator adds for_role => ${roleLiteral}.`,
@@ -350,7 +354,14 @@ export function failureError(failure: SnowflakeFailure, context: SnowflakeFailur
       : new SnowflakeError("query", sentences.resultGone);
   }
   if (code === "390142") return new SnowflakeError("defect", sentences.invalidPayload);
-  if (code !== null && NO_WAREHOUSE_CODES.has(code)) return new SnowflakeError("query", sentences.noWarehouse);
+  if (code !== null && NO_WAREHOUSE_CODES.has(code)) {
+    // With Warehouse set the statement did name one, so the sentence names it rather than asking for one.
+    const { warehouse } = context;
+    return new SnowflakeError(
+      "query",
+      warehouse === undefined ? sentences.noWarehouse : sentences.warehouseUnusable(warehouse, context.role),
+    );
+  }
   if (code === "002003") {
     return new SnowflakeError(
       "query",
