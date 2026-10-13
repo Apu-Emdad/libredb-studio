@@ -2072,15 +2072,15 @@ Found 2026-10-03 while packaging the Db2 provider (#786).
 
 **Done when:** a clean Windows 11 VM without the redistributable is measured on every Windows channel, each channel either installs the runtime or says what to install before the first Db2 connection, and a missing runtime reaches the user as a sentence naming it rather than a load error.
 
-### D150. The Db2 schema diff mixes schemas and writes views as tables, and nothing can turn it off
+### D150. The schema diff migration quotes a cross-schema foreign-key reference as one identifier
 
-Nothing in the provider capabilities disables schema diff or migration DDL for an engine, so a Db2 connection offers both with the shared engine's limits, measured on the Db2 provider branch.
-The diff keys objects by name only, so `APP.T` and `REPORTING.T` collide; it writes a view or a materialized query table as `CREATE TABLE`; and it quotes a cross-schema reference `SCHEMA.TABLE` as one identifier.
-The nearest lever is the migration generator's `NO_TABLE_DDL` type set in `src/lib/schema-diff/migration-generator.ts`, which declines the whole diff.
+The schema diff now keys objects by their path below the compared roots, so `APP.T` and `REPORTING.T` are two objects, names every table by its full path, and names a view, a materialized view or a Db2 materialized query table in a comment instead of writing table DDL for it (SF-047, pinned in `tests/unit/schema-diff/migration-generator.test.ts` over a two-schema Db2 diff and over PostgreSQL and MySQL).
+What remains is the foreign key: `ForeignKeyDiff.targetReferencedTable` is the reading's own spelling, which a cross-schema reference carries as `SCHEMA.TABLE`, and `generateCreateTable` and `generateAlterTable` in `src/lib/schema-diff/migration-generator.ts` quote it whole, as one identifier `"SCHEMA.TABLE"`.
+Splitting the text on the dot is not the fix, because a table name may contain a dot; the reference needs its path from the reading.
 
-Found 2026-10-03 while building the Db2 provider (#786); the schema-diff engine was left untouched.
+Found 2026-10-03 while building the Db2 provider (#786); narrowed to the foreign key by SF-047 on 2026-10-14.
 
-**Done when:** either the diff keys objects by schema and name, keeps a view or MQT a view, and quotes each part of a qualified name on its own, each pinned by a test over a two-schema Db2 fixture, or a declared capability turns schema diff and migration DDL off for an engine that cannot be served correctly, with the Db2 provider declaring it and the UI saying why.
+**Done when:** a foreign key reaches the migration with its referenced object's path and the generator quotes each segment on its own, pinned by a test over a cross-schema reference on Db2 and PostgreSQL.
 
 ### D151. MongoDB and Couchbase read their fields from a sample and do not mark them sampled
 

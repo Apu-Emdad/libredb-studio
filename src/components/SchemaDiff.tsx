@@ -91,6 +91,11 @@ function readTargetKey(conn: DatabaseConnection): string {
   return connectionResolutionKey(payload.connection);
 }
 
+/** A diffed object's identity in the list: two schemas' `t1` are two rows (SF-047). */
+function diffKey(table: TableDiff): string {
+  return table.key ?? table.tableName;
+}
+
 /** The one container of a level the session says is its own, or undefined when none or several say so. */
 function sessionDefaultOf(level: readonly Container[]): readonly string[] | undefined {
   const defaults = level.filter((container) => container.isSessionDefault === true);
@@ -1222,19 +1227,19 @@ export function SchemaDiff({ schema, connection }: SchemaDiffProps) {
               </div>
               {diff.tables.map((table) => (
                 <button
-                  key={table.tableName}
-                  onClick={() => setSelectedTable(table.tableName)}
+                  key={diffKey(table)}
+                  onClick={() => setSelectedTable(diffKey(table))}
                   className={cn(
                     "w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-fill transition-colors",
-                    selectedTable === table.tableName && "bg-fill-strong",
+                    selectedTable === diffKey(table) && "bg-fill-strong",
                   )}
                 >
-                  {selectedTable === table.tableName ? (
+                  {selectedTable === diffKey(table) ? (
                     <ChevronDown strokeWidth={1.5} className="w-3 h-3 text-fg-muted" />
                   ) : (
                     <ChevronRight strokeWidth={1.5} className="w-3 h-3 text-fg-muted" />
                   )}
-                  <span className="text-fg-secondary">{table.tableName}</span>
+                  <span className="text-fg-secondary">{table.label ?? table.tableName}</span>
                   <span className="ml-auto">{getActionBadge(table.action)}</span>
                 </button>
               ))}
@@ -1243,7 +1248,7 @@ export function SchemaDiff({ schema, connection }: SchemaDiffProps) {
             {/* Table Detail */}
             <div className="flex-1 overflow-auto p-4">
               {selectedTable ? (
-                <TableDiffDetail diff={diff.tables.find((t) => t.tableName === selectedTable)!} />
+                <TableDiffDetail diff={diff.tables.find((t) => diffKey(t) === selectedTable)!} />
               ) : (
                 <div className="h-full flex items-center justify-center text-fg-subtle text-xs">
                   {"Select a table to view diff details"}
@@ -1271,7 +1276,7 @@ function TableDiffDetail({ diff }: { diff: TableDiff }) {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Database strokeWidth={1.5} className="w-3.5 h-3.5 text-fg-tertiary" />
-        <h3 className="text-xs font-medium text-fg">{diff.tableName}</h3>
+        <h3 className="text-xs font-medium text-fg">{diff.label ?? diff.tableName}</h3>
         <Badge
           className={cn(
             "text-xs",

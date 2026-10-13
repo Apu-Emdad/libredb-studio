@@ -2414,6 +2414,43 @@ describe("SchemaDiff", () => {
     });
   });
 
+  describe("two objects that share a name in two schemas (SF-047)", () => {
+    test("are two rows, each labelled with its schema, selected one at a time", () => {
+      const twin = (schema: string, column: string) => ({
+        action: "modified",
+        tableName: "t1",
+        key: `${schema}\u001ft1`,
+        label: `${schema}.t1`,
+        path: [schema, "t1"],
+        kind: "table",
+        columns: [
+          { action: "added", columnName: column, targetType: "int", changes: [`Added column "${column}" (int)`] },
+        ],
+        indexes: [],
+        foreignKeys: [],
+      });
+      mockDiffSchemas.mockImplementation(() => ({
+        tables: [twin("b2a", "only_in_a"), twin("b2b", "only_in_b")],
+        summary: { added: 0, removed: 0, modified: 2 },
+        hasChanges: true,
+      }));
+      const { container, getByText } = renderDiff();
+      changeTarget("snap-1");
+
+      fireEvent.click(getByText("b2b.t1"));
+      const rows = Array.from(container.querySelectorAll("button")).filter((b) =>
+        /b2[ab]\.t1/.test(b.textContent ?? ""),
+      );
+      expect(rows.map((row) => row.textContent?.includes("b2b") && row.className.includes("bg-fill-strong"))).toEqual([
+        false,
+        true,
+      ]);
+      expect(container.textContent).toContain("only_in_b");
+      expect(container.textContent).not.toContain("only_in_a");
+      mockDiffSchemas.mockImplementation(() => structuredClone(mockDiffWithChanges));
+    });
+  });
+
   // ═══════════════════════════════════════════════════════════════════════════
   // No Changes State
   // ═══════════════════════════════════════════════════════════════════════════

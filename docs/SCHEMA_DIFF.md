@@ -36,8 +36,18 @@ ClickHouse index metadata to distinguish and recreate its index kinds, so those 
 also produce comments. Existing Cassandra and SQLite-family limitations remain explicit.
 Databend gets no transaction wrapper, because a DDL statement commits the open transaction, and a column modification is written as a comment: Databend has `ALTER TABLE ... MODIFY COLUMN`, but the MySQL spelling this generator writes fails `NOT NULL` on an empty table and silently drops an existing default it does not restate.
 
+Objects are compared by their path below the two readings' roots: the container prefix every object of a
+reading shares, with both sides dropping the same, smaller number of leading segments. So two schemas'
+`t1` are two objects, and two connections rooted in different databases or schemas compare table by
+table. A snapshot taken before objects carried paths is compared by name, as it always was. Every
+table is named by its full path (`"b2a"."t1"`, `` `app`.`t1` ``), an added table under the source's
+root, and an index dropped without `ON <table>` is named in its table's container. A view, a
+materialized view or any other object that is not a table is named in a `-- Skipped` comment rather
+than altered, created or dropped (SF-047).
+
 Review each migration against its target: a diff does not carry original foreign-key constraint
-names, schema qualifiers, cross-table dependency order, or a general type-conversion strategy.
+names, a foreign key's referenced table as a path (it is written as the reading spelled it, D150),
+cross-table dependency order, or a general type-conversion strategy.
 Default expressions remain SQL expressions supplied by the diff; they are not parameter values.
 
 ## Live regression probe
