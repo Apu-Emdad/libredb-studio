@@ -25,6 +25,7 @@ import {
 } from "@/lib/db-ui-config";
 import type { ImportedContext, ImportedField, ImportedSsl } from "@/lib/connection-import";
 import { databendNotAppliedNotice, parseConnectionString } from "@/lib/connection-string-parser";
+import { PASTE_FORMATS_TEXT } from "@/lib/connection-paste-formats";
 import { parseHostUri, tlsModeAfterScheme, type HostUriResult } from "@/lib/connection-host-uri";
 import { newLocalId } from "@/lib/ids";
 import { READ_ONLY_ENFORCED } from "@/lib/db/compatibility";
@@ -1472,16 +1473,8 @@ export function useConnectionForm({ isOpen, onConnect, editConnection, onTestCon
     if (!parsed) {
       setTestResult({
         tone: "error",
-        // One scheme per branch in connection-string-parser.ts, and nothing else.
-        // Elasticsearch, OpenSearch and Trino are absent on purpose: all three are
-        // addressed by host and port like Druid, and `http(s)://` already resolves to
-        // ClickHouse there, so listing them would promise a paste this form cannot
-        // honour. Trino's own `jdbc:trino://…` is a JDBC URL the parser does not read.
-        // DuckDB, SQLite and the embedded store are absent for a different reason:
-        // they are FILE-based, `showConnectionStringToggle` is false for all three, so
-        // this control is never rendered for them and no scheme is being withheld.
-        message:
-          "Could not parse connection string. Supported formats: postgres://, mysql://, mongodb://, couchbase://, clickhouse://, libsql://, http(s)://, redis://, oracle://, mssql://, db2://, databend://",
+        // The list the box's hint shows, from one module, so the two cannot drift (SF-024).
+        message: `Could not parse connection string. Supported formats: ${PASTE_FORMATS_TEXT}`,
       });
       return;
     }

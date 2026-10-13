@@ -1659,6 +1659,22 @@ describe("parseConnectionString: Snowflake URLs, decomposed into fields and neve
     expect(parseConnectionString("myorg-myacct")).toBeNull();
   });
 
+  test("the scheme is read without regard to case, as the parameter names are (SF-024)", () => {
+    expect(parseConnectionString("JDBC:SNOWFLAKE://myorg-myacct.snowflakecomputing.com/?USER=x&ROLE=r")).toEqual({
+      type: "snowflake",
+      host: "myorg-myacct.snowflakecomputing.com",
+      user: "x",
+      role: "r",
+    });
+    expect(parseConnectionString("Snowflake://u@myorg-myacct/D")).toEqual({
+      type: "snowflake",
+      host: "myorg-myacct.snowflakecomputing.com",
+      user: "u",
+      database: "D",
+    });
+    expect(detectConnectionStringType("JDBC:Snowflake://myorg-myacct.snowflakecomputing.com/")).toBe("snowflake");
+  });
+
   test("a Snowsight URL reads the account from its path", () => {
     expect(parseConnectionString("https://app.snowflake.com/myorg/myacct/x")).toEqual({
       type: "snowflake",

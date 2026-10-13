@@ -291,6 +291,8 @@ mock.module("@/hooks/use-connection-form", () => ({
   useConnectionForm: mock(() => getDefaultForm()),
 }));
 
+import { PASTE_FORMATS_TEXT } from "@/lib/connection-paste-formats";
+
 // The account module is pure and not mocked: the Snowflake entry's derived-host hint is the real one.
 import { snowflakeHostHint } from "@/lib/db/providers/sql/snowflake/account-host";
 
@@ -2693,11 +2695,8 @@ describe("ConnectionModal: the Snowflake fields, the account-only host row and t
     const paste = container.querySelector('input[placeholder^="postgres://"]') as HTMLInputElement;
     expect(paste.getAttribute("autocomplete")).toBe("off");
     expect(paste.getAttribute("spellcheck")).toBe("false");
-    expect(
-      getByText(
-        "Supports: postgres://, mysql://, mongodb://, redis://, oracle://, mssql://, db2://, databend://, jdbc:snowflake://, snowflake://, a Snowflake account URL",
-      ),
-    ).toBeDefined();
+    expect(getByText(`Supports: ${PASTE_FORMATS_TEXT}`)).toBeDefined();
+    expect(PASTE_FORMATS_TEXT).toContain("jdbc:snowflake://, snowflake://, a Snowflake account URL or host");
   });
 
   describe("a refusal with a statement that fixes it", () => {

@@ -966,6 +966,12 @@ export function detectConnectionStringType(input: string): DatabaseType | null {
 const SNOWFLAKE_SCHEMES = ["jdbc:snowflake://", "snowflake://"] as const;
 const SNOWSIGHT_HOST = "app.snowflake.com";
 
+/** The Snowflake scheme `text` starts with, in any case (`JDBC:SNOWFLAKE://` too, SF-024), or undefined. */
+function snowflakeScheme(text: string): (typeof SNOWFLAKE_SCHEMES)[number] | undefined {
+  const lower = text.toLowerCase();
+  return SNOWFLAKE_SCHEMES.find((scheme) => lower.startsWith(scheme));
+}
+
 /** The host of an `https://` text, lower-cased, or undefined when it is not a URL. */
 function httpsHost(text: string): string | undefined {
   if (!text.toLowerCase().startsWith("https://")) return undefined;
@@ -982,7 +988,7 @@ function httpsHost(text: string): string | undefined {
  * any word, so it is typed in Account instead.
  */
 function isSnowflakePaste(text: string): boolean {
-  if (SNOWFLAKE_SCHEMES.some((scheme) => text.startsWith(scheme))) return true;
+  if (snowflakeScheme(text) !== undefined) return true;
   const host = httpsHost(text);
   if (host !== undefined) return host === SNOWSIGHT_HOST || isSnowflakeHost(host);
   return !/[\s/:?#@]/.test(text) && isSnowflakeHost(text);
@@ -1061,7 +1067,7 @@ function splitSnowflakePaste(text: string): {
   segments: string[];
   query: string;
 } {
-  const scheme = SNOWFLAKE_SCHEMES.find((prefix) => text.startsWith(prefix));
+  const scheme = snowflakeScheme(text);
   if (scheme === undefined && !text.toLowerCase().startsWith("https://")) {
     return { account: text, hasPassword: false, segments: [], query: "" };
   }

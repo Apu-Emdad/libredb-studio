@@ -50,6 +50,7 @@ import { CONNECTION_FORM_DEFAULTS, useConnectionForm } from "@/hooks/use-connect
 import { useIsMobile } from "@/hooks/use-mobile";
 import { WireCompatibilityHint } from "@/components/WireCompatibilityHint";
 import { ConnectionImportPanel } from "@/components/ConnectionImportPanel";
+import { PASTE_FORMATS_TEXT } from "@/lib/connection-paste-formats";
 
 /**
  * What each SSL mode actually does, in the panel where it is chosen.
@@ -686,9 +687,8 @@ export function ConnectionModal({
                     Parse
                   </Button>
                 </div>
-                <p className="text-xs text-fg-muted">
-                  Supports: postgres://, mysql://, mongodb://, redis://, oracle://, mssql://, db2://, databend://,
-                  jdbc:snowflake://, snowflake://, a Snowflake account URL
+                <p data-testid="paste-formats" className="text-xs text-fg-muted">
+                  Supports: {PASTE_FORMATS_TEXT}
                 </p>
               </div>
             </motion.div>

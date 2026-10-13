@@ -481,3 +481,22 @@ describe("the Private key box draws no key once one is entered (SF-014)", () => 
     expect(onConnect.mock.calls[0][0]).toMatchObject({ privateKey: KEY, privateKeyPassphrase: "P-SENTINEL" });
   });
 });
+
+describe("the paste box's hint and its refusal name the same formats (SF-024)", () => {
+  test("an unparsed text is refused with the list the hint shows, the Snowflake forms included", () => {
+    render(<ConnectionModal isOpen onClose={() => {}} onConnect={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Paste URL" }));
+    const hint = screen.getByTestId("paste-formats").textContent ?? "";
+    expect(hint.startsWith("Supports: ")).toBe(true);
+    const formats = hint.slice("Supports: ".length);
+    for (const form of ["jdbc:snowflake://", "snowflake://", "a Snowflake account URL", "couchbase://", "http(s)://"]) {
+      expect(formats).toContain(form);
+    }
+    const box = document.querySelector('input[placeholder^="postgres://"]') as HTMLInputElement;
+    fireEvent.change(box, { target: { value: "zz-libredbtest-nonexistent123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Parse" }));
+    expect(screen.getByTestId("connection-test-result").textContent).toContain(
+      `Could not parse connection string. Supported formats: ${formats}`,
+    );
+  });
+});

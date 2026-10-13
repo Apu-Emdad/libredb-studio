@@ -179,7 +179,8 @@ When secondary roles are active for the user, Test connection shows this caution
 
 ### 2.6 Paste URL
 
-The paste box reads an account identifier, an account URL, a Snowsight URL, `jdbc:snowflake://<host>/?<params>` and `snowflake://<user>@<account>/<database>/<schema>?<params>` into fields.
+The paste box reads an account host (`<identifier>.snowflakecomputing.com` or `.cn`), an account URL, a Snowsight URL, `jdbc:snowflake://<host>/?<params>` and `snowflake://<user>@<account>/<database>/<schema>?<params>` into fields; the scheme and the parameter names are read in any case.
+A bare account identifier such as `myorg-myaccount` is typed into Account instead: as a paste it is one word, which would claim any text, so the box refuses it with the list of formats it reads, the same list its hint shows.
 The pasted text is read in the browser and never kept: it is not stored as a connection string, sent to a route or kept in form state after the parse.
 It applies `user`, `warehouse`, `db` or `database`, `schema`, `role`, `authenticator` (`SNOWFLAKE_JWT` or `PROGRAMMATIC_ACCESS_TOKEN`), `token`, and the key passphrase parameters.
 An inline key parameter and every file-path parameter are refused by name, a password is named as not applied, and every other parameter is counted, never named; no value is ever echoed.
