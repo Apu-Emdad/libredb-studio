@@ -165,6 +165,8 @@ const QUOTED: Readonly<Record<string, { readonly keys: readonly string[]; readon
     quotes: [
       SNOWFLAKE_STATEMENT_SENTENCES.useRefused,
       SNOWFLAKE_STATEMENT_SENTENCES.settingNotCarried,
+      SNOWFLAKE_STATEMENT_SENTENCES.temporaryNotCarried,
+      SNOWFLAKE_STATEMENT_SENTENCES.noLastQuery,
       SNOWFLAKE_STATEMENT_SENTENCES.noTransactions,
       SNOWFLAKE_STATEMENT_SENTENCES.secondaryRoles("<roles>", "<role>"),
       SNOWFLAKE_STATEMENT_SENTENCES.unresolvedDatabase("<db>", "<role>"),

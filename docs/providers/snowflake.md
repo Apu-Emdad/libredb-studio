@@ -300,6 +300,18 @@ The SQL API does not run `USE` (it answers code 391911, `Command not supported b
 
 `Each Snowflake statement runs in its own session, so a session setting or variable does not carry over to the next statement.`
 
+A `CREATE` whose modifiers include `TEMP`, `TEMPORARY` or `VOLATILE` (a temporary table, stage, file format or any other temporary object) runs, and the object belongs to that statement's session, which no later request joins.
+Measured on the trial on 2026-10-14: the next statement's `SELECT`, `INSERT`, `LIST` or `DROP` answers that the object does not exist or is not authorized, `SHOW STAGES LIKE` in the schema does not list it, yet `SHOW STAGES IN ACCOUNT` still lists a temporary stage after such a `DROP`, since the session that owns it lives on until Snowflake ends it.
+The result says so:
+
+`Each Snowflake statement runs in its own session, so this temporary object belongs to a session no later statement joins: the next statement cannot use or drop it, and Snowflake removes it only when that session ends. Create a permanent or TRANSIENT object instead, or use it inside one EXECUTE IMMEDIATE $$ ... $$ block.`
+
+A statement whose code calls `LAST_QUERY_ID()` runs, and the function answers NULL, since its session holds no earlier statement; `RESULT_SCAN(LAST_QUERY_ID())` and `BEFORE(STATEMENT => LAST_QUERY_ID())` then fail with Snowflake's `Statement null not found`. The result, or the error after Snowflake's own text, says:
+
+`Each Snowflake statement runs in its own session, so LAST_QUERY_ID() names no earlier statement here and answers NULL. Use the query ID from Query History instead, or call it inside one EXECUTE IMMEDIATE $$ ... $$ block.`
+
+Inside an `EXECUTE IMMEDIATE $$ ... $$` block both work as in any session, so neither sentence is added there.
+
 A lone transaction statement (`BEGIN [WORK | TRANSACTION] [NAME <n>]`, `START TRANSACTION [NAME <n>]`, and `COMMIT` or `ROLLBACK`, each alone or followed by `WORK`) is refused before it is sent:
 
 `Snowflake's SQL API runs each statement in its own session, so a transaction cannot span statements. Nothing was sent. Run the whole transaction inside one EXECUTE IMMEDIATE $$ ... $$ block.`

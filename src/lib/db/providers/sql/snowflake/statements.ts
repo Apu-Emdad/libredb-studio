@@ -93,6 +93,10 @@ export const SNOWFLAKE_STATEMENT_SENTENCES = Object.freeze({
     "Snowflake's SQL API does not run USE. Set Database, Schema, Warehouse or Role on the connection instead, or use fully qualified names such as database.schema.table. Nothing was sent.",
   settingNotCarried:
     "Each Snowflake statement runs in its own session, so a session setting or variable does not carry over to the next statement.",
+  temporaryNotCarried:
+    "Each Snowflake statement runs in its own session, so this temporary object belongs to a session no later statement joins: the next statement cannot use or drop it, and Snowflake removes it only when that session ends. Create a permanent or TRANSIENT object instead, or use it inside one EXECUTE IMMEDIATE $$ ... $$ block.",
+  noLastQuery:
+    "Each Snowflake statement runs in its own session, so LAST_QUERY_ID() names no earlier statement here and answers NULL. Use the query ID from Query History instead, or call it inside one EXECUTE IMMEDIATE $$ ... $$ block.",
   noTransactions:
     "Snowflake's SQL API runs each statement in its own session, so a transaction cannot span statements. Nothing was sent. Run the whole transaction inside one EXECUTE IMMEDIATE $$ ... $$ block.",
   secondaryRoles: (roles: string, role: string) =>
@@ -311,12 +315,50 @@ function isLoneTransaction(tokens: readonly CodeToken[]): boolean {
   );
 }
 
+/** The words that may stand between `CREATE` and the object kind; three of them make the object temporary. */
+const CREATE_MODIFIERS: ReadonlySet<string> = new Set([
+  "OR",
+  "REPLACE",
+  "ALTER",
+  "LOCAL",
+  "GLOBAL",
+  "TEMP",
+  "TEMPORARY",
+  "VOLATILE",
+  "TRANSIENT",
+]);
+const TEMPORARY_WORDS: ReadonlySet<string> = new Set(["TEMP", "TEMPORARY", "VOLATILE"]);
+
+/** Whether `CREATE` is followed, among its modifiers, by `TEMP`, `TEMPORARY` or `VOLATILE`. */
+function createsTemporary(tokens: readonly CodeToken[]): boolean {
+  if (tokens[0]?.kind !== "word" || tokens[0].text !== "CREATE") return false;
+  for (const token of tokens.slice(1)) {
+    if (token.kind !== "word" || !CREATE_MODIFIERS.has(token.text)) return false;
+    if (TEMPORARY_WORDS.has(token.text)) return true;
+  }
+  return false;
+}
+
+/** Whether the statement's code calls `LAST_QUERY_ID(`; text inside a string or a `$$` block is not code. */
+function callsLastQueryId(tokens: readonly CodeToken[]): boolean {
+  return tokens.some((token, index) => {
+    const next = tokens[index + 1];
+    return token.kind === "word" && token.text === "LAST_QUERY_ID" && next?.kind === "other" && next.text === "(";
+  });
+}
+
 /** The notice of a statement whose effect a sessionless request does not keep, or null. */
 function sessionNotice(keyword: string | null, tokens: readonly CodeToken[]): QueryWarning | null {
   const second = tokens[1];
   const alterSession = keyword === "ALTER" && second?.kind === "word" && second.text === "SESSION";
   if (keyword === "SET" || keyword === "UNSET" || alterSession) {
     return { code: "SNOWFLAKE_SETTING_NOT_CARRIED", message: SNOWFLAKE_STATEMENT_SENTENCES.settingNotCarried };
+  }
+  if (createsTemporary(tokens)) {
+    return { code: "SNOWFLAKE_TEMPORARY_NOT_CARRIED", message: SNOWFLAKE_STATEMENT_SENTENCES.temporaryNotCarried };
+  }
+  if (callsLastQueryId(tokens)) {
+    return { code: "SNOWFLAKE_NO_LAST_QUERY", message: SNOWFLAKE_STATEMENT_SENTENCES.noLastQuery };
   }
   return null;
 }
@@ -678,15 +720,24 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
       if (isLoneTransaction(tokens)) throw new SnowflakeError("query", SNOWFLAKE_STATEMENT_SENTENCES.noTransactions);
       // The SQL API answers every USE with 391911, so it is refused here, unsent.
       if (keyword === "USE") throw new SnowflakeError("query", SNOWFLAKE_STATEMENT_SENTENCES.useRefused);
-      const result = await runStatement({
-        queryId,
-        sql,
-        tag: SNOWFLAKE_QUERY_TAGS.editor,
-        timeoutS: clampedTimeoutS(options.queryTimeoutMs),
-        deadlineBound: "query-timeout",
-        keyword,
-      });
       const notice = sessionNotice(keyword, tokens);
+      let result: SnowflakeResult;
+      try {
+        result = await runStatement({
+          queryId,
+          sql,
+          tag: SNOWFLAKE_QUERY_TAGS.editor,
+          timeoutS: clampedTimeoutS(options.queryTimeoutMs),
+          deadlineBound: "query-timeout",
+          keyword,
+        });
+      } catch (error) {
+        // A statement that fails for want of an earlier one ("Statement null not found") says why, after Snowflake.
+        if (notice?.code === "SNOWFLAKE_NO_LAST_QUERY" && error instanceof SnowflakeError) {
+          error.message = `${error.message} ${notice.message}`;
+        }
+        throw error;
+      }
       return notice === null ? result : { ...result, warnings: [...result.warnings, notice] };
     },
 

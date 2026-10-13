@@ -599,6 +599,80 @@ describe("session notices, USE and the lone transaction", () => {
     });
   }
 
+  // SF-029: a temporary object lives only as long as its session, which is the one statement.
+  const TEMPORARY_NOTICE = {
+    code: "SNOWFLAKE_TEMPORARY_NOT_CARRIED",
+    message: SNOWFLAKE_STATEMENT_SENTENCES.temporaryNotCarried,
+  };
+  const LAST_QUERY_NOTICE = {
+    code: "SNOWFLAKE_NO_LAST_QUERY",
+    message: SNOWFLAKE_STATEMENT_SENTENCES.noLastQuery,
+  };
+  for (const sql of [
+    "CREATE TEMPORARY TABLE D_TEMP2 (a INT)",
+    "create temp table t (a int)",
+    "CREATE OR REPLACE LOCAL TEMPORARY TABLE t AS SELECT 1 AS a",
+    "CREATE GLOBAL TEMP TABLE t (a INT)",
+    "CREATE VOLATILE TABLE t (a INT)",
+    "CREATE /* c */ TEMPORARY STAGE s",
+    "CREATE OR REPLACE TEMPORARY FILE FORMAT f TYPE = CSV",
+  ]) {
+    test(`${JSON.stringify(sql)} runs and says the object is gone after it`, async () => {
+      const harness = setup();
+      harness.transports.answer(SUBMIT, one());
+      const result = await harness.statements.runUser(sql, undefined);
+      expect(result.warnings).toEqual([TEMPORARY_NOTICE]);
+    });
+  }
+
+  for (const sql of [
+    "SELECT LAST_QUERY_ID()",
+    "SELECT * FROM t BEFORE(STATEMENT => last_query_id(-1))",
+    "SELECT * FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()))",
+  ]) {
+    test(`${JSON.stringify(sql)} runs and says LAST_QUERY_ID() names no earlier statement here`, async () => {
+      const harness = setup();
+      harness.transports.answer(SUBMIT, one());
+      const result = await harness.statements.runUser(sql, undefined);
+      expect(result.warnings).toEqual([LAST_QUERY_NOTICE]);
+    });
+  }
+
+  test("a LAST_QUERY_ID() statement Snowflake refuses carries the same sentence after Snowflake's", async () => {
+    const harness = setup();
+    harness.transports.answer(SUBMIT, failureAnswer(422, "000709", "Statement null not found", "02000"));
+    const error = await caught(
+      harness.statements.runUser("SELECT * FROM t BEFORE(STATEMENT => LAST_QUERY_ID())", undefined),
+    );
+    expect(error).toBeInstanceOf(SnowflakeError);
+    expect((error as SnowflakeError).message).toEndWith(` ${SNOWFLAKE_STATEMENT_SENTENCES.noLastQuery}`);
+    expect((error as SnowflakeError).message).toContain("Statement null not found");
+  });
+
+  test("a refused statement without LAST_QUERY_ID() keeps Snowflake's sentence alone", async () => {
+    const harness = setup();
+    harness.transports.answer(SUBMIT, failureAnswer(422, "000709", "Statement null not found", "02000"));
+    const error = await caught(harness.statements.runUser("SELECT 1", undefined));
+    expect((error as SnowflakeError).message).not.toContain(SNOWFLAKE_STATEMENT_SENTENCES.noLastQuery);
+  });
+
+  for (const sql of [
+    "CREATE TABLE temp (a INT)",
+    "CREATE TRANSIENT TABLE t (a INT)",
+    "CREATE OR REPLACE",
+    "SELECT 'CREATE TEMPORARY TABLE' AS x",
+    "SELECT 'LAST_QUERY_ID()' AS x, last_query_id_col FROM t",
+    "EXECUTE IMMEDIATE $$ BEGIN CREATE TEMPORARY TABLE t (a INT); INSERT INTO t VALUES (1); END; $$",
+    "EXECUTE IMMEDIATE $$ BEGIN SELECT 1; SELECT LAST_QUERY_ID(); END; $$",
+  ]) {
+    test(`${JSON.stringify(sql)} carries no session notice`, async () => {
+      const harness = setup();
+      harness.transports.answer(SUBMIT, one());
+      const result = await harness.statements.runUser(sql, undefined);
+      expect(result.warnings).toEqual([]);
+    });
+  }
+
   for (const sql of ["ALTER TABLE t ADD COLUMN c INT", "SHOW TABLES", "ALTER"]) {
     test(`${JSON.stringify(sql)} carries no notice`, async () => {
       const harness = setup();
