@@ -104,7 +104,14 @@ export const nodeSshPort: SshPort = {
     });
     return {
       onReady: (handler) => void client.once("ready", handler),
-      onError: (handler) => void client.once("error", handler),
+      // `on` and not `once`, which is a defect this fixed rather than a preference. MEASURED on a
+      // port that listens and never speaks: the dial's deadline rejects, and ssh2 then raises
+      // "Connection lost before handshake" on the same client a moment later. With a one-shot
+      // listener that second error has nobody to go to, so it surfaced as an unhandled error from
+      // inside `ssh2/lib/protocol/utils.js` - a refusal that was already answered correctly,
+      // leaving a crash behind it. The dial's own handler ignores anything after it has settled,
+      // so the extra deliveries cost nothing and the process stays quiet.
+      onError: (handler) => void client.on("error", handler),
       subsystem: (name, handler) => {
         client.subsys(name, (error, channel) => {
           if (error || channel === undefined) {

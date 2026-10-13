@@ -43,6 +43,8 @@ interface Recorder {
   readonly dialled: { host: string; port: number; noDelay: true; lookup?: unknown }[];
   readonly connects: SshConnectOptions[];
   readonly subsystems: string[];
+  /** Teardowns of the ssh client, so a dial that fails without one can be told apart. */
+  ended: number;
 }
 
 function ports(
@@ -50,6 +52,10 @@ function ports(
     hostKey?: Buffer;
     subsystemError?: unknown;
     connectError?: unknown;
+    /** The socket itself refusing, which is what an address with nobody on it does. */
+    socketError?: unknown;
+    /** A SECOND library error after the dial has already settled, which a real server sends. */
+    lateError?: boolean;
     /**
      * What ssh2 does after the verifier returns false: it raises its own "Host denied
      * (verification failed)" a moment later. Without this the fake cannot show the two outcomes
@@ -62,10 +68,11 @@ function ports(
   socket: SocketPort;
   seen: Recorder;
 } {
-  const seen: Recorder = { dialled: [], connects: [], subsystems: [] };
+  const seen: Recorder = { dialled: [], connects: [], subsystems: [], ended: 0 };
   const socket: SocketPort = {
     connect: async (options) => {
       seen.dialled.push(options);
+      if (over.socketError !== undefined) throw over.socketError;
       return { socket: true };
     },
   };
@@ -77,6 +84,10 @@ function ports(
       queueMicrotask(() => {
         if (over.connectError !== undefined) {
           failed?.(over.connectError);
+          // A real server keeps going after the first error: ssh2 raised "Connection lost before
+          // handshake" on the same client a moment after the deadline had already answered. The
+          // fake sends a second one so the handler's behaviour after settling is measurable.
+          if (over.lateError) failed?.(new Error("Connection lost before handshake"));
           return;
         }
         // The library offers the host key before it authenticates, which is the order the rule
@@ -97,7 +108,9 @@ function ports(
           if (over.subsystemError !== undefined) handler(over.subsystemError, null);
           else handler(null, transport);
         },
-        end: () => {},
+        end: () => {
+          seen.ended += 1;
+        },
       };
     },
   };
@@ -347,4 +360,60 @@ test("an unreadable fingerprint and an unreadable private key answer different r
   expectTruthy(key.kind === "configuration");
   expectBe(key.reason, "key-unreadable");
   expectNotBe(failure.reason, key.reason);
+});
+
+/**
+ * THE SOCKET'S OWN FAILURE IS A DIAL FAILURE, and it was not before.
+ *
+ * MEASURED through the real route on the registration commit: an address with nobody on it answered
+ * HTTP 500 `INTERNAL_ERROR`, logged "Unhandled error", carrying `connect ECONNREFUSED 127.0.0.1:9`,
+ * while a port that listens and says nothing answered 503 on the same provider. Two facts of the
+ * same class arriving as two different classes, and the cause was position rather than logic: the
+ * `await socket.connect(...)` sat OUTSIDE the promise that classifies failures, so the raw socket
+ * error never reached `classifyLoginFailure` and never became one of the four kinds.
+ *
+ * Asserted as the KIND and not as a sentence: the sentence is the platform's and will differ
+ * between a refused connection, an unreachable network and a name that does not resolve, while the
+ * kind is what decides the class the user is answered with.
+ */
+test("a socket that refuses leaves as a transport dial failure, not as a raw error", async () => {
+  const { ssh, socket, seen } = ports({ socketError: new Error("connect ECONNREFUSED 127.0.0.1:9") });
+  let caught: unknown;
+  try {
+    await dialNetconf(config(), ssh, socket);
+  } catch (error) {
+    caught = error;
+  }
+  expectTruthy(caught instanceof DialError);
+  expectBe((caught as DialError).failure.kind, "transport");
+  expectMatch((caught as DialError).failure.message, /ECONNREFUSED/);
+  // The control: it failed at the socket, so the library was never asked to connect at all.
+  expectEqual(seen.connects, []);
+});
+
+/**
+ * A FAILED DIAL TEARS ITSELF DOWN, and the measurement behind it is a crash rather than a leak.
+ *
+ * On a port that listens and never speaks, the deadline answered correctly and ssh2 then raised
+ * "Connection lost before handshake" on the same client. Nothing was left to receive it, so it
+ * surfaced as an unhandled error out of the library, after the user had already been told the
+ * truth. Two things fix it together and both are asserted here: the client is ended, and the error
+ * handler stays attached, so a second delivery is ignored instead of having nowhere to go.
+ */
+test("a dial that fails ends its client, and a second error after that changes nothing", async () => {
+  const { ssh, socket, seen } = ports({
+    connectError: new Error("Timed out while waiting for handshake"),
+    lateError: true,
+  });
+  let caught: unknown;
+  try {
+    await dialNetconf(config(), ssh, socket);
+  } catch (error) {
+    caught = error;
+  }
+  expectTruthy(caught instanceof DialError);
+  expectBe((caught as DialError).failure.kind, "transport");
+  // The teardown runs in a microtask, so it is awaited rather than assumed.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expectBe(seen.ended, 1, "the client was ended, so the socket is not left open");
 });

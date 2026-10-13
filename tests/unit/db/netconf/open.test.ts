@@ -18,7 +18,7 @@ import type { Transport } from "@/lib/db/providers/network/netconf/session";
 import type { XmlElement, XmlReaderPort } from "@/lib/db/providers/network/netconf/reader-port";
 import type { DatabaseConnection } from "@/lib/db/types";
 import { fingerprintOf } from "@/lib/db/providers/network/netconf/hostkey";
-import { DatabaseConfigError } from "@/lib/db/errors";
+import { ConnectionError, DatabaseConfigError } from "@/lib/db/errors";
 
 const DEVICE_KEY = Buffer.from("the device's host key");
 const PIN = fingerprintOf(DEVICE_KEY);
@@ -56,7 +56,7 @@ interface Seen {
   readonly closed: { count: number };
 }
 
-function ports(over: { library?: XmlElement; parseThrows?: boolean } = {}): {
+function ports(over: { library?: XmlElement; parseThrows?: boolean; socketError?: unknown } = {}): {
   ports: { xml: XmlReaderPort; ssh: SshPort; socket: SocketPort };
   seen: Seen;
 } {
@@ -98,6 +98,7 @@ function ports(over: { library?: XmlElement; parseThrows?: boolean } = {}): {
       socket: {
         connect: async (options) => {
           seen.dialled.push({ host: options.host, port: options.port });
+          if (over.socketError !== undefined) throw over.socketError;
           return { socket: true };
         },
       },
@@ -196,4 +197,29 @@ test("a failure after the session is open closes the session", async () => {
   // its own error would still "reject", and the test would pass while the cause was lost.
   await expectRejects(openNetconfReader(connection, p, credential), /the parser refused this message/);
   expectTruthy(seen.closed.count >= 1, "the session was left open after the reader failed");
+});
+
+/**
+ * THE TRANSLATION IS WIRED, which is a different claim from the translation being correct.
+ *
+ * `failures.test.ts` holds the table itself, and a mutation proved that is not enough: removing
+ * the conversion from this composition root killed NO test, because every assertion about it was
+ * made by calling the converter directly. That is the same "written but not connected" shape this
+ * provider has already been caught by twice tonight, so the wiring gets its own test here.
+ *
+ * MEASURED through the real route before the wiring: HTTP 500 `INTERNAL_ERROR`, logged "Unhandled
+ * error", for an address with nobody on it. The class below is what makes that a 503.
+ */
+test("a dial failure leaves this function as a ConnectionError that names the address", async () => {
+  const { ports: p } = ports({ socketError: new Error("connect ECONNREFUSED") });
+  let caught: unknown;
+  try {
+    await openNetconfReader({ ...connection, port: 1830 } as DatabaseConnection, p, credential);
+  } catch (error) {
+    caught = error;
+  }
+  expectTruthy(caught instanceof ConnectionError);
+  // The address, because the platform's own sentence here carries none, and a reader told only
+  // that a dial failed has not been told which device.
+  expectTruthy((caught as Error).message.includes("1830"));
 });

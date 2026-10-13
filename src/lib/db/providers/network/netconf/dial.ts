@@ -107,21 +107,52 @@ export async function dialNetconf(config: DialConfig, ssh: SshPort, socket: Sock
   // gone rather than kept as a comfort.
   const lookup = socketEgress(config.host, { refusesLinkLocal: true });
   const port = config.port ?? NETCONF_PORT;
-  const connected = await socket.connect(
-    lookup === undefined
-      ? { host: config.host, port, noDelay: true }
-      : { host: config.host, port, noDelay: true, lookup },
-  );
+  // The socket's own failure is a DialError too, and it was NOT before. MEASURED through the real
+  // route: an address with nobody on it answered HTTP 500 `INTERNAL_ERROR`, logged "Unhandled
+  // error", carrying `connect ECONNREFUSED 127.0.0.1:9` - because this await sits OUTSIDE the
+  // promise below, so the raw socket error never reached `classifyLoginFailure` and never became
+  // one of the four kinds. The same run answered 503 for a port that listens and says nothing,
+  // since that failure happens inside the promise. Two facts of the same class arriving as two
+  // different classes is the defect; `kind: "transport"` is what the specification's table (11.2)
+  // says this is.
+  let connected: Awaited<ReturnType<typeof socket.connect>>;
+  try {
+    connected = await socket.connect(
+      lookup === undefined
+        ? { host: config.host, port, noDelay: true }
+        : { host: config.host, port, noDelay: true, lookup },
+    );
+  } catch (error) {
+    throw new DialError({ kind: "transport", message: error instanceof Error ? error.message : String(error) });
+  }
 
   return await new Promise<Transport>((resolve, reject) => {
     let settled = false;
+    let client: SshSession | undefined;
     const failWith = (failure: LoginFailure): void => {
       if (settled) return;
       settled = true;
+      // The dial is torn down before the caller is told, and the order matters: a dial that
+      // rejects without ending the client leaves the socket open until the peer or the OS closes
+      // it, and on a port that listens and says nothing that is forever. One leaked socket per
+      // failed dial is how a server runs out of them.
+      //
+      // `end()` runs in a microtask rather than inline because this is also called from inside
+      // ssh2's `hostVerifier`, which has not returned yet; ending the client underneath it is a
+      // reentrant call into the library. It is wrapped because tearing down a client that never
+      // finished connecting is allowed to throw, and that throw is not the failure the user is
+      // being told about.
+      queueMicrotask(() => {
+        try {
+          client?.end();
+        } catch {
+          /* the dial already failed; a teardown error is not a second fact about the device */
+        }
+      });
       reject(new DialError(failure));
     };
     const fail = (error: unknown): void => failWith(classifyLoginFailure(error));
-    const session = ssh.connect({
+    const session = (client = ssh.connect({
       sock: connected,
       username: config.username,
       readyTimeout: config.readyMs,
@@ -148,7 +179,7 @@ export async function dialNetconf(config: DialConfig, ssh: SshPort, socket: Sock
         });
         return false;
       },
-    });
+    }));
     session.onError(fail);
     session.onReady(() => {
       session.subsystem(NETCONF_SUBSYSTEM, (error, transport) => {

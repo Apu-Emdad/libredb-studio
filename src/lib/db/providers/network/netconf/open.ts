@@ -11,8 +11,9 @@
  */
 import { DatabaseConfigError } from "@/lib/db/errors";
 import type { DatabaseConnection } from "@/lib/db/types";
-import { dialNetconf, type SocketPort, type SshPort } from "./dial";
+import { dialNetconf, NETCONF_PORT, type SocketPort, type SshPort } from "./dial";
 import { nodeSocketPort, nodeSshPort } from "./node-ports";
+import { asHouseError, type DialTarget } from "./failures";
 import type { XmlReaderPort } from "./reader-port";
 import { DeviceReaderImpl, type SessionPort } from "./reader";
 import { NetconfSession, type SessionLimits } from "./session";
@@ -117,6 +118,26 @@ export async function openNetconfReader(
   if (typeof host !== "string" || host === "") {
     throw new DatabaseConfigError("this connection needs the device's address");
   }
+  const port = typeof config.port === "number" && config.port > 0 ? config.port : NETCONF_PORT;
+  // EVERY failure below leaves as the house class its SCOPE calls for, and naming the address is
+  // part of it. MEASURED without this, through the real route: an address with nobody on it
+  // answered HTTP 500 `INTERNAL_ERROR` logged "Unhandled error", and a port that listens and says
+  // nothing answered the same 500 after 15,005 ms NAMING NO ADDRESS. The sentences were right and
+  // the dress was not. The table is in `failures.ts`.
+  try {
+    return await compose(config, ports, override, { host, port });
+  } catch (failure) {
+    throw asHouseError(failure, { host, port });
+  }
+}
+
+async function compose(
+  config: DatabaseConnection,
+  ports: OpenPorts,
+  override: NetconfCredential | undefined,
+  target: DialTarget,
+): Promise<DeviceReaderImpl> {
+  const { host } = target;
   const { username, hostKeyFingerprint, privateKey, passphrase, password } =
     override === undefined ? credentialOf(config) : checked(override);
   const limits = ports.limits ?? NETCONF_SESSION_LIMITS;
