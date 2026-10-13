@@ -17,6 +17,9 @@
  * Each scenario's requests are checked against the fixture's, in order: the method, the path and its query (a
  * submit's `requestId` is the run's own), and the whole body. What is BUILT, each answer in the shape the capture
  * shows, and why:
+ * - the role check's columns past `R` and `S` (the user since SF-005): the capture sent the two-column check, so
+ *   `load()` widens every captured role check to `SNOWFLAKE_ROLE_CHECK_SQL`, its added cells answered as the account
+ *   answers that connection (`widenRoleCheck`);
  * - the role check answering another role: the account refuses a role the credentials may not use at connect with
  *   390186 (`refusal-390186`, `role-restricted-pat-show`), so no captured role check answers another role;
  * - a role holding no warehouse (391920): the account answers it only with secondary roles off, which this capture
@@ -62,7 +65,7 @@ import { SnowflakeProvider } from "@/lib/db/providers/sql/snowflake/index";
 import { SNOWFLAKE_INTROSPECT_SENTENCES, SNOWFLAKE_KIND_IDS } from "@/lib/db/providers/sql/snowflake/introspect";
 import { SNOWFLAKE_MONITORING_SENTENCES } from "@/lib/db/providers/sql/snowflake/monitoring";
 import { SNOWFLAKE_ROWS_SENTENCES } from "@/lib/db/providers/sql/snowflake/rows";
-import { SNOWFLAKE_STATEMENT_SENTENCES } from "@/lib/db/providers/sql/snowflake/statements";
+import { SNOWFLAKE_ROLE_CHECK_SQL, SNOWFLAKE_STATEMENT_SENTENCES } from "@/lib/db/providers/sql/snowflake/statements";
 import { MAX_UNLIMITED_ROWS } from "@/lib/db/utils/query-limiter";
 import { historyMaskOf, maskStatementForHistory } from "@/lib/history-mask";
 import { logger } from "@/lib/logger";
@@ -116,7 +119,49 @@ interface Scenario {
   readonly stopped?: { readonly statement: number; readonly sql: string; readonly reason: string };
 }
 
-const load = (name: string): Scenario => JSON.parse(readFileSync(join(FIXTURES, `${name}.json`), "utf8")) as Scenario;
+/** The role check as the capture sent it, before the columns Studio's check added since were in it. */
+const CAPTURED_ROLE_CHECK = "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s";
+
+/**
+ * The columns the role check reads past the captured two, each with the cell the account answers for the scenario's
+ * connection: on the trial every user's NAME is its login name upper-cased. BUILT, in the captured columns' shape.
+ */
+const ROLE_CHECK_ADDED: readonly { readonly name: string; readonly cell: (c: FixtureConnection) => string | null }[] = [
+  { name: "U", cell: (connection) => connection.user.toUpperCase() },
+];
+
+type Row = readonly (string | null)[];
+
+/**
+ * The scenario with its captured role check widened to `SNOWFLAKE_ROLE_CHECK_SQL`: the statement in the submit's
+ * body, and the added columns and cells in the answer that carries the check's `R` and `S` columns. BUILT.
+ */
+function widenRoleCheck(scenario: Scenario): Scenario {
+  if (scenario.connection === undefined) return scenario;
+  const exchanges = scenario.exchanges.map((exchange) => {
+    const { request, response } = exchange;
+    if (request.body?.statement === CAPTURED_ROLE_CHECK) {
+      return { ...exchange, request: { ...request, body: { ...request.body, statement: SNOWFLAKE_ROLE_CHECK_SQL } } };
+    }
+    const meta = response.body.resultSetMetaData as { rowType?: { name: string }[] } | undefined;
+    const rowType = meta?.rowType;
+    if (rowType?.length !== 2 || rowType[0].name !== "R" || rowType[1].name !== "S") return exchange;
+    const cells = ROLE_CHECK_ADDED.map((column) => column.cell(scenario.connection));
+    const body = {
+      ...response.body,
+      resultSetMetaData: {
+        ...meta,
+        rowType: [...rowType, ...ROLE_CHECK_ADDED.map((column) => ({ ...rowType[1], name: column.name }))],
+      },
+      data: (response.body.data as Row[]).map((row) => [...row, ...cells]),
+    };
+    return { ...exchange, response: { ...response, body } };
+  });
+  return { ...scenario, exchanges };
+}
+
+const load = (name: string): Scenario =>
+  widenRoleCheck(JSON.parse(readFileSync(join(FIXTURES, `${name}.json`), "utf8")) as Scenario);
 
 /** A fixture's answer as the scripted transport gives it: a partition compressed again, a non-JSON body as text. */
 function answerOf(response: FixtureExchange["response"]): ScriptedAnswer {
@@ -158,9 +203,13 @@ function withRows(
 /** The index of the role check's status answer in every captured connect: the SHOW, its GET, the check, its GET. */
 const ROLE_CHECK_ANSWER = 3;
 
-/** A scenario whose role check answers `role` with the secondary roles cell `secondary`. BUILT. */
+/** A scenario whose role check answers `role` with the secondary roles cell `secondary`, its other cells kept. BUILT. */
 function roleCheckAnswering(scenario: Scenario, role: string, secondary: string): Scenario {
-  return { ...scenario, exchanges: withRows(scenario.exchanges, ROLE_CHECK_ANSWER, [[role, secondary]]) };
+  const [captured] = scenario.exchanges[ROLE_CHECK_ANSWER].response.body.data as Row[];
+  return {
+    ...scenario,
+    exchanges: withRows(scenario.exchanges, ROLE_CHECK_ANSWER, [[role, secondary, ...captured.slice(2)]]),
+  };
 }
 
 /** The secondary roles cell with none active, as connect-pat captured it, and in M38's shape with `roles` active. */
@@ -333,10 +382,7 @@ describe("connect", () => {
     const { entry, scenario } = replayed("connect-keypair");
     await entry.provider.connect();
     expectRequests(entry.transports.requests, scenario.exchanges);
-    expect(statementsSent(entry)).toEqual([
-      "SHOW WAREHOUSES LIKE 'STUDIO_PROBE_WH'",
-      "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s",
-    ]);
+    expect(statementsSent(entry)).toEqual(["SHOW WAREHOUSES LIKE 'STUDIO_PROBE_WH'", SNOWFLAKE_ROLE_CHECK_SQL]);
     for (const request of entry.transports.requests)
       expect(bearerOf(request)).toMatch(/^eyJ[\w-]+\.eyJ[\w-]+\.[\w-]+$/);
     expect(entry.provider.isConnected()).toBe(true);
@@ -352,15 +398,21 @@ describe("connect", () => {
     expect(entry.provider.connectWarnings()).toEqual([]);
   });
 
+  test("by PAT with User naming another user: the role check's CURRENT_USER() refuses the connect (SF-005)", async () => {
+    const { entry } = replayed("connect-pat", { user: "studio_svc" });
+    const error = await caught(entry.provider.connect());
+    expect(error).toBeInstanceOf(AuthenticationError);
+    expect((error as Error).message).toBe(SNOWFLAKE_ERROR_SENTENCES.tokenUserMismatch("STUDIO_PAT", "studio_svc"));
+    expect(statementsSent(entry)).toEqual(["SHOW WAREHOUSES LIKE 'STUDIO_PROBE_WH'", SNOWFLAKE_ROLE_CHECK_SQL]);
+    expect(entry.provider.isConnected()).toBe(false);
+  });
+
   test("browse-only, with no warehouse field: Test Connection succeeds with the empty-warehouse and secondary-role cautions", async () => {
     const { entry, scenario } = replayed("connect-no-warehouse");
     expect(scenario.connection.warehouse).toBe("");
     await entry.provider.connect();
     expectRequests(entry.transports.requests, scenario.exchanges);
-    expect(statementsSent(entry)).toEqual([
-      "SHOW DATABASES LIMIT 1",
-      "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s",
-    ]);
+    expect(statementsSent(entry)).toEqual(["SHOW DATABASES LIMIT 1", SNOWFLAKE_ROLE_CHECK_SQL]);
     expect(entry.transports.requests.every((request) => bodyOf(request).warehouse === undefined)).toBe(true);
     expect(entry.provider.isConnected()).toBe(true);
     expect(entry.provider.connectWarnings()).toEqual([

@@ -162,15 +162,19 @@ The durable relief is an authentication policy with `PAT_POLICY = (NETWORK_POLIC
 On the trial on 2026-10-13 that policy let a token sign in for a user with no network policy, and each policy change took up to about 45 s to show.
 Key pair avoids that requirement, though a network policy that applies to the user still refuses an address it excludes.
 Use Key pair for npx and the desktop app, and a PAT for a server with a fixed egress address.
+A token names its own user and the SQL API takes no user beside it, so Studio compares User with the `CURRENT_USER()` the role check answers and fails the connect when they differ.
+The comparison ignores case unless User is double-quoted; `CURRENT_USER()` answers the user's NAME, so for a token enter the NAME when it differs from the login name.
 
 ### 2.5 Test connection
 
 Test connection checks the key, the account, the role Snowflake runs as and the warehouse's state, without starting the warehouse.
 Your first query starts the warehouse if it is suspended, and Snowflake bills at least one minute for that.
 
-Test connection, Save and every connect send one `SHOW WAREHOUSES LIKE '<warehouse>'`, or `SHOW DATABASES LIMIT 1` when Warehouse is empty, then the role check, `SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s`, with the same context.
+Test connection, Save and every connect send one `SHOW WAREHOUSES LIKE '<warehouse>'`, or `SHOW DATABASES LIMIT 1` when Warehouse is empty, then the role check, `SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s, CURRENT_USER() AS u`, with the same context.
 Neither needs a running warehouse: on the trial the role check answered with the warehouse suspended and left it suspended, and answered under a role holding no warehouse at all, so a connection with Warehouse empty passes it too.
+The check with `CURRENT_USER()` added answered the same way on 2026-10-14, the warehouse suspended before and after it.
 A role other than Role fails the connect with the role mismatch sentence of [section 11](#11-errors).
+Under token sign-in a user other than User fails it too, with the token user sentence of [section 11](#11-errors).
 They add a caution only when something is wrong:
 
 - `Snowflake shows no warehouse named <wh> to role <role>. Check the name, and that the role has USAGE on it.`
@@ -319,7 +323,7 @@ A statement that needs a warehouse resumes a suspended one when AUTO_RESUME is T
 | Agent operations workflow | the sessions and slow-queries reads (Information Schema); `SHOW` for table stats, index stats and health | no; Information Schema is read only on a warehouse a fresh state read shows running | the model's call; the 60 s cache |
 | MCP `inspect_schema` | `SHOW` | no | an operator seed with `mcp: true` |
 | Test connection, Save, a connect on a cache miss | one `SHOW`, then the role check | no | the user's click |
-| Role check | `SELECT CURRENT_ROLE(), CURRENT_SECONDARY_ROLES()` once per connect | no | sent by every connect, after its `SHOW`; a mismatch fails the connect |
+| Role check | `SELECT CURRENT_ROLE(), CURRENT_SECONDARY_ROLES(), CURRENT_USER()` once per connect | no | sent by every connect, after its `SHOW`; a mismatch fails the connect |
 | Health | `SHOW WAREHOUSES LIKE`, or `SHOW DATABASES LIMIT 1` with Warehouse empty | no | - |
 | Connection pulse, fleet health | none | - | skipped for `resumesBilledCompute` |
 | Tree refresh after DDL | `SHOW` | no | - |
@@ -556,6 +560,7 @@ Still unconfirmed: every Snowflake form not named above, among them `CREATE CATA
 | Network policy refuses the address (390422 at HTTP 401, for a key pair or a token; Snowflake's message names the address and is not shown) | `AuthenticationError` | `A network policy on the Snowflake account or on this user does not allow the address Studio connects from. An administrator adds that address to the policy's allowed list.` |
 | Token for a user under no network policy (390432 at HTTP 401; on the trial the authentication policy named let the token sign in) | `AuthenticationError` | `Snowflake signs in with an access token only for a user under a network policy, and this user has none. An administrator either attaches a network policy that allows the address Studio connects from, or sets an authentication policy with PAT_POLICY = (NETWORK_POLICY_EVALUATION = ENFORCED_NOT_REQUIRED).` |
 | Role refused (390186 at HTTP 400, as Snowflake answers; 390189 and 3013, as documented) | `AuthenticationError` | `Snowflake refused role <role> for user <user>: the role does not exist, it is not granted to this user, or the key pair or access token is restricted to another role. Check the Role field; an administrator grants it with GRANT ROLE <role> TO USER <user>.` |
+| Token of another user (token sign-in, `CURRENT_USER()` is not User) | `AuthenticationError` | `Snowflake signed this access token in as user <u>, not <user>. A token signs in only as the user it belongs to: enter <u> in User, or paste a token of user <user>.` |
 | Role mismatch | `AuthenticationError` | `Snowflake ran this connection as role <r>, not <role>. Check the Role field; a role-restricted key or token signs in only as its own role.` |
 | No warehouse (000606, as documented; 391920, as Snowflake answers a role that can use no warehouse) | `QueryError` | `No warehouse is selected for this connection. Enter one in the connection settings, or ask an administrator to set DEFAULT_WAREHOUSE on the user. Browsing works without one; queries do not.` |
 | Object missing or hidden (002003) | `QueryError` | `Snowflake says this object does not exist or role <role> may not see it. Check the name, the database and schema, and the role; CALL EXPLAIN_PRIVILEGES(statement => '<statement>', missing_only => true) lists what is missing, and an administrator adds for_role => '<role>'.`, then the server text |

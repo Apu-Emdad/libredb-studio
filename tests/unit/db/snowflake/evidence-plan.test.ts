@@ -35,7 +35,7 @@ describe("M97", () => {
 describe("the capture scenarios", () => {
   const scenario = (name: string) => SNOWFLAKE_EVIDENCE_SCENARIOS.find((entry) => entry.name === name);
   const sqlOf = (name: string) => scenario(name)?.statements.map((statement) => statement.sql);
-  const ROLE_CHECK = "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s";
+  const ROLE_CHECK = "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s, CURRENT_USER() AS u";
 
   test("are named once each, for the measured refusal codes and the two-partition result", () => {
     const names = SNOWFLAKE_EVIDENCE_SCENARIOS.map((entry) => entry.name);

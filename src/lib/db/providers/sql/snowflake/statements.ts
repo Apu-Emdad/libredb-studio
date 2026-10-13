@@ -98,8 +98,12 @@ export const SNOWFLAKE_STATEMENT_SENTENCES = Object.freeze({
   foreignLink: "Snowflake answered with a link outside this account's statements, so Studio did not follow it.",
 });
 
-/** The role check `connect()` sends; M100 measured it to answer with the warehouse suspended, and with none at all. */
-export const SNOWFLAKE_ROLE_CHECK_SQL = "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s";
+/**
+ * The role check `connect()` sends; M100 measured it to answer with the warehouse suspended, and with none at all.
+ * `CURRENT_USER()` rides in the same statement, so the token sign-in's user check costs no request of its own.
+ */
+export const SNOWFLAKE_ROLE_CHECK_SQL =
+  "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s, CURRENT_USER() AS u";
 
 /** The connection's `queryTimeoutMs` as Snowflake's `timeout`: whole seconds, rounded up, 1 to the maximum. */
 export function clampedTimeoutS(queryTimeoutMs: number): number {
@@ -298,6 +302,16 @@ function sessionNotice(keyword: string | null, tokens: readonly CodeToken[]): Qu
     return { code: "SNOWFLAKE_SETTING_NOT_CARRIED", message: SNOWFLAKE_STATEMENT_SENTENCES.settingNotCarried };
   }
   return null;
+}
+
+/**
+ * Whether the user Snowflake signed in is the one typed in User: a double-quoted name exactly, without its quotes,
+ * and anything else ignoring case, since a login name is case-insensitive and Snowflake upper-cases an unquoted name.
+ */
+function sameUser(typed: string, actual: string): boolean {
+  const name = typed.trim();
+  if (QUOTED_IDENTIFIER.test(name)) return foldIdentifier(name) === actual;
+  return name.toUpperCase() === actual.toUpperCase();
 }
 
 /** A decoded text cell as text; an absent or null cell is empty. */
@@ -649,7 +663,7 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
 
     async checkRole() {
       const result = await runSurface(SNOWFLAKE_ROLE_CHECK_SQL, SNOWFLAKE_QUERY_TAGS.roleCheck);
-      const [roleField, secondaryField] = result.fields;
+      const [roleField, secondaryField, userField] = result.fields;
       const row = result.rows[0] ?? {};
       const actual = cellText(row[roleField]);
       const forms = secretForms([...options.secrets(), ...transport.recentTokens()]);
@@ -657,6 +671,15 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
         throw new SnowflakeError(
           "auth",
           SNOWFLAKE_ERROR_SENTENCES.roleMismatch(serverMessage(actual, forms), context.role),
+        );
+      }
+      // A token names its own user and the SQL API takes no user beside it, so User is checked against the session.
+      const { authMethod, user } = options.failure;
+      const signedIn = cellText(row[userField]);
+      if (authMethod === "pat" && !sameUser(user, signedIn)) {
+        throw new SnowflakeError(
+          "auth",
+          SNOWFLAKE_ERROR_SENTENCES.tokenUserMismatch(serverMessage(signedIn, forms), user),
         );
       }
       const roles = secondaryRoleNames(cellText(row[secondaryField]));

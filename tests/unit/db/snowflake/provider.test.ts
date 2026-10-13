@@ -291,11 +291,20 @@ describe("connect() sends the connect statement, then the role check", () => {
 
   test("a programmatic access token is its own bearer", async () => {
     const entry = build({ authMethod: "pat", password: "pat-value", privateKey: undefined });
-    entry.transports.answer(SUBMIT, RUNNING, ROLE_OK);
+    entry.transports.answer(SUBMIT, RUNNING, roleAnswer("STUDIO_RO", undefined, "STUDIO_SVC"));
     await entry.provider.connect();
     const [request] = entry.transports.requests;
     expect(request.headers["x-snowflake-authorization-token-type"]).toBe("PROGRAMMATIC_ACCESS_TOKEN");
     expect(request.headers.authorization).toBe("Bearer pat-value");
+  });
+
+  test("a token that signs in as another user than User fails the connect, naming both (SF-005)", async () => {
+    const entry = build({ authMethod: "pat", password: "pat-value", privateKey: undefined, user: "someone_else" });
+    entry.transports.answer(SUBMIT, RUNNING, roleAnswer("STUDIO_RO", undefined, "STUDIO_PAT"));
+    const error = await caught(entry.provider.connect());
+    expect(error).toBeInstanceOf(AuthenticationError);
+    expect((error as Error).message).toBe(SNOWFLAKE_ERROR_SENTENCES.tokenUserMismatch("STUDIO_PAT", "someone_else"));
+    expect(entry.provider.isConnected()).toBe(false);
   });
 
   test("a refused key pair maps to AuthenticationError with the statement that registers the key", async () => {

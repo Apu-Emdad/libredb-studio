@@ -142,6 +142,8 @@ export const SNOWFLAKE_ERROR_SENTENCES = Object.freeze({
     `Snowflake refused role ${role} for user ${user}: the role does not exist, it is not granted to this user, or the key pair or access token is restricted to another role. Check the Role field; an administrator grants it with GRANT ROLE ${roleId} TO USER ${userId}.`,
   roleMismatch: (actual: string, role: string) =>
     `Snowflake ran this connection as role ${actual}, not ${role}. Check the Role field; a role-restricted key or token signs in only as its own role.`,
+  tokenUserMismatch: (actual: string, user: string) =>
+    `Snowflake signed this access token in as user ${actual}, not ${user}. A token signs in only as the user it belongs to: enter ${actual} in User, or paste a token of user ${user}.`,
   noWarehouse:
     "No warehouse is selected for this connection. Enter one in the connection settings, or ask an administrator to set DEFAULT_WAREHOUSE on the user. Browsing works without one; queries do not.",
   objectMissing: (role: string, roleLiteral: string, text: string) =>
