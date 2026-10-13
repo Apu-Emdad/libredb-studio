@@ -181,3 +181,12 @@ export function snowflakeHostHint(text: string): string | undefined {
   const reading = readSnowflakeAccount(text);
   return reading.ok ? `Studio connects to ${reading.host}.` : undefined;
 }
+
+/**
+ * The account a text names, for telling whether a paste names the account already in the box: the host it resolves
+ * to, or the text trimmed and lower-cased when it does not read, so `myorg-myacct` and its full URL are one account.
+ */
+export function snowflakeHostIdentity(text: string): string {
+  const reading = readSnowflakeAccount(text);
+  return reading.ok ? reading.host : text.trim().toLowerCase();
+}

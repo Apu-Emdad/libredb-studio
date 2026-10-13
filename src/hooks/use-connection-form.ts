@@ -262,6 +262,70 @@ export const CONNECTION_FORM_DEFAULTS = {
 
 type ConnectionFormDefaults = typeof CONNECTION_FORM_DEFAULTS;
 
+/**
+ * Whether a form field belongs to the server it was typed for (`true`: cleared when the engine or the server changes,
+ * SF-002) or says nothing about it (`false`: kept). A record over every default rather than a list, so a field added
+ * to `CONNECTION_FORM_DEFAULTS` fails the typecheck until someone decides which it is; see `startNewTarget`.
+ */
+const TARGET_SCOPED: Record<keyof ConnectionFormDefaults, boolean> = {
+  type: false,
+  name: false,
+  // Set by the caller: kept, or the engine's `defaultHost`, or the pasted one.
+  host: false,
+  port: true,
+  user: true,
+  password: true,
+  database: true,
+  schema: true,
+  queryTimeout: false,
+  connectionString: true,
+  mongoConnectionMode: true,
+  environment: false,
+  showSSL: false,
+  sslMode: false,
+  caCert: false,
+  clientCert: false,
+  clientKey: false,
+  showAdvanced: true,
+  serviceName: true,
+  instanceName: true,
+  localDataCenter: true,
+  authSource: true,
+  apiKeyId: true,
+  apiKeySecret: true,
+  saslMechanism: true,
+  skipObjectScan: false,
+  readOnly: false,
+  allowInsecureAuth: true,
+  dataServers: true,
+  warehouse: true,
+  location: true,
+  authMethod: true,
+  privateKey: true,
+  privateKeyPassphrase: true,
+  role: true,
+  region: true,
+  apiPath: true,
+  namespaces: true,
+  tlsServerName: true,
+  amqpPort: true,
+  securityMode: true,
+  serverCertificateThumbprint: true,
+  showSSH: false,
+  sshEnabled: false,
+  sshHost: false,
+  sshPort: false,
+  sshUsername: false,
+  sshAuthMethod: false,
+  sshPassword: false,
+  sshPrivateKey: false,
+  sshPassphrase: false,
+};
+
+const TARGET_SCOPED_FIELDS = (Object.keys(TARGET_SCOPED) as (keyof ConnectionFormDefaults)[]).filter(
+  (key) => TARGET_SCOPED[key],
+);
+
 interface UseConnectionFormProps {
   isOpen: boolean;
   onClose: () => void;
@@ -948,16 +1012,40 @@ export function useConnectionForm({ isOpen, onConnect, editConnection, onTestCon
   }, []);
 
   /**
-   * The type as the dialog chooses it. An engine that declares `defaultHost` opens its Host box holding that, never
-   * the host typed for the engine chosen before it; choosing the engine already chosen keeps what was typed for it.
+   * The form emptied for another engine or server, so nothing typed for one is sent to another (SF-002): every
+   * credential the server reads (password or token, private key and passphrase, API key pair, auth database, SASL
+   * mechanism, the consent to a cleartext password) and every engine-specific context field (user, database, schema,
+   * warehouse, role, sign-in method, connection string and the rest) goes back to its default. Kept: what says nothing
+   * about the server (name, environment, query timeout, the read-only and no-scan choices, as `applyImported` keeps
+   * them), the Host box as `nextHost` gives it, and the network path, the SSL / TLS panel and the SSH tunnel, which a
+   * type switch has always kept (`buildConnection` sends them only to an engine that offers them) and whose secrets go
+   * to the user's own bastion or stay in the TLS handshake, never to the database server.
+   */
+  const startNewTarget = useCallback(
+    (next: DatabaseType, nextHost: string) => {
+      for (const key of TARGET_SCOPED_FIELDS) {
+        (resetSetters[key] as (value: ConnectionFormDefaults[typeof key]) => void)(CONNECTION_FORM_DEFAULTS[key]);
+      }
+      setType(next);
+      setHost(nextHost);
+      setPort(getDBConfig(next).defaultPort);
+      // The next server has not been warned about anything.
+      setAcknowledgedCaution(null);
+    },
+    [resetSetters],
+  );
+
+  /**
+   * The type as the dialog chooses it. Another engine opens with no credential or engine-specific field of the one
+   * chosen before it (`startNewTarget`); its Host box keeps what was typed, unless the engine declares `defaultHost`,
+   * which it then holds. Choosing the engine already chosen keeps everything typed for it.
    */
   const chooseType = useCallback(
     (next: DatabaseType) => {
-      const opening = getDBConfig(next).defaultHost;
-      if (next !== type && opening !== undefined) setHost(opening);
-      setType(next);
+      if (next === type) return;
+      startNewTarget(next, getDBConfig(next).defaultHost ?? host);
     },
-    [type],
+    [type, host, startNewTarget],
   );
 
   /**
@@ -1410,8 +1498,12 @@ export function useConnectionForm({ isOpen, onConnect, editConnection, onTestCon
       return;
     }
 
-    // Auto-switch DB type
-    chooseType(parsed.type);
+    // Auto-switch DB type. A paste for another engine, or one naming another server than the Host box holds, starts
+    // from an empty form, so the previous engine's or account's password, token, key, passphrase, database or schema
+    // is never sent to the server the paste names (SF-002); one naming the same server fills in over what is typed.
+    const identity = (text: string) => getDBConfig(parsed.type).hostIdentity?.(text) ?? text.trim().toLowerCase();
+    const newTarget = parsed.type !== type || (parsed.host !== undefined && identity(parsed.host) !== identity(host));
+    if (newTarget) startNewTarget(parsed.type, getDBConfig(parsed.type).defaultHost ?? host);
     // The sign-in method first, clearing the other method's secret, so the credential the paste names below wins.
     if (parsed.authMethod) applyAuthMethod(parsed.type, parsed.authMethod);
     if (parsed.host) setHost(parsed.host);
@@ -1527,7 +1619,7 @@ export function useConnectionForm({ isOpen, onConnect, editConnection, onTestCon
         .filter(Boolean)
         .join(" "),
     });
-  }, [pasteInput, name, sslMode, applyAuthMethod, chooseType]);
+  }, [pasteInput, name, type, host, sslMode, applyAuthMethod, chooseType, startNewTarget]);
 
   /**
    * Fills the form from one entry of the import the type declares (`connectionImport` in db-ui-config.ts). The entry

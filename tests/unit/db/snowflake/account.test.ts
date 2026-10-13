@@ -6,6 +6,7 @@ import {
   SNOWFLAKE_MAX_HOST_LABELS,
   SNOWFLAKE_FIELD_SENTENCES,
   snowflakeHostHint,
+  snowflakeHostIdentity,
 } from "@/lib/db/providers/sql/snowflake/account-host";
 import { snowflakeEndpoint } from "@/lib/db/providers/sql/snowflake/account";
 import { SnowflakeError } from "@/lib/db/providers/sql/snowflake/errors";
@@ -159,6 +160,13 @@ describe("the host test and the hint", () => {
     expect(snowflakeHostHint("myorg-myacct")).toBe("Studio connects to myorg-myacct.snowflakecomputing.com.");
     expect(snowflakeHostHint("jdbc:x")).toBeUndefined();
     expect(snowflakeHostHint("")).toBeUndefined();
+  });
+  test("the identity of an account: one account however it is spelled, the text itself when it does not read", () => {
+    expect(snowflakeHostIdentity("myorg-myacct")).toBe("myorg-myacct.snowflakecomputing.com");
+    expect(snowflakeHostIdentity(" https://MYORG-MYACCT.snowflakecomputing.com/ ")).toBe(
+      "myorg-myacct.snowflakecomputing.com",
+    );
+    expect(snowflakeHostIdentity(" JDBC:X ")).toBe("jdbc:x");
   });
 });
 

@@ -44,6 +44,7 @@ import {
   SNOWFLAKE_ACCOUNT_PATTERN,
   SNOWFLAKE_FIELD_SENTENCES,
   snowflakeHostHint,
+  snowflakeHostIdentity,
 } from "@/lib/db/providers/sql/snowflake/account-host";
 
 // DB brand icons share the same interface as LucideIcon (className + SVG props)
@@ -144,6 +145,12 @@ export interface DatabaseUIConfig {
    * entry for `host` while it answers; absent, the static hint is drawn as before.
    */
   hostHint?: (host: string) => string | undefined;
+  /**
+   * The server a Host text names, for telling whether a pasted connection string names the server already in the box
+   * or another one, whose credentials the form then drops. Read through `hostIdentity`; absent, the text trimmed and
+   * lower-cased.
+   */
+  hostIdentity?: (host: string) => string;
   /**
    * The sentence under the connection dialog's Read-only toggle, where this engine's mode differs from
    * the dialog's own sentence, which says the mode can be turned off. Neo4j declares one because its
@@ -1000,6 +1007,8 @@ export const DB_UI_CONFIG: Record<DatabaseType, DatabaseUIConfig> = {
     fieldHints: SNOWFLAKE_FIELD_HINTS,
     // Once the Account reads, the hint names the host Studio connects to.
     hostHint: snowflakeHostHint,
+    // `myorg-myacct` and `https://MYORG-MYACCT.snowflakecomputing.com` are one account.
+    hostIdentity: snowflakeHostIdentity,
     fieldRules: SNOWFLAKE_FIELD_RULES,
     // One credential at a time: the key and its passphrase for a key pair, the token for an access token.
     fieldShownWhen: {

@@ -31,7 +31,7 @@ None of it is a GitHub issue.
 - [Drivers and connections](#drivers-and-connections) — D1-D348, U17 · 248
 - [Value interpolation](#value-interpolation) — V1
 - [Row editing](#row-editing) — R1–R3 · 3
-- [Studio UI and query execution](#studio-ui-and-query-execution) — X2-X27, U2-U139 · 129
+- [Studio UI and query execution](#studio-ui-and-query-execution) — X2-X27, U2-U139 · 128
 - [Dependencies](#dependencies) — P1-P9 · 7
 - [Documentation](#documentation) — DOC3-DOC25 · 22
 - [Release pipeline](#release-pipeline) — REL1-REL8 · 8
@@ -4910,16 +4910,6 @@ Found 2026-10-05 by the final review of the platform integration branch.
 Not fixed there: the flash needs a "policy unknown" state, and the import block was kept unchanged to avoid a merge conflict.
 
 **Done when:** a policy-unknown state withholds the controls, the policy and managed reads run in parallel while no connection is made active before the policy is known, and the unused import is gone.
-
-### U91. A user typed for another engine rides along to libSQL
-
-The connection form keeps its `user` when the type changes (the type buttons in `src/components/ConnectionModal.tsx` call `setType` and reset only the port).
-libSQL now takes a user and sends HTTP Basic when one is set, so a name typed for another engine is saved on a libSQL connection, and a server that expects a bearer token answers `401`.
-
-Found 2026-10-05 by the final review of the platform integration branch.
-Not fixed there: it needs a form-state change outside that work.
-
-**Done when:** switching to a type that newly takes a user starts that field empty, or the form asks, with a test.
 
 ### U92. The remembered active connection outlives its connection
 

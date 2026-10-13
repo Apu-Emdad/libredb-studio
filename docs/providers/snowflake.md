@@ -182,6 +182,8 @@ The pasted text is read in the browser and never kept: it is not stored as a con
 It applies `user`, `warehouse`, `db` or `database`, `schema`, `role`, `authenticator` (`SNOWFLAKE_JWT` or `PROGRAMMATIC_ACCESS_TOKEN`), `token`, and the key passphrase parameters.
 An inline key parameter and every file-path parameter are refused by name, a password is named as not applied, and every other parameter is counted, never named; no value is ever echoed.
 A refused paste fills no field and clears the paste box, and the dialog switches to Snowflake, so the Private key box its sentence names is in view.
+A paste that names another account than Account holds, or that switches the dialog from another engine, first clears every credential and context field (User, Sign-in, Private key, Passphrase, Access token, Warehouse, Database, Schema, Role), so one account's token or key is never sent to another; a paste naming the account already in Account fills in over what was typed.
+Choosing another engine in the dialog clears the same fields the other way, so a Snowflake warehouse, user or secret does not follow to it; only the name, the environment, the query timeout and the read-only and no-scan choices are kept.
 `insecureMode` and `disableOCSPChecks` never lower TLS.
 
 ### 2.7 Seeding

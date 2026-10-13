@@ -279,3 +279,124 @@ describe("the Snowflake Schema, Database and User boxes", () => {
     expect(field("user").placeholder).toBe("root");
   });
 });
+
+describe("a new engine or a new account opens without the previous one's credentials (SF-002)", () => {
+  const choose = (name: string) => fireEvent.click(screen.getByRole("button", { name }));
+
+  function openDialog() {
+    const probe = mock(async (_connection: DatabaseConnection) => ({ success: true }));
+    render(<ConnectionModal isOpen onClose={() => {}} onConnect={() => {}} onTestConnection={probe} />);
+    return probe;
+  }
+
+  function paste(text: string) {
+    fireEvent.click(screen.getByRole("button", { name: "Paste URL" }));
+    const box = document.querySelector('input[placeholder^="postgres://"]') as HTMLInputElement;
+    fireEvent.change(box, { target: { value: text } });
+    fireEvent.click(screen.getByRole("button", { name: "Parse" }));
+  }
+
+  test("PostgreSQL's user, password and database never reach Snowflake, and the token box opens empty", async () => {
+    const probe = openDialog();
+    fireEvent.change(field("name"), { target: { value: "kept name" } });
+    fireEvent.change(field("user"), { target: { value: "pguser" } });
+    fireEvent.change(field("password"), { target: { value: "PG-SENTINEL" } });
+    fireEvent.change(field("database"), { target: { value: "pgdb" } });
+    choose("Snowflake");
+    expect(field("user").value).toBe("");
+    expect(field("database").value).toBe("");
+    fireEvent.change(field("host"), { target: { value: "myorg-myacct" } });
+    fireEvent.change(field("authMethod"), { target: { value: "pat" } });
+    expect(field("password").value).toBe("");
+    fireEvent.change(field("user"), { target: { value: "u" } });
+    fireEvent.change(field("role"), { target: { value: "R" } });
+    fireEvent.change(field("password"), { target: { value: "S-TOKEN" } });
+    await click("Test Connection");
+    expect(probe).toHaveBeenCalledTimes(1);
+    const sent = JSON.stringify(probe.mock.calls[0][0]);
+    expect(sent).not.toContain("PG-SENTINEL");
+    expect(sent).not.toContain("pguser");
+    expect(sent).not.toContain("pgdb");
+    // The name is not the engine's, so it stays.
+    expect(probe.mock.calls[0][0].name).toBe("kept name");
+  });
+
+  test("a Snowflake URL pasted over PostgreSQL's fields carries none of them", () => {
+    openDialog();
+    fireEvent.change(field("user"), { target: { value: "pguser" } });
+    fireEvent.change(field("password"), { target: { value: "PG-SENTINEL" } });
+    fireEvent.change(field("database"), { target: { value: "pgdb" } });
+    paste("jdbc:snowflake://myorg-myacct.snowflakecomputing.com/?user=alice&authenticator=PROGRAMMATIC_ACCESS_TOKEN");
+    expect(field("user").value).toBe("alice");
+    expect(field("password").value).toBe("");
+    expect(field("database").value).toBe("");
+    expect(everythingDrawn()).not.toContain("PG-SENTINEL");
+  });
+
+  test("a second paste naming another account drops the first account's token, database and schema", async () => {
+    const probe = openDialog();
+    paste(
+      "jdbc:snowflake://acct-a.snowflakecomputing.com/?user=alice&warehouse=WH1&db=DB1&schema=S1&role=R1&authenticator=PROGRAMMATIC_ACCESS_TOKEN&token=TOKEN_A_123",
+    );
+    expect(field("password").value).toBe("TOKEN_A_123");
+    paste("jdbc:snowflake://other-acct.snowflakecomputing.com/?user=bob");
+    expect(field("host").value).toBe("other-acct.snowflakecomputing.com");
+    expect(field("user").value).toBe("bob");
+    expect(field("database").value).toBe("");
+    expect(field("schema").value).toBe("");
+    // The sign-in method is the first account's choice too, so the form opens on the default key pair.
+    expect((field("authMethod") as unknown as HTMLSelectElement).value).toBe("keypair");
+    expect(everythingDrawn()).not.toContain("TOKEN_A_123");
+    fireEvent.change(field("role"), { target: { value: "R" } });
+    fireEvent.change(field("privateKey"), { target: { value: pemArmour("BEGIN") } });
+    await click("Test Connection");
+    expect(JSON.stringify(probe.mock.calls[0][0])).not.toContain("TOKEN_A_123");
+  });
+
+  test("a paste naming the same account keeps what was typed for it", () => {
+    openDialog();
+    choose("Snowflake");
+    fireEvent.change(field("host"), { target: { value: "myorg-myacct" } });
+    fireEvent.change(field("privateKey"), { target: { value: "KEY-TYPED" } });
+    paste("snowflake://carol@MYORG-MYACCT/DB3");
+    expect(field("user").value).toBe("carol");
+    expect(field("privateKey").value).toBe("KEY-TYPED");
+  });
+
+  test("a typed key and passphrase survive neither a paste for another account nor a switch to PostgreSQL and back", () => {
+    openDialog();
+    choose("Snowflake");
+    fireEvent.change(field("host"), { target: { value: "myorg-myacct" } });
+    fireEvent.change(field("privateKey"), { target: { value: "KEY-SENTINEL" } });
+    fireEvent.change(field("privateKeyPassphrase"), { target: { value: "PASS-SENTINEL" } });
+    paste("snowflake://carol@third-acct/DB3");
+    expect(field("host").value).toBe("third-acct.snowflakecomputing.com");
+    expect(field("privateKey").value).toBe("");
+    expect(field("privateKeyPassphrase").value).toBe("");
+
+    fireEvent.change(field("privateKey"), { target: { value: "KEY-SENTINEL" } });
+    fireEvent.change(field("privateKeyPassphrase"), { target: { value: "PASS-SENTINEL" } });
+    choose("PostgreSQL");
+    choose("Snowflake");
+    expect(field("privateKey").value).toBe("");
+    expect(field("privateKeyPassphrase").value).toBe("");
+  });
+
+  test("Snowflake's warehouse and user are not sent to Databend", async () => {
+    const probe = openDialog();
+    choose("Snowflake");
+    fireEvent.change(field("host"), { target: { value: "myorg-myacct" } });
+    fireEvent.change(field("user"), { target: { value: "SVC" } });
+    fireEvent.change(field("warehouse"), { target: { value: "STUDIO_PROBE_WH" } });
+    choose("Databend");
+    expect(field("warehouse").value).toBe("");
+    expect(field("user").value).toBe("");
+    fireEvent.change(field("host"), { target: { value: "databend.internal" } });
+    fireEvent.change(field("user"), { target: { value: "cloudapp" } });
+    await click("Test Connection");
+    expect(probe).toHaveBeenCalledTimes(1);
+    const sent = probe.mock.calls[0][0];
+    expect(sent).not.toHaveProperty("warehouse");
+    expect(sent.user).toBe("cloudapp");
+  });
+});
