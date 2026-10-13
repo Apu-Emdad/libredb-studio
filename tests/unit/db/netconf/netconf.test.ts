@@ -88,6 +88,70 @@ test("a four byte character split across two reads decodes correctly", () => {
   expectEqual(step.messages, [payload]);
 });
 
+/**
+ * Frames `payload` the way a server does: in chunks of `chunkBytes`, not as one chunk.
+ *
+ * `frame()` writes one chunk, which is why the test above could split a message in half and still
+ * pass while the reader was losing data: with one chunk, a split that lands inside it completes
+ * nothing, so nothing is consumed and nothing can be dropped.
+ */
+function framedInChunks(payload: string, chunkBytes: number): string {
+  const buffer = Buffer.from(payload, "utf8");
+  let out = "";
+  for (let at = 0; at < buffer.length; at += chunkBytes) {
+    const piece = buffer.subarray(at, Math.min(at + chunkBytes, buffer.length));
+    out += `\n#${piece.length}\n${piece.toString("utf8")}`;
+  }
+  return `${out}\n##\n`;
+}
+
+function fedInPieces(text: string, size: number): string[] {
+  const reader = new FrameReader("chunked", limits);
+  const messages: string[] = [];
+  for (let at = 0; at < text.length; at += size) messages.push(...reader.feed(text.slice(at, at + size)).messages);
+  return messages;
+}
+
+/**
+ * MEASURED 2026-10-13, against Netopeer2 over SSH: a `get-schema` reply of 39,348 bytes arrived as
+ * four chunks of 10,240, 10,240, 10,240 and 8,593 bytes, in nine TCP pieces. The reader kept the
+ * assembled part of a message in a local variable, so a feed that completed a chunk without
+ * completing the message returned and discarded it, while those bytes were already gone from the
+ * buffer. It still answered exactly one message: the tail of the reply, with its opening tag and
+ * its `message-id` missing. The session then refused it for carrying no `message-id`, a true
+ * sentence that pointed nowhere near the loss.
+ */
+test("a message framed in several chunks arrives whole when the pieces do not align with the chunks", () => {
+  const payload = `<rpc-reply message-id="7">${"x".repeat(26_000)}</rpc-reply>`;
+  const written = framedInChunks(payload, 10_240);
+  expectBe((written.match(/\n#\d+\n/g) ?? []).length, 3, "the payload has to span more than one chunk");
+  for (const size of [1_024, 4_096, 8_192, 10_240, 10_241]) {
+    expectEqual(fedInPieces(written, size), [payload]);
+  }
+});
+
+test("feeding a multi-chunk message at once and in pieces answer the same message", () => {
+  const payload = `<rpc-reply message-id="8">${"\u00e7".repeat(9_000)}</rpc-reply>`;
+  const written = framedInChunks(payload, 4_096);
+  const whole = new FrameReader("chunked", limits).feed(written).messages;
+  expectEqual(whole, [payload]);
+  expectEqual(fedInPieces(written, 777), whole);
+});
+
+/**
+ * The part held between feeds is bounded as it grows, not only where the message ends. A peer that
+ * keeps sending chunks and never sends the terminator holds its bytes there rather than in the
+ * buffer, so a cap checked at the terminator alone would never run.
+ */
+test("chunks that never terminate are refused once they pass the message cap", () => {
+  const reader = new FrameReader("chunked", { maxMessageBytes: 64, maxBufferBytes: 1_048_576 });
+  let fault: unknown;
+  for (let sent = 0; sent < 10 && fault === undefined; sent += 1) {
+    fault = reader.feed(`\n#32\n${"y".repeat(32)}`).fault;
+  }
+  expectBe((fault as { kind?: string } | undefined)?.kind, "message-too-large");
+});
+
 test("every measured key value round trips and none keeps the separator", () => {
   const values = [
     "ge-0/0/0",
@@ -293,6 +357,43 @@ test("no sixth operation element can be emitted, read from the source rather tha
   ]);
   const operations = [...emitted].filter((name) => !arguments_.has(name));
   expectEqual(operations.sort(), ["close-session", "get", "get-config", "get-data", "get-schema"]);
+});
+
+/**
+ * The two read operations carry a subtree filter in different elements, and taking them to be the
+ * same cost both NMDA reads their whole result.
+ *
+ * MEASURED 2026-10-13 against Netopeer2: `<get-data>` carrying `<filter type="subtree">` is
+ * refused with `operation-failed` and the device's own sentence, `Node "filter" not found as a
+ * child of "get-data" node.`, on `operational` and on `running` alike, while `<get-config>` with
+ * the identical filter answered 987,956 bytes. With `<subtree-filter>` the same `<get-data>` on
+ * running answered 234,120 bytes, every one of the 5,000 entries at depth 2.
+ * STANDARD: RFC 8526 section 3.1.1 names the child `subtree-filter`.
+ *
+ * No test caught this, and the reason is worth keeping: every request test compared our text with
+ * our own expectation of our text. A device was the only thing that could tell us.
+ */
+test("get-data carries subtree-filter and the older reads carry filter type=subtree", () => {
+  const filter = { nodes: [{ name: "interfaces" }] };
+  const data = buildRpc({ operation: "get-data", datastore: "running", filter, maxDepth: 2 }, 1);
+  expectMatch(data, /<subtree-filter><interfaces><\/interfaces><\/subtree-filter>/);
+  expectBe(data.includes('<filter type="subtree">'), false, "get-data must not carry the older element");
+  for (const older of [
+    buildRpc({ operation: "get", filter }, 2),
+    buildRpc({ operation: "get-config", source: "running", filter }, 3),
+  ]) {
+    expectMatch(older, /<filter type="subtree"><interfaces><\/interfaces><\/filter>/);
+    expectBe(older.includes("<subtree-filter>"), false, "get and get-config keep the RFC 6241 element");
+  }
+});
+
+test("the filter element is the only difference: the node chain inside it is the same text", () => {
+  const filter = { nodes: [{ name: "interfaces" }, { name: "interface", keys: ["ge-0/0/0"] }] };
+  const inner = /<interfaces>.*<\/interfaces>/;
+  const fromData = inner.exec(buildRpc({ operation: "get-data", datastore: "running", filter }, 1))?.[0];
+  const fromGet = inner.exec(buildRpc({ operation: "get", filter }, 2))?.[0];
+  expectTruthy(fromData !== undefined && fromData.includes("ge-0/0/0"));
+  expectBe(fromGet, fromData);
 });
 
 test("max-depth 0 and 1 are never sent, because the server refuses one and empties the other", () => {

@@ -43,6 +43,26 @@ export interface SubtreeFilter {
  * for the unfiltered read. This is the shape every grid page uses.
  */
 export function subtreeFilter(filter: SubtreeFilter): string {
+  return `<filter type="subtree">${filterBody(filter)}</filter>`;
+}
+
+/**
+ * The same node chain for `<get-data>`, which carries it in a different element.
+ *
+ * MEASURED 2026-10-13 against Netopeer2: `<get-data>` with `<filter type="subtree">` is refused
+ * with `operation-failed` and the device's own sentence, `Node "filter" not found as a child of
+ * "get-data" node.`, on `operational` and on `running` alike, while the identical filter is
+ * answered by `<get-config>`. STANDARD: RFC 8526 section 3.1.1 names the child `subtree-filter`,
+ * so the two operations do not share the element and only the body is shared. This cost two reads
+ * their whole result, and no test caught it, because every test compared our own text with our own
+ * expectation.
+ */
+export function nmdaSubtreeFilter(filter: SubtreeFilter): string {
+  return `<subtree-filter>${filterBody(filter)}</subtree-filter>`;
+}
+
+/** The node chain itself, without the element that carries it. */
+function filterBody(filter: SubtreeFilter): string {
   const build = (index: number): string => {
     const node = filter.nodes[index];
     if (!node) return "";
@@ -54,7 +74,7 @@ export function subtreeFilter(filter: SubtreeFilter): string {
     const inner = keys.join("") + build(index + 1);
     return `<${node.name}${ns}>${inner}</${node.name}>`;
   };
-  return `<filter type="subtree">${build(0)}</filter>`;
+  return build(0);
 }
 
 /**
@@ -159,7 +179,7 @@ function buildOperation(request: NetconfRequest): string {
       return (
         `<get-data xmlns="${NMDA_NS}" xmlns:ds="${DATASTORE_NS}">` +
         `<datastore>ds:${request.datastore}</datastore>` +
-        `${request.filter ? subtreeFilter(request.filter) : ""}${depth}${defaults}` +
+        `${request.filter ? nmdaSubtreeFilter(request.filter) : ""}${depth}${defaults}` +
         `</get-data>`
       );
     }

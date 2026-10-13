@@ -63,6 +63,20 @@ export function frame(payload: string, framing: Framing): string {
  */
 export class FrameReader {
   private buffer = "";
+  /**
+   * The part of a chunked message whose chunks have arrived, across feeds.
+   *
+   * MEASURED 2026-10-13, against Netopeer2 over SSH: a 39,348 byte `get-schema` reply arrived in
+   * nine pieces, framed as four chunks of 10,240, 10,240, 10,240 and 8,593 bytes. This was a local
+   * variable, so a feed that completed a chunk but not the message returned, discarded what it had
+   * assembled, and left the next feed to start from empty, while the bytes it dropped had already
+   * been taken out of `buffer`. The reader still answered exactly one message, and the message was
+   * the tail of the reply with its opening tag missing. Nothing failed: the session then refused
+   * the reply for carrying no `message-id`, which is a true sentence about a mutilated message and
+   * says nothing about where the bytes went. A reply that had arrived in one piece was correct, so
+   * every test that fed a whole message passed.
+   */
+  private assembled = "";
   private framing: Framing;
   private readonly limits: FrameLimits;
   private faulted = false;
@@ -93,6 +107,7 @@ export class FrameReader {
   private fail(fault: FrameFault): FrameStep {
     this.faulted = true;
     this.buffer = "";
+    this.assembled = "";
     return { messages: [], fault };
   }
 
@@ -113,16 +128,15 @@ export class FrameReader {
 
   private readChunked(): FrameStep {
     const messages: string[] = [];
-    let assembled = "";
     for (;;) {
       if (this.buffer.startsWith("\n##\n")) {
         this.buffer = this.buffer.slice(4);
-        const bytes = Buffer.byteLength(assembled, "utf8");
+        const bytes = Buffer.byteLength(this.assembled, "utf8");
         if (bytes > this.limits.maxMessageBytes) {
           return this.fail({ kind: "message-too-large", bytes, cap: this.limits.maxMessageBytes });
         }
-        messages.push(assembled);
-        assembled = "";
+        messages.push(this.assembled);
+        this.assembled = "";
         continue;
       }
       const header = /^\n#(\d+)\n/.exec(this.buffer);
@@ -145,8 +159,16 @@ export class FrameReader {
       const slice = this.buffer.slice(start);
       if (Buffer.byteLength(slice, "utf8") < value) return { messages };
       const body = takeBytes(slice, value);
-      assembled += body;
+      this.assembled += body;
       this.buffer = slice.slice(body.length);
+      // The cap is checked as the message grows, not only where it ends. A peer that keeps sending
+      // chunks and never sends the terminator holds bytes here rather than in `buffer`, so
+      // checking only at the terminator would leave this half of the read unbounded, and the
+      // buffer cap in `feed` would never see them.
+      const held = Buffer.byteLength(this.assembled, "utf8");
+      if (held > this.limits.maxMessageBytes) {
+        return this.fail({ kind: "message-too-large", bytes: held, cap: this.limits.maxMessageBytes });
+      }
     }
   }
 }
