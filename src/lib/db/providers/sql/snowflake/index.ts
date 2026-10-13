@@ -360,6 +360,8 @@ export class SnowflakeProvider extends SQLBaseProvider {
         mode: "session-default",
         whenNoDefault: { walk: "parent-default-children", skip: ["INFORMATION_SCHEMA"] },
       },
+      // A schema diff compares the Database and Schema the connection names, never every database the role sees.
+      schemaDiffScope: "agent-walk",
       // Every statement that needs a warehouse can resume it and bills at least a minute: read from configuration alone.
       resumesBilledCompute: true,
     };

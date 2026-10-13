@@ -349,7 +349,7 @@ A statement that needs a warehouse resumes a suspended one when AUTO_RESUME is T
 | Export | none: it writes the rows the grid holds | - | - |
 | Load More, inline edit, profiler, test data, maintenance | none: off in v1 | - | - |
 | AI panels, history, code generation | none: text only | - | - |
-| Schema diff | the inventory with columns, every container | no (`SHOW`) | the user's compare |
+| Schema diff | the inventory with columns, of the configured Database and Schema only (with no Schema, that database's schemas less `INFORMATION_SCHEMA`); with no Database the diff is refused in a sentence and shows no difference or migration for that side | no (`SHOW`) | the user's compare |
 | Object search | `SHOW` per kind | no | the user's search |
 
 A Source tab restored on a connection Studio opened by itself says, until the user acts:

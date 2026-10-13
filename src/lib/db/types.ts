@@ -1571,6 +1571,22 @@ export interface ProviderCapabilities {
     };
   };
   /**
+   * Which containers a Schema Diff reads.
+   *
+   * Absent: every container the connection reaches, as before (a server-level connection is still read one database
+   * at a time). `"agent-walk"`: the containers `agentWalkScope` names, listed one level at a time from the top, and a
+   * connection that names none is refused in a sentence rather than read whole. Ignored without `agentWalkScope`.
+   *
+   * It is for an engine whose connection fields name the session's containers, so the walk's default is the
+   * connection's own choice: Snowflake's Database and Schema, without which a diff read every database the role sees.
+   * An engine whose walk default is only a container the server happens to hold leaves it absent: RabbitMQ marks `/`
+   * when the broker has it, and its form names no virtual host, so a narrowed diff would miss every other virtual
+   * host and advise setting a field that does not exist.
+   *
+   * Optional for the same published-interface reason as `containerLevels`.
+   */
+  schemaDiffScope?: "agent-walk";
+  /**
    * The row actions this engine offers on objects of named kinds, in menu order. See `KindRowAction`.
    *
    * Absent: no row offers one, which is every engine declared before this field existed. Read through

@@ -1000,6 +1000,7 @@ describe("the declarations", () => {
         mode: "session-default",
         whenNoDefault: { walk: "parent-default-children", skip: ["INFORMATION_SCHEMA"] },
       },
+      schemaDiffScope: "agent-walk",
     });
     expect(capabilities.containerLevels).toEqual([
       { id: "catalog", label: "Database", labelPlural: "Databases" },
