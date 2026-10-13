@@ -80,6 +80,7 @@ import {
   deadlineMsFor,
   foldIdentifier,
   SNOWFLAKE_QUERY_TAGS,
+  SNOWFLAKE_UNRESOLVED_CODES,
   type SnowflakeResult,
   type SnowflakeStatementRunner,
   type SnowflakeStatements,
@@ -442,7 +443,14 @@ export class SnowflakeProvider extends SQLBaseProvider {
       const roleCautions = await statements.checkRole();
       // A disconnect() while either statement ran took the session and closed it: this connect ended cancelled.
       if (this.connecting !== session) throw new SnowflakeError("cancelled", SNOWFLAKE_ERROR_SENTENCES.cancelled);
-      cautions = [...connectCautions(answer, warehouse, role), ...roleCautions];
+      // A warehouse the connect SHOW already cautioned on is not cautioned twice by the role check.
+      const showCautions = connectCautions(answer, warehouse, role);
+      cautions = [
+        ...showCautions,
+        ...roleCautions.filter(
+          (caution) => showCautions.length === 0 || caution.code !== SNOWFLAKE_UNRESOLVED_CODES.warehouse,
+        ),
+      ];
     } catch (error) {
       // A second connect() displaces this one from `connecting`: its session is closed here whoever holds it, and
       // its failure leaves the state of the connect that replaced it alone.

@@ -176,7 +176,7 @@ Studio does not otherwise read a token's format, but it refuses before anything 
 Test connection checks the key, the account, the role Snowflake runs as and the warehouse's state, without starting the warehouse.
 Your first query starts the warehouse if it is suspended, and Snowflake bills at least one minute for that.
 
-Test connection, Save and every connect send one `SHOW WAREHOUSES LIKE '<warehouse>'`, or `SHOW DATABASES LIMIT 1` when Warehouse is empty, then the role check, `SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s, CURRENT_USER() AS u`, with the same context.
+Test connection, Save and every connect send one `SHOW WAREHOUSES LIKE '<warehouse>'`, or `SHOW DATABASES LIMIT 1` when Warehouse is empty, then the role check, `SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s, CURRENT_USER() AS u, CURRENT_DATABASE() AS d, CURRENT_SCHEMA() AS c, CURRENT_WAREHOUSE() AS w`, with the same context.
 Neither needs a running warehouse: on the trial the role check answered with the warehouse suspended and left it suspended, and answered under a role holding no warehouse at all, so a connection with Warehouse empty passes it too.
 The check with `CURRENT_USER()` added answered the same way on 2026-10-14, the warehouse suspended before and after it.
 A role other than Role fails the connect with the role mismatch sentence of [section 11](#11-errors).
@@ -187,6 +187,11 @@ They add a caution only when something is wrong:
 - `Snowflake shows no warehouse named <wh> to role <role>. Check the name, and that the role has USAGE on it.`
 - `Warehouse <wh> is suspended and does not resume on its own, so queries fail until someone resumes it.`
 - `Warehouse is empty, so queries use the user's default warehouse and fail if the user has none. Browsing works without one.`
+- `Snowflake resolves no database named <db> for role <role>, so statements run with no current database and unqualified names fail. Check the name, its case, and that the role has USAGE on it.`
+- `Snowflake resolves no schema named <schema> in the connection's database for role <role>, so statements run with no current schema and unqualified names fail. Check the name, its case, and that the role has USAGE on it.`
+- `Snowflake resolves no warehouse named <wh> for role <role>, so queries fail although browsing works. Check the name, its case, and that the role has USAGE on it.`
+
+The last three come from the role check's `CURRENT_DATABASE()`, `CURRENT_SCHEMA()` and `CURRENT_WAREHOUSE()` answering NULL for a name the connection sets: the schema caution is left out when the database's was given, and the warehouse caution when the `SHOW WAREHOUSES` caution above already named that warehouse.
 
 When secondary roles are active for the user, Test connection shows this caution, because the tree, every SHOW and every statement can reach what those roles can, not only Role:
 
@@ -278,6 +283,7 @@ ALTER USER STUDIO_SVC ADD KEY PAIR libredb_studio_<fp8> PUBLIC_KEY = '<public ke
 Every request is its own Snowflake session context: Studio sends Database, Schema, Warehouse and Role on every request, and leaves a field out only when the connection leaves it empty, so Snowflake falls back to the user's default.
 Each of the four is read as a name in Snowflake SQL: an unquoted name is upper-cased, and double quotes keep its case, so `studio_ro` is sent as `STUDIO_RO` and `"Mixed Case"` as `Mixed Case`.
 The SQL API reads the four fields as exact names: a role it cannot resolve is refused, while a database, schema or warehouse name Snowflake cannot resolve leaves that context unset without an error: `CURRENT_DATABASE()`, `CURRENT_SCHEMA()` or `CURRENT_WAREHOUSE()` then answers NULL.
+The role check reads all three, so Test connection cautions on a configured name that answers NULL ([section 2.5](#25-test-connection)).
 The SQL API does not run `USE` (it answers code 391911, `Command not supported by SQL API: USE`), so a statement whose operative keyword is `USE` is refused before anything is sent:
 
 `Snowflake's SQL API does not run USE. Set Database, Schema, Warehouse or Role on the connection instead, or use fully qualified names such as database.schema.table. Nothing was sent.`

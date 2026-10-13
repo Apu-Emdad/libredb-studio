@@ -17,7 +17,7 @@
  * Each scenario's requests are checked against the fixture's, in order: the method, the path and its query (a
  * submit's `requestId` is the run's own), and the whole body. What is BUILT, each answer in the shape the capture
  * shows, and why:
- * - the role check's columns past `R` and `S` (the user since SF-005): the capture sent the two-column check, so
+ * - the role check's columns past `R` and `S` (the user since SF-005, the database, schema and warehouse since SF-019): the capture sent the two-column check, so
  *   `load()` widens every captured role check to `SNOWFLAKE_ROLE_CHECK_SQL`, its added cells answered as the account
  *   answers that connection (`widenRoleCheck`);
  * - the role check answering another role: the account refuses a role the credentials may not use at connect with
@@ -119,6 +119,9 @@ interface Scenario {
   readonly stopped?: { readonly statement: number; readonly sql: string; readonly reason: string };
 }
 
+/** A configured name as the account answers it once resolved (the capture's names are unquoted), or null when empty. */
+const named = (value: string): string | null => (value.trim() === "" ? null : value.toUpperCase());
+
 /** The role check as the capture sent it, before the columns Studio's check added since were in it. */
 const CAPTURED_ROLE_CHECK = "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s";
 
@@ -128,6 +131,9 @@ const CAPTURED_ROLE_CHECK = "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES
  */
 const ROLE_CHECK_ADDED: readonly { readonly name: string; readonly cell: (c: FixtureConnection) => string | null }[] = [
   { name: "U", cell: (connection) => connection.user.toUpperCase() },
+  { name: "D", cell: (connection) => named(connection.database) },
+  { name: "C", cell: (connection) => named(connection.schema) },
+  { name: "W", cell: (connection) => named(connection.warehouse) },
 ];
 
 type Row = readonly (string | null)[];
@@ -151,9 +157,9 @@ function widenRoleCheck(scenario: Scenario): Scenario {
       ...response.body,
       resultSetMetaData: {
         ...meta,
-        rowType: [...rowType, ...ROLE_CHECK_ADDED.map((column) => ({ ...rowType[1], name: column.name }))],
+        rowType: rowType.concat(ROLE_CHECK_ADDED.map((column) => Object.assign({}, rowType[1], { name: column.name }))),
       },
-      data: (response.body.data as Row[]).map((row) => [...row, ...cells]),
+      data: (response.body.data as Row[]).map((row) => row.concat(cells)),
     };
     return { ...exchange, response: { ...response, body } };
   });
@@ -405,6 +411,25 @@ describe("connect", () => {
     expect((error as Error).message).toBe(SNOWFLAKE_ERROR_SENTENCES.tokenUserMismatch("STUDIO_PAT", "studio_svc"));
     expect(statementsSent(entry)).toEqual(["SHOW WAREHOUSES LIKE 'STUDIO_PROBE_WH'", SNOWFLAKE_ROLE_CHECK_SQL]);
     expect(entry.provider.isConnected()).toBe(false);
+  });
+
+  test("a Database and Schema that do not resolve: Test Connection cautions on the database (SF-019, BUILT)", async () => {
+    // Measured 2026-10-14: the check under database D_NODB and schema D_NOSCHEMA answers NULL for both names.
+    const captured = load("connect-keypair");
+    const [row] = captured.exchanges[ROLE_CHECK_ANSWER].response.body.data as Row[];
+    const scenario = {
+      ...captured,
+      exchanges: withRows(captured.exchanges, ROLE_CHECK_ANSWER, [[...row.slice(0, 3), null, null, row[5]]]),
+    };
+    const { entry } = replayed(scenario, { database: "D_NODB", schema: "D_NOSCHEMA" });
+    await entry.provider.connect();
+    expect(entry.provider.isConnected()).toBe(true);
+    expect(entry.provider.connectWarnings()).toEqual([
+      {
+        code: "SNOWFLAKE_UNRESOLVED_DATABASE",
+        message: SNOWFLAKE_STATEMENT_SENTENCES.unresolvedDatabase("D_NODB", "STUDIO_RW"),
+      },
+    ]);
   });
 
   test("browse-only, with no warehouse field: Test Connection succeeds with the empty-warehouse and secondary-role cautions", async () => {

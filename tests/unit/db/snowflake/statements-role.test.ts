@@ -10,6 +10,7 @@ import {
   SNOWFLAKE_QUERY_TAGS,
   SNOWFLAKE_ROLE_CHECK_SQL,
   SNOWFLAKE_STATEMENT_SENTENCES,
+  SNOWFLAKE_UNRESOLVED_CODES,
 } from "@/lib/db/providers/sql/snowflake/statements";
 import { logger } from "@/lib/logger";
 import { failureAnswer } from "../../../helpers/snowflake-answers";
@@ -182,6 +183,47 @@ describe("the signed-in user under token sign-in (SF-005)", () => {
     harness.transports.answer(SUBMIT, roleAnswer("STUDIO_RO", undefined, "pat-secret"));
     const error = await caught(harness.statements.checkRole());
     expect((error as SnowflakeError).message).not.toContain("pat-secret");
+  });
+});
+
+describe("a configured name Snowflake does not resolve (SF-019, D344)", () => {
+  const S = SNOWFLAKE_STATEMENT_SENTENCES;
+  const code = SNOWFLAKE_UNRESOLVED_CODES;
+
+  test("each configured name answered NULL is cautioned, in field order, after the secondary roles", async () => {
+    const harness = setup();
+    harness.transports.answer(
+      SUBMIT,
+      roleAnswer("STUDIO_RO", '{"roles":"ANALYST","value":""}', undefined, { database: null, warehouse: null }),
+    );
+    expect(await harness.statements.checkRole()).toEqual([
+      CAUTION("ANALYST"),
+      { code: code.database, message: S.unresolvedDatabase("SALES", "STUDIO_RO") },
+      { code: code.warehouse, message: S.unresolvedWarehouse("STUDIO_WH", "STUDIO_RO") },
+    ]);
+  });
+
+  test("a schema answered NULL under a database that resolved is cautioned", async () => {
+    const harness = setup();
+    harness.transports.answer(SUBMIT, roleAnswer("STUDIO_RO", undefined, undefined, { schema: null }));
+    expect(await harness.statements.checkRole()).toEqual([
+      { code: code.schema, message: S.unresolvedSchema("PUBLIC", "STUDIO_RO") },
+    ]);
+  });
+
+  test("a field the connection leaves empty is not cautioned, whatever the check answers for it", async () => {
+    const harness = setup({ context: { role: "STUDIO_RO", database: "", schema: undefined } });
+    harness.transports.answer(
+      SUBMIT,
+      roleAnswer("STUDIO_RO", undefined, undefined, { database: null, schema: null, warehouse: null }),
+    );
+    expect(await harness.statements.checkRole()).toEqual([]);
+  });
+
+  test("names that resolved give no caution", async () => {
+    const harness = setup();
+    harness.transports.answer(SUBMIT, roleAnswer("STUDIO_RO"));
+    expect(await harness.statements.checkRole()).toEqual([]);
   });
 });
 

@@ -64,7 +64,7 @@ describe("constants", () => {
     expect(SNOWFLAKE_ROWS_PER_RESULTSET).toBe(100_001);
     expect(SNOWFLAKE_LIMITER_OPTIONS).toEqual({ perProvider: 4, perEngine: 8, queueDepth: 64 });
     expect(SNOWFLAKE_ROLE_CHECK_SQL).toBe(
-      "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s, CURRENT_USER() AS u",
+      "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s, CURRENT_USER() AS u, CURRENT_DATABASE() AS d, CURRENT_SCHEMA() AS c, CURRENT_WAREHOUSE() AS w",
     );
   });
 

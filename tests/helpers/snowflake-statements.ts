@@ -137,18 +137,29 @@ export async function caught(promise: Promise<unknown>): Promise<unknown> {
 
 /**
  * The role check's answer: the effective role, the secondary roles value, as `CURRENT_SECONDARY_ROLES()` sends it,
- * and the signed-in user, `FAILURE.user` by default.
+ * the signed-in user, `FAILURE.user` by default, and the current database, schema and warehouse, `CONTEXT`'s by
+ * default (null where a name did not resolve).
  */
 export const roleAnswer = (
   role: string,
   secondary: string | null = '{"roles":"","value":""}',
   user: string | null = FAILURE.user,
+  names: {
+    readonly database?: string | null;
+    readonly schema?: string | null;
+    readonly warehouse?: string | null;
+  } = {},
 ): ScriptedAnswer =>
   resultAnswer({
-    columns: [
-      { name: "R", type: "text" },
-      { name: "S", type: "text" },
-      { name: "U", type: "text" },
+    columns: ["R", "S", "U", "D", "C", "W"].map((name) => ({ name, type: "text" })),
+    rows: [
+      [
+        role,
+        secondary,
+        user,
+        names.database === undefined ? (CONTEXT.database ?? null) : names.database,
+        names.schema === undefined ? (CONTEXT.schema ?? null) : names.schema,
+        names.warehouse === undefined ? (CONTEXT.warehouse ?? null) : names.warehouse,
+      ],
     ],
-    rows: [[role, secondary, user]],
   });

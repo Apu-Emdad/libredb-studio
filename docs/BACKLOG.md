@@ -3511,15 +3511,15 @@ Found 2026-10-12 in the external review of the Snowflake provider (#1714).
 
 **Done when:** a cancel during a retried submit answers true once the run ends cancelled, the race bounded by the submit work still to come plus the cancel's 5 s, with a test in `tests/unit/db/snowflake/statements-cancel.test.ts` over a 429 then 503 submit.
 
-### D344. Test Connection passes when a database, schema or warehouse name does not resolve
+### D344. The captured connect exchanges predate the role check's added columns
 
-The SQL API reads the request's database, schema and warehouse as exact names, and one it cannot resolve leaves that context unset without an error (measured on the trial account 2026-10-13: `CURRENT_DATABASE()`, `CURRENT_SCHEMA()` or `CURRENT_WAREHOUSE()` answered NULL).
-The role check, `SNOWFLAKE_ROLE_CHECK_SQL` in `src/lib/db/providers/sql/snowflake/statements.ts`, reads only `CURRENT_ROLE()` and `CURRENT_SECONDARY_ROLES()`, so a misspelt database or schema passes Test Connection with no word and fails at the first query that needs it; a warehouse that does not resolve passes too, with only the connect caution its `SHOW WAREHOUSES` row match gives (`noWarehouseRow`).
-Reading the other three in the same statement changes the captured exchanges under `tests/fixtures/snowflake/`, so it needs a re-capture on the trial account.
+The role check, `SNOWFLAKE_ROLE_CHECK_SQL` in `src/lib/db/providers/sql/snowflake/statements.ts`, now also reads `CURRENT_USER()` (the token sign-in's user check) and `CURRENT_DATABASE()`, `CURRENT_SCHEMA()` and `CURRENT_WAREHOUSE()` (a caution for a configured name that answers NULL), in the same statement.
+The fixtures under `tests/fixtures/snowflake/trial-2026-10-12-v10.37.100/` were captured with the two-column check, so `widenRoleCheck` in `tests/integration/db/snowflake-provider.test.ts` rewrites each captured role check to the current statement and builds the four added cells from the scenario's connection: every connect the integration test replays answers its role check partly BUILT.
+The six-column statement was run by hand on the trial account on 2026-10-14 (the warehouse stayed suspended; a database, schema or warehouse that does not resolve answered NULL), but no fixture records it.
 
-Found 2026-10-13 while fixing the Snowflake request's name folding.
+Found 2026-10-14 while fixing the Snowflake E2E sweep's SF-005 and SF-019.
 
-**Done when:** the role check also reads `CURRENT_DATABASE()`, `CURRENT_SCHEMA()` and `CURRENT_WAREHOUSE()`, a configured field that answers NULL adds a connect caution naming the field, the fixtures are re-captured on the trial account, and the provider doc's sections 2.5 and 4 state the caution.
+**Done when:** the scenarios are re-captured with `tests/live/snowflake-evidence.ts` (its plan already sends the six-column check), the integration test reads the new set, and `widenRoleCheck` and its BUILT note are deleted.
 
 ### D345. SQL Server refuses plan-mode grounding and the operations workflow on a login that can write
 

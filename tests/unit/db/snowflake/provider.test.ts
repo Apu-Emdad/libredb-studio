@@ -516,6 +516,30 @@ describe("the connect cautions", () => {
     ]);
   });
 
+  test("a warehouse the SHOW lists but the role check answers NULL for is cautioned once (SF-019)", async () => {
+    // SHOW WAREHOUSES lists a warehouse the role holds MONITOR on, while only USAGE lets it be the current one.
+    const entry = await connected(
+      { warehouse: "studio_wh", database: "D_NODB" },
+      warehouses(["STUDIO_WH", "STARTED", "X-Small", "true"]),
+      roleAnswer("STUDIO_RO", undefined, undefined, { database: null, schema: null, warehouse: null }),
+    );
+    expect(entry.provider.connectWarnings().map((w) => w.message)).toEqual([
+      SNOWFLAKE_STATEMENT_SENTENCES.unresolvedDatabase("D_NODB", "STUDIO_RO"),
+      SNOWFLAKE_STATEMENT_SENTENCES.unresolvedWarehouse("studio_wh", "STUDIO_RO"),
+    ]);
+  });
+
+  test("a warehouse the SHOW already cautioned on is not cautioned again by the role check", async () => {
+    const entry = await connected(
+      { warehouse: "D_NOWH" },
+      warehouses(),
+      roleAnswer("STUDIO_RO", undefined, undefined, { warehouse: null }),
+    );
+    expect(entry.provider.connectWarnings().map((w) => w.message)).toEqual([
+      SNOWFLAKE_INTROSPECT_SENTENCES.noWarehouseRow("D_NOWH", "STUDIO_RO"),
+    ]);
+  });
+
   test("none for a running warehouse, and none after disconnect()", async () => {
     const entry = await connected();
     expect(entry.provider.connectWarnings()).toEqual([]);

@@ -94,16 +94,30 @@ export const SNOWFLAKE_STATEMENT_SENTENCES = Object.freeze({
     "Snowflake's SQL API runs each statement in its own session, so a transaction cannot span statements. Nothing was sent. Run the whole transaction inside one EXECUTE IMMEDIATE $$ ... $$ block.",
   secondaryRoles: (roles: string, role: string) =>
     `Secondary roles are active for this user (${roles}), so this connection can read and change what those roles can, not only role ${role}. An administrator can set DEFAULT_SECONDARY_ROLES = () on the user.`,
+  unresolvedDatabase: (name: string, role: string) =>
+    `Snowflake resolves no database named ${name} for role ${role}, so statements run with no current database and unqualified names fail. Check the name, its case, and that the role has USAGE on it.`,
+  unresolvedSchema: (name: string, role: string) =>
+    `Snowflake resolves no schema named ${name} in the connection's database for role ${role}, so statements run with no current schema and unqualified names fail. Check the name, its case, and that the role has USAGE on it.`,
+  unresolvedWarehouse: (name: string, role: string) =>
+    `Snowflake resolves no warehouse named ${name} for role ${role}, so queries fail although browsing works. Check the name, its case, and that the role has USAGE on it.`,
   badHandle: "Snowflake answered without a statement handle Studio can use.",
   foreignLink: "Snowflake answered with a link outside this account's statements, so Studio did not follow it.",
 });
 
 /**
  * The role check `connect()` sends; M100 measured it to answer with the warehouse suspended, and with none at all.
- * `CURRENT_USER()` rides in the same statement, so the token sign-in's user check costs no request of its own.
+ * `CURRENT_USER()` and the three context names ride in the same statement, so the token sign-in's user check and the
+ * unresolved-name cautions cost no request of their own; the six-column form answered the same way on 2026-10-14.
  */
 export const SNOWFLAKE_ROLE_CHECK_SQL =
-  "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s, CURRENT_USER() AS u";
+  "SELECT CURRENT_ROLE() AS r, CURRENT_SECONDARY_ROLES() AS s, CURRENT_USER() AS u, CURRENT_DATABASE() AS d, CURRENT_SCHEMA() AS c, CURRENT_WAREHOUSE() AS w";
+
+/** The `code` of each unresolved-name caution the role check gives, so `connect()` can drop one said twice. */
+export const SNOWFLAKE_UNRESOLVED_CODES = Object.freeze({
+  database: "SNOWFLAKE_UNRESOLVED_DATABASE",
+  schema: "SNOWFLAKE_UNRESOLVED_SCHEMA",
+  warehouse: "SNOWFLAKE_UNRESOLVED_WAREHOUSE",
+} as const);
 
 /** The connection's `queryTimeoutMs` as Snowflake's `timeout`: whole seconds, rounded up, 1 to the maximum. */
 export function clampedTimeoutS(queryTimeoutMs: number): number {
@@ -663,7 +677,7 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
 
     async checkRole() {
       const result = await runSurface(SNOWFLAKE_ROLE_CHECK_SQL, SNOWFLAKE_QUERY_TAGS.roleCheck);
-      const [roleField, secondaryField, userField] = result.fields;
+      const [roleField, secondaryField, userField, databaseField, schemaField, warehouseField] = result.fields;
       const row = result.rows[0] ?? {};
       const actual = cellText(row[roleField]);
       const forms = secretForms([...options.secrets(), ...transport.recentTokens()]);
@@ -683,9 +697,33 @@ export function createSnowflakeStatements(options: SnowflakeStatementsOptions): 
         );
       }
       const roles = secondaryRoleNames(cellText(row[secondaryField]));
-      return roles === ""
-        ? []
-        : [{ message: SNOWFLAKE_STATEMENT_SENTENCES.secondaryRoles(serverMessage(roles, forms), context.role) }];
+      const cautions: QueryWarning[] =
+        roles === ""
+          ? []
+          : [{ message: SNOWFLAKE_STATEMENT_SENTENCES.secondaryRoles(serverMessage(roles, forms), context.role) }];
+      // The SQL API leaves a name it cannot resolve unset without an error (measured 2026-10-13), so a configured
+      // name answered as NULL is cautioned here; a schema is not, once its database already was.
+      const unset = (field: string | undefined, configured: string | undefined): configured is string =>
+        configured !== undefined && configured !== "" && cellText(row[field ?? ""]) === "";
+      const { database, schema, warehouse, role } = context;
+      if (unset(databaseField, database)) {
+        cautions.push({
+          code: SNOWFLAKE_UNRESOLVED_CODES.database,
+          message: SNOWFLAKE_STATEMENT_SENTENCES.unresolvedDatabase(database, role),
+        });
+      } else if (unset(schemaField, schema)) {
+        cautions.push({
+          code: SNOWFLAKE_UNRESOLVED_CODES.schema,
+          message: SNOWFLAKE_STATEMENT_SENTENCES.unresolvedSchema(schema, role),
+        });
+      }
+      if (unset(warehouseField, warehouse)) {
+        cautions.push({
+          code: SNOWFLAKE_UNRESOLVED_CODES.warehouse,
+          message: SNOWFLAKE_STATEMENT_SENTENCES.unresolvedWarehouse(warehouse, role),
+        });
+      }
+      return cautions;
     },
 
     async cancel(queryId) {
