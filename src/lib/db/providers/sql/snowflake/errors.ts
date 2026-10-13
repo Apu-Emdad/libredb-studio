@@ -175,6 +175,8 @@ export const SNOWFLAKE_ERROR_SENTENCES = Object.freeze({
   tlsRefused:
     "Snowflake refused the TLS certificate of this request (522). Studio sends no client certificate, so a proxy or gateway between Studio and Snowflake may be presenting one.",
   resultGone: "Snowflake no longer holds this statement's result; run it again.",
+  accountNotFound: (host: string) =>
+    `Snowflake has no account at ${host} (HTTP 404 on the first request). Check the account identifier: an organisation account is written orgname-account_name, with a hyphen after the organisation, and a locator outside AWS Oregon needs its region.`,
   invalidPayload:
     "Snowflake could not read the request Studio sent (390142). This is a Studio defect; please report it.",
   unreachable: (host: string) =>
@@ -328,7 +330,12 @@ export function failureError(failure: SnowflakeFailure, context: SnowflakeFailur
     return new SnowflakeError("unavailable", sentences.unavailable(status, context.attempts));
   }
   if (status === 522) return new SnowflakeError("unavailable", sentences.tlsRefused);
-  if (status === 404) return new SnowflakeError("query", sentences.resultGone);
+  if (status === 404) {
+    // A submit has no handle yet: its 404 is the host's load balancer answering for an account it does not have.
+    return failure.request === "submit"
+      ? new SnowflakeError("unavailable", sentences.accountNotFound(context.host))
+      : new SnowflakeError("query", sentences.resultGone);
+  }
   if (code === "390142") return new SnowflakeError("defect", sentences.invalidPayload);
   if (code !== null && NO_WAREHOUSE_CODES.has(code)) return new SnowflakeError("query", sentences.noWarehouse);
   if (code === "002003") {

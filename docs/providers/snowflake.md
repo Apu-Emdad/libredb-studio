@@ -579,7 +579,8 @@ Still unconfirmed: every Snowflake form not named above, among them `CREATE CATA
 | Rate limit after retries (429) | `ConnectionError` | `Snowflake is limiting requests from this account (429). Try again in a moment.` |
 | Server unavailable after retries (500, 502, 503, 504) | `ConnectionError` | `Snowflake did not answer this request (HTTP <n>) after <attempts> attempts.` |
 | Certificate refused by Snowflake (522) | `ConnectionError` | `Snowflake refused the TLS certificate of this request (522). Studio sends no client certificate, so a proxy or gateway between Studio and Snowflake may be presenting one.` |
-| Result gone (404) | `QueryError` | `Snowflake no longer holds this statement's result; run it again.` |
+| Result gone (404 on the status or partition GET of a statement Snowflake accepted) | `QueryError` | `Snowflake no longer holds this statement's result; run it again.` |
+| Account not found (404 on the first submit: `*.snowflakecomputing.com` resolves for any name, and the load balancer answers an account it does not have with a `File not Found` page) | `ConnectionError` | `Snowflake has no account at <host> (HTTP 404 on the first request). Check the account identifier: an organisation account is written orgname-account_name, with a hyphen after the organisation, and a locator outside AWS Oregon needs its region.` |
 | Invalid payload (390142) | `DatabaseError` | `Snowflake could not read the request Studio sent (390142). This is a Studio defect; please report it.` |
 | Host unreachable | `ConnectionError` | `Studio could not reach <host>. Check the account identifier; a locator outside AWS Oregon needs its region.` |
 | Certificate mismatch | `ConnectionError` | `The certificate <host> presented does not match its name. Check the account identifier, including the region for a locator.` |

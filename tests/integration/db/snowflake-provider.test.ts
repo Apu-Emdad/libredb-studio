@@ -527,6 +527,20 @@ describe("each refusal the fixtures hold, with its class and its sentence", () =
     },
   );
 
+  test("404 on the first submit: an account the host does not have, not a gone result (BUILT, SF-011)", async () => {
+    const connect = load("refusal-422");
+    const entry = build(connectionFor(connect.connection));
+    entry.transports.answer(
+      { method: "POST", path: /^\/api\/v2\/statements$/ },
+      { status: 404, text: "<html><body>File not Found</body></html>" },
+    );
+    const error = await caught(entry.provider.connect());
+    expect(error).toBeInstanceOf(ConnectionError);
+    expect(error.message).toBe(SNOWFLAKE_ERROR_SENTENCES.accountNotFound(`${ACCOUNT}.snowflakecomputing.com`));
+    expect(error.message).not.toBe(SNOWFLAKE_ERROR_SENTENCES.resultGone);
+    expect(entry.transports.requests).toHaveLength(1);
+  });
+
   test("404: the status GET of a handle whose result Snowflake no longer holds (BUILT)", async () => {
     const connect = load("refusal-422");
     const entry = build(connectionFor(connect.connection));

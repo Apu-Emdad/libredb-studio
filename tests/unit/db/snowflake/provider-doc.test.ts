@@ -206,6 +206,7 @@ const QUOTED: Readonly<Record<string, { readonly keys: readonly string[]; readon
       SNOWFLAKE_ERROR_SENTENCES.unavailable("<n>" as unknown as number, "<attempts>" as unknown as number),
       SNOWFLAKE_ERROR_SENTENCES.tlsRefused,
       SNOWFLAKE_ERROR_SENTENCES.resultGone,
+      SNOWFLAKE_ERROR_SENTENCES.accountNotFound("<host>"),
       SNOWFLAKE_ERROR_SENTENCES.invalidPayload,
       SNOWFLAKE_ERROR_SENTENCES.unreachable("<host>"),
       SNOWFLAKE_ERROR_SENTENCES.certMismatch("<host>"),

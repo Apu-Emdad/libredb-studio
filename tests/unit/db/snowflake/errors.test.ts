@@ -219,6 +219,22 @@ describe("failureError: every row of the error table", () => {
       sentence: "Snowflake no longer holds this statement's result; run it again.",
     },
     {
+      name: "result gone, 404 on a partition",
+      failure: failure({ status: 404, request: "partition" }),
+      category: "query",
+      house: QueryError,
+      sentence: "Snowflake no longer holds this statement's result; run it again.",
+    },
+    {
+      // Measured 2026-10-13: the load balancer of the wildcard *.snowflakecomputing.com answers a submit for an
+      // account it does not have with HTTP 404 and a text/html "File not Found" page.
+      name: "account not found, 404 on the submit",
+      failure: failure({ status: 404, request: "submit" }),
+      category: "unavailable",
+      house: ConnectionError,
+      sentence: `Snowflake has no account at myorg-myaccount.snowflakecomputing.com (HTTP 404 on the first request). Check the account identifier: an organisation account is written orgname-account_name, with a hyphen after the organisation, and a locator outside AWS Oregon needs its region.`,
+    },
+    {
       name: "invalid payload, 390142",
       failure: failure({ status: 400, code: "390142", message: "Incoming request does not contain a valid payload." }),
       category: "defect",
