@@ -14,8 +14,9 @@
  *   digits, and `timestamp_tz` the same, one space and an offset carried as minutes plus 1440. The arithmetic is
  *   exact, in `BigInt` nanoseconds, the fraction printed with the digits received. A pre-1970 fraction is one signed
  *   decimal, so `-1.5` is 1.5 seconds before the epoch. `ltz` is the UTC instant with `+00:00`, since every request
- *   sends `timezone: "UTC"`. A year outside 1 to 9999 is refused, so an integer-nanosecond text read as seconds
- *   fails loudly instead of showing a date millions of years away.
+ *   sends `timezone: "UTC"`. The calendar is proleptic Gregorian with astronomical years, as Snowflake counts days:
+ *   a year outside 1 to 9999, which Snowflake stores, is written with all its digits and a `-` at or before year 0
+ *   (`10000-01-01`, `-0002-06-01` for 3 BC), never refused, so one such cell cannot fail a result.
  * - `variant`, `object`, `array`, `map`, `vector` and every other type are their text verbatim, never parsed, so a
  *   10,000-deep VARIANT passes as a string. `vector` is not declared as a vector column: the trial capture
  *   (Snowflake 10.37.100, 2026-10-12) reports its `rowType` as `vector` with no element type or dimension, so the
@@ -80,9 +81,10 @@ const ONE = BigInt(1);
 const SIXTY = BigInt(60);
 const NANOS_PER_SECOND = BigInt(1_000_000_000);
 const SECONDS_PER_DAY = BigInt(86_400);
-/** 0001-01-01 00:00:00 and 9999-12-31 23:59:59 UTC, in seconds since the epoch. */
-const FIRST_SECOND = BigInt(-62_135_596_800);
-const LAST_SECOND = BigInt(253_402_300_799);
+const SECONDS_PER_HOUR = BigInt(3_600);
+/** The civil-from-days constants: the days from 0000-03-01 to the epoch, and the days of one 400-year era. */
+const DAYS_TO_EPOCH_FROM_MARCH_0 = BigInt(719_468);
+const DAYS_PER_ERA = BigInt(146_097);
 /** The offset `timestamp_tz` carries is the offset in minutes plus this. */
 const TZ_OFFSET_BIAS = BigInt(1440);
 
@@ -149,16 +151,47 @@ function fractionText(nanos: bigint, digits: number): string {
   return digits === 0 ? "" : `.${nanos.toString().padStart(9, "0").slice(0, digits)}`;
 }
 
-/** `YYYY-MM-DD HH:MM:SS` of a whole second, refused outside years 1 to 9999. */
-function wallTime(seconds: bigint, column: SnowflakeColumn): string {
-  if (seconds < FIRST_SECOND || seconds > LAST_SECOND) throw unreadable(column);
-  const iso = new Date(Number(seconds) * 1000).toISOString();
-  return `${iso.slice(0, 10)} ${iso.slice(11, 19)}`;
+/** `a / b` rounded toward negative infinity, and the remainder that goes with it (never negative for b > 0). */
+function floorDivide(a: bigint, b: bigint): [bigint, bigint] {
+  const quotient = a / b;
+  const remainder = a % b;
+  return remainder < ZERO ? [quotient - ONE, remainder + b] : [quotient, remainder];
+}
+
+const two = (value: bigint): string => value.toString().padStart(2, "0");
+
+/**
+ * `YYYY-MM-DD` of a day count from the epoch, on the proleptic Gregorian calendar with astronomical years (H. Hinnant's
+ * civil-from-days, in `BigInt` so any count Snowflake sends is exact). The year has at least four digits and a `-`
+ * at or before year 0.
+ */
+function civilDate(days: bigint): string {
+  const [era, dayOfEra] = floorDivide(days + DAYS_TO_EPOCH_FROM_MARCH_0, DAYS_PER_ERA);
+  const yearOfEra =
+    (dayOfEra - dayOfEra / BigInt(1_460) + dayOfEra / BigInt(36_524) - dayOfEra / BigInt(146_096)) / BigInt(365);
+  const dayOfYear = dayOfEra - (BigInt(365) * yearOfEra + yearOfEra / BigInt(4) - yearOfEra / BigInt(100));
+  const shiftedMonth = (BigInt(5) * dayOfYear + BigInt(2)) / BigInt(153);
+  const day = dayOfYear - (BigInt(153) * shiftedMonth + BigInt(2)) / BigInt(5) + ONE;
+  const month = shiftedMonth < BigInt(10) ? shiftedMonth + BigInt(3) : shiftedMonth - BigInt(9);
+  const year = yearOfEra + era * BigInt(400) + (month <= BigInt(2) ? ONE : ZERO);
+  const yearText = (year < ZERO ? -year : year).toString().padStart(4, "0");
+  return `${year < ZERO ? "-" : ""}${yearText}-${two(month)}-${two(day)}`;
+}
+
+/** `HH:MM:SS` of a second within its day. */
+function clockTime(secondOfDay: bigint): string {
+  return `${two(secondOfDay / SECONDS_PER_HOUR)}:${two((secondOfDay / SIXTY) % SIXTY)}:${two(secondOfDay % SIXTY)}`;
+}
+
+/** `YYYY-MM-DD HH:MM:SS` of a whole second since the epoch, for any year. */
+function wallTime(seconds: bigint): string {
+  const [days, secondOfDay] = floorDivide(seconds, SECONDS_PER_DAY);
+  return `${civilDate(days)} ${clockTime(secondOfDay)}`;
 }
 
 function timestamp(text: string, column: SnowflakeColumn, offsetMinutes = ZERO): string {
   const { seconds, nanos, digits } = readSeconds(text, column);
-  return `${wallTime(seconds + offsetMinutes * SIXTY, column)}${fractionText(nanos, digits)}`;
+  return `${wallTime(seconds + offsetMinutes * SIXTY)}${fractionText(nanos, digits)}`;
 }
 
 function offsetText(minutes: bigint): string {
@@ -178,13 +211,12 @@ function zoned(text: string, column: SnowflakeColumn): string {
 function timeOfDay(text: string, column: SnowflakeColumn): string {
   const { seconds, nanos, digits } = readSeconds(text, column);
   if (seconds < ZERO || seconds >= SECONDS_PER_DAY) throw unreadable(column);
-  const iso = new Date(Number(seconds) * 1000).toISOString();
-  return `${iso.slice(11, 19)}${fractionText(nanos, digits)}`;
+  return `${clockTime(seconds)}${fractionText(nanos, digits)}`;
 }
 
 function date(text: string, column: SnowflakeColumn): string {
   if (!INTEGER_TEXT.test(text)) throw unreadable(column);
-  return wallTime(BigInt(text) * SECONDS_PER_DAY, column).slice(0, 10);
+  return civilDate(BigInt(text));
 }
 
 function fixed(text: string, column: SnowflakeColumn): SnowflakeCell {
