@@ -123,6 +123,8 @@ connections:
 ```
 
 A Snowflake connection takes no `connectionString` and is refused if it carries one.
+It is also held at load to the checks Studio makes before it opens one: an account the Account field refuses (a URL of another host, an account URL with a path, a query, a port other than 443 or userinfo, an IP address), a missing `user` or `role`, an `authMethod` other than `keypair` and `pat`, and no `privateKey` for a key pair or no `password` for a token each refuse the file, as `Seed connection "<id>": <field> is refused: <sentence>`, naming the field and never its value.
+A field holding a `${ENV}` or `${vault:...}` reference is not judged at load, since it is resolved after the file is read; an absent `authMethod` reads as `keypair`.
 
 ### Diagnostics
 

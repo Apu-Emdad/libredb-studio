@@ -214,6 +214,7 @@ connections:
 
 For a token, set `authMethod: "pat"` and `password: "${SNOWFLAKE_PAT}"` instead of the two key fields.
 A seed that sets `connectionString` for `snowflake` is refused.
+The file load also runs the checks `connect()` makes before any socket on every field that is not a reference (the account, the user, the sign-in method, the key or token that method needs, the role) and refuses the file with `Seed connection "<id>": <field> is refused: <sentence>`, so an entry that could never open is named in the Seed sources card instead of loading and failing when it is opened.
 
 ## 3. The recommended Snowflake setup
 
