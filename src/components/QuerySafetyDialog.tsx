@@ -628,6 +628,13 @@ const CONTROL_FLOW_KEYWORDS = new Set([
  * used to refuse the block it sits in when the runner cut it at its first `;` (#1312).
  * A dialect's own `confirmForms` count the same way, anywhere in the block's code.
  */
+/** Whether a `confirmExemptForms` form led by `keyword` starts at the keyword that ends at `end`. */
+function exemptFormAt(text: string, keyword: string, end: number, grammar: SqlGrammar): boolean {
+  return (grammar.confirmExemptForms ?? []).some(
+    (form) => form[0].toUpperCase() === keyword && wordsFollow(text, end, form.slice(1), grammar),
+  );
+}
+
 function blockWrites(text: string, grammar: SqlGrammar): boolean {
   if ((grammar.confirmForms ?? []).some((form) => sequenceInCode(text, form, grammar))) return true;
   if ((grammar.confirmFormsWhen ?? []).some((form) => conditionalFormInCode(text, form, grammar))) return true;
@@ -642,7 +649,7 @@ function blockWrites(text: string, grammar: SqlGrammar): boolean {
       const before = text.slice(0, found.start);
       const variable = before.endsWith("@");
       const lockClause = word === "UPDATE" && /\bFOR\s+$/i.test(before);
-      if (!variable && !lockClause) return true;
+      if (!variable && !lockClause && !exemptFormAt(text, word, found.end, grammar)) return true;
       found = findCodeWord(text, word, found.end, grammar);
     }
   }
@@ -652,7 +659,13 @@ function blockWrites(text: string, grammar: SqlGrammar): boolean {
 function writesUnderGrammar(text: string, grammar: SqlGrammar): boolean {
   const reading = readOperativeKeyword(text, grammar);
   const keyword = reading?.keyword;
-  if (keyword !== undefined && DANGEROUS_KEYWORDS.has(keyword)) return true;
+  if (
+    reading !== null &&
+    DANGEROUS_KEYWORDS.has(reading.keyword) &&
+    !exemptFormAt(text, reading.keyword, reading.end, grammar)
+  ) {
+    return true;
+  }
 
   // The dialect's own forms: a keyword sequence that operates the statement, and a form found anywhere in its code.
   // Both are absent on every row that does not declare them, so no other dialect's verdict moves.

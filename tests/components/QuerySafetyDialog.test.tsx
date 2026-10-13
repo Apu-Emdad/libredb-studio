@@ -2336,6 +2336,12 @@ describe("Snowflake's confirmation forms", () => {
     expect(isDangerousQuery("BEGIN CREATE API INTEGRATION i ENABLED = TRUE; END", "snowflake")).toBe(true);
     expect(isDangerousQuery("BEGIN CREATE STAGE s URL = 's3://b/'; END", "snowflake")).toBe(true);
     expect(isDangerousQuery("SELECT 1; CREATE SHARE sh", "snowflake")).toBe(true);
+    // ALTER SESSION does not ask, but a write beside it still does, and so does any other ALTER (SF-030).
+    expect(isDangerousQuery("ALTER SESSION SET QUERY_TAG = 'e'; DELETE FROM t", "snowflake")).toBe(true);
+    expect(isDangerousQuery("BEGIN ALTER SESSION SET QUERY_TAG = 'e'; DROP TABLE t; END", "snowflake")).toBe(true);
+    expect(isDangerousQuery("ALTER SESSIONS_T RENAME TO x", "snowflake")).toBe(true);
+    expect(isDangerousQuery("ALTER TABLE session SET COMMENT = 'x'", "snowflake")).toBe(true);
+    expect(isDangerousQuery("ALTER USER u SET DEFAULT_ROLE = r", "snowflake")).toBe(true);
     expect(
       isDangerousQuery(
         "WITH p AS PROCEDURE () RETURNS INT LANGUAGE SQL AS $$ BEGIN RETURN 1; END $$ CALL p()",
@@ -2377,6 +2383,11 @@ describe("Snowflake's confirmation forms", () => {
     "CREATE STAGE s -- URL = 's3://b/'",
     "BEGIN CREATE STAGE s; END",
     "SELECT url FROM t",
+    // Each Snowflake statement runs in its own session, so a session setting cannot outlive it (SF-030).
+    "ALTER SESSION SET QUERY_TAG = 'e'",
+    "alter session unset query_tag",
+    "-- tag\nALTER /* x */ SESSION SET TIMEZONE = 'UTC'",
+    "BEGIN ALTER SESSION SET QUERY_TAG = 'e'; END",
   ])("does not ask for %s", (sql) => {
     expect(isDangerousQuery(sql, "snowflake")).toBe(false);
   });
@@ -2395,6 +2406,15 @@ describe("Snowflake's confirmation forms", () => {
     expect(isDangerousQuery("SELECT SYSTEM$X()", type)).toBe(expected);
     expect(isDangerousQuery("MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN UPDATE SET a = 1", type)).toBe(true);
   });
+
+  // Another engine's session can outlive the statement (a pooled Oracle session keeps it), so only Snowflake's row
+  // exempts ALTER SESSION (SF-030).
+  test.each(["postgres", "mysql", "oracle", "mssql", "databend"] as const)(
+    "%s still asks for ALTER SESSION",
+    (type) => {
+      expect(isDangerousQuery("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY'", type)).toBe(true);
+    },
+  );
 
   test("SQL Server's procedure call still runs unasked", () => {
     expect(isDangerousQuery("EXEC sp_cleanup", "mssql")).toBe(false);

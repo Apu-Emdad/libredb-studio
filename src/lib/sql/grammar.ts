@@ -275,6 +275,13 @@ export interface SqlGrammar {
    * none.
    */
   readonly confirmFormsWhen?: readonly ConfirmFormWhen[];
+  /**
+   * Keyword sequences led by a shared dangerous keyword that do NOT ask on this dialect, read where that keyword is
+   * read: at the operative keyword and inside a control-flow block. For a form whose effect cannot outlive the
+   * statement on this engine: Snowflake runs each statement in its own session, so `ALTER SESSION` changes nothing a
+   * later statement sees. Absent means none, and every shared keyword asks.
+   */
+  readonly confirmExemptForms?: readonly (readonly string[])[];
 }
 
 /** A form `SqlGrammar.confirmFormsWhen` looks for: a keyword sequence and the code word that makes it ask. */
@@ -882,6 +889,9 @@ const SNOWFLAKE_GRAMMAR: SqlGrammar = {
     { form: ["CREATE", "TEMPORARY", "STAGE"], when: "URL" },
     { form: ["CREATE", "TEMP", "STAGE"], when: "URL" },
   ],
+  // Each statement runs in its own session (see `snowflake/statements.ts`), so `ALTER SESSION SET | UNSET` cannot
+  // outlive it, and the result already says the setting does not carry over (SF-030).
+  confirmExemptForms: [["ALTER", "SESSION"]],
   // An anonymous procedure (`WITH p AS PROCEDURE … CALL p()`) and any `SYSTEM$` function, wherever they are written.
   confirmCodeForms: [["AS", "PROCEDURE"], { prefix: "SYSTEM$" }],
 };

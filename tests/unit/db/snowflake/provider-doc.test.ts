@@ -379,6 +379,8 @@ describe("docs/providers/snowflake.md", () => {
     const whenForms = grammar.confirmFormsWhen ?? [];
     expect(whenForms.length).toBeGreaterThan(0);
     for (const { form, when } of whenForms) expect(gate).toContain(`\`${form.join(" ")} ... ${when}\``);
+    // A form exempt from the shared keywords is named too (SF-030).
+    for (const form of grammar.confirmExemptForms ?? []) expect(gate).toContain(`but \`${form.join(" ")}\``);
     expect(gate).toContain("a browser confirmation, not a boundary");
     expect(gate).toContain("`IDENTIFIER()`");
   });

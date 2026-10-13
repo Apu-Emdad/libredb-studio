@@ -261,7 +261,7 @@ The SQL API does not run `USE` (it answers code 391911, `Command not supported b
 
 `Snowflake's SQL API does not run USE. Set Database, Schema, Warehouse or Role on the connection instead, or use fully qualified names such as database.schema.table. Nothing was sent.`
 
-`ALTER SESSION`, `SET` and `UNSET` run, and the result says the setting does not carry over:
+`ALTER SESSION`, `SET` and `UNSET` run without the confirmation gate, since nothing they change outlives the statement, and the result says the setting does not carry over:
 
 `Each Snowflake statement runs in its own session, so a session setting or variable does not carry over to the next statement.`
 
@@ -512,6 +512,7 @@ Forms that spend credits on their own, once or on a schedule: `CREATE WAREHOUSE`
 Forms that change who gets in or what leaves the account: `CREATE USER`, `CREATE ROLE`, `CREATE NETWORK POLICY`, `CREATE NETWORK RULE`, `CREATE EXTERNAL ACCESS INTEGRATION`, `CREATE API INTEGRATION`, `CREATE SECURITY INTEGRATION`, `CREATE NOTIFICATION INTEGRATION`, `CREATE STORAGE INTEGRATION`, `CREATE SHARE`, `CREATE REPLICATION GROUP` and `CREATE FAILOVER GROUP`.
 Forms that create a billed account: `CREATE ACCOUNT` and `CREATE MANAGED ACCOUNT`.
 An external stage, which reads and writes files outside the account, asks when its code names a `URL`: `CREATE STAGE ... URL`, `CREATE TEMPORARY STAGE ... URL` and `CREATE TEMP STAGE ... URL`; an internal stage, with no URL, keeps its files in the account and runs unconfirmed.
+The shared `ALTER` keyword asks for every Snowflake `ALTER` but `ALTER SESSION`, whose setting cannot outlive the statement's own session ([section 4](#4-sessions-transactions-and-blocks)); on every other engine `ALTER SESSION` still asks.
 It also asks wherever `AS PROCEDURE` (an anonymous procedure) or an identifier starting `SYSTEM$` appears in a statement's code, a quoted `"SYSTEM$..."` name included when it is called as a function.
 Still unconfirmed: every Snowflake form not named above, among them `CREATE CATALOG INTEGRATION`, `CREATE EXTERNAL VOLUME` and `CREATE LISTING`; a statement whose effect hides behind an `IDENTIFIER()` target; and whatever a procedure created earlier does when a statement that does not name it reaches it.
 
