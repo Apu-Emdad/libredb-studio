@@ -60,9 +60,17 @@ describe("constants and sentences", () => {
     expect(SNOWFLAKE_ROWS_SENTENCES.nonString("NAME")).toBe(
       'Snowflake sent a cell that is not text in column "NAME", so the result is not shown.',
     );
-    expect(SNOWFLAKE_ROWS_SENTENCES.byteCut(1234567)).toBe(
-      "The result reached Studio's statement budget of 16 MiB, so only the rows before it are shown. Snowflake reported 1,234,567 rows.",
+    expect(SNOWFLAKE_ROWS_SENTENCES.byteCut(58_726)).toBe(
+      "The result reached Studio's statement budget of 16 MiB, so only the rows before it are shown. Snowflake reported 58,726 rows.",
     );
+    // SF-031: Studio asks for at most 100,001 rows (rows_per_resultset), so Snowflake's numRows stops there: a count
+    // that reached it is Studio's own request echoed, and the sentence says "more than 100,000" instead.
+    for (const numRows of [100_001, 1_234_567]) {
+      expect(SNOWFLAKE_ROWS_SENTENCES.byteCut(numRows)).toBe(
+        "The result reached Studio's statement budget of 16 MiB, so only the rows before it are shown. Snowflake reported more than 100,000 rows.",
+      );
+    }
+    expect(SNOWFLAKE_ROWS_SENTENCES.byteCut(100_000)).toEndWith("Snowflake reported 100,000 rows.");
     expect(SNOWFLAKE_ROWS_SENTENCES.byteCut(null)).toBe(
       "The result reached Studio's statement budget of 16 MiB, so only the rows before it are shown.",
     );

@@ -42,9 +42,17 @@ export const SNOWFLAKE_ROWS_SENTENCES = Object.freeze({
     `Snowflake sent a result partition in an encoding Studio does not read (${encoding}).`,
   nonString: (column: string) =>
     `Snowflake sent a cell that is not text in column "${column}", so the result is not shown.`,
+  /**
+   * `numRows` is Snowflake's count, which Studio's `rows_per_resultset` of one past the row budget caps: a count past
+   * the budget is that request echoed back, so it is said as "more than" the budget, never as a total.
+   */
   byteCut: (numRows: number | null | undefined) =>
     `The result reached Studio's statement budget of 16 MiB, so only the rows before it are shown.${
-      typeof numRows === "number" ? ` Snowflake reported ${numRows.toLocaleString("en-US")} rows.` : ""
+      typeof numRows !== "number"
+        ? ""
+        : numRows > MAX_UNLIMITED_ROWS
+          ? ` Snowflake reported more than ${MAX_UNLIMITED_ROWS.toLocaleString("en-US")} rows.`
+          : ` Snowflake reported ${numRows.toLocaleString("en-US")} rows.`
     }`,
   rowCut: "The result reached Studio's statement budget of 100,000 rows, so only the rows before it are shown.",
   snowflakeCut:

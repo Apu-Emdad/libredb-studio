@@ -78,7 +78,7 @@ import {
   SNOWFLAKE_USER_AGENT,
   snowflakeBackoffMs,
 } from "@/lib/db/providers/sql/snowflake/transport";
-import { applyQueryLimit } from "@/lib/db/utils/query-limiter";
+import { applyQueryLimit, MAX_UNLIMITED_ROWS } from "@/lib/db/utils/query-limiter";
 import { resolveSqlGrammar } from "@/lib/sql/grammar";
 import type { DatabaseProvider } from "@/lib/db/types";
 import type { DatabaseConnection } from "@/lib/types";
@@ -566,6 +566,16 @@ describe("every other number and sentence the doc states is the code's", () => {
     );
     expect(FLAT_DOC).toContain(
       `The wait has its own bound of the same length (\`timeout\` plus ${seconds(SNOWFLAKE_DEADLINE_GRACE_MS)})`,
+    );
+  });
+
+  test("the byte cut's count is Snowflake's below the row request and 'more than' at it (SF-031)", () => {
+    expect(SNOWFLAKE_ROWS_PER_RESULTSET).toBe(MAX_UNLIMITED_ROWS + 1);
+    expect(FLAT_DOC).toContain(
+      `Studio asks Snowflake for at most ${n(SNOWFLAKE_ROWS_PER_RESULTSET)} rows (\`rows_per_resultset\`)`,
+    );
+    expect(FLAT_DOC).toContain(
+      `\`${SNOWFLAKE_ROWS_SENTENCES.byteCut(SNOWFLAKE_ROWS_PER_RESULTSET).split(" shown. ")[1]}\``,
     );
   });
 

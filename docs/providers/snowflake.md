@@ -413,6 +413,7 @@ One budget spans a statement's whole result: 16 MiB of decoded rows and 100,000 
 A cut keeps the rows before it, marks the result limited, and says so:
 
 - `The result reached Studio's statement budget of 16 MiB, so only the rows before it are shown. Snowflake reported <numRows> rows.`
+  Studio asks Snowflake for at most 100,001 rows (`rows_per_resultset`), so Snowflake's count stops there; a result that reaches it ends `Snowflake reported more than 100,000 rows.` instead, since its true size is not known.
 - `The result reached Studio's statement budget of 100,000 rows, so only the rows before it are shown.`
 - `Snowflake returned only part of this result because it is too large (391908), so only the rows it sent are shown. Add a LIMIT, or select fewer columns.`
 
