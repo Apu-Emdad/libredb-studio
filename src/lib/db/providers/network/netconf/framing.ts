@@ -62,7 +62,30 @@ export function frame(payload: string, framing: Framing): string {
  * assembled, which is the only point at which an unterminated stream can still be stopped.
  */
 export class FrameReader {
-  private buffer = "";
+  /**
+   * Held as bytes, not as text.
+   *
+   * WHERE THIS STOPS, and it is a contract limit rather than a bug here: `feed` takes text, because
+   * the transport decodes the channel's bytes with a StringDecoder. If a server cut a multi byte
+   * character at a chunk boundary, the decoder would hold the incomplete sequence and the next
+   * bytes it saw would be the following chunk's header, which is not a continuation, so the
+   * character would already be lost before this reader was given anything. No frame reader can
+   * recover from that; a transport that carried bytes could. MEASURED 2026-10-13, with a four byte
+   * character every 160 bytes of data: Netopeer2 answered chunks of 10,240, 10,236, 10,240, 10,208,
+   * 10,240, 10,240, 10,233, 10,195, 10,240, 10,236 and 2,648 bytes, so it SHORTENS a chunk rather
+   * than cutting a character, and all eleven decoded on their own. The case is therefore not
+   * reachable on the one server measured, and a bytes-carrying transport is not written for a
+   * branch nothing runs. A server that chunks blind is UNMEASURED and is the thing to look for on
+   * the first device.
+   *
+   * A chunk size counts bytes and a server chunks by bytes, so a chunk boundary can land in the
+   * middle of a multi byte character. Holding text and taking `count` bytes out of it meant
+   * decoding a cut sequence: the character became a replacement character, and the string length of
+   * that decoded piece no longer matched the bytes consumed, so the buffer slid out of step with
+   * the framing as well. Bytes in, one decode when a message is whole, which is what this file
+   * already claimed to do.
+   */
+  private buffer: Buffer = Buffer.alloc(0);
   /**
    * The part of a chunked message whose chunks have arrived, across feeds.
    *
@@ -76,7 +99,7 @@ export class FrameReader {
    * says nothing about where the bytes went. A reply that had arrived in one piece was correct, so
    * every test that fed a whole message passed.
    */
-  private assembled = "";
+  private assembled: Buffer = Buffer.alloc(0);
   private framing: Framing;
   private readonly limits: FrameLimits;
   private faulted = false;
@@ -93,35 +116,31 @@ export class FrameReader {
 
   feed(chunk: string): FrameStep {
     if (this.faulted) return { messages: [] };
-    this.buffer += chunk;
-    if (Buffer.byteLength(this.buffer, "utf8") > this.limits.maxBufferBytes) {
-      return this.fail({
-        kind: "buffer-too-large",
-        bytes: Buffer.byteLength(this.buffer, "utf8"),
-        cap: this.limits.maxBufferBytes,
-      });
+    this.buffer = this.buffer.length === 0 ? Buffer.from(chunk, "utf8") : Buffer.concat([this.buffer, Buffer.from(chunk, "utf8")]);
+    if (this.buffer.length > this.limits.maxBufferBytes) {
+      return this.fail({ kind: "buffer-too-large", bytes: this.buffer.length, cap: this.limits.maxBufferBytes });
     }
     return this.framing === "eom" ? this.readEom() : this.readChunked();
   }
 
   private fail(fault: FrameFault): FrameStep {
     this.faulted = true;
-    this.buffer = "";
-    this.assembled = "";
+    this.buffer = Buffer.alloc(0);
+    this.assembled = Buffer.alloc(0);
     return { messages: [], fault };
   }
 
   private readEom(): FrameStep {
     const messages: string[] = [];
     for (;;) {
-      const at = this.buffer.indexOf(EOM);
+      const at = this.buffer.indexOf(EOM, 0, "utf8");
       if (at === -1) return { messages };
-      const message = this.buffer.slice(0, at);
-      const bytes = Buffer.byteLength(message, "utf8");
+      const bytes = at;
       if (bytes > this.limits.maxMessageBytes) {
         return this.fail({ kind: "message-too-large", bytes, cap: this.limits.maxMessageBytes });
       }
-      this.buffer = this.buffer.slice(at + EOM.length);
+      const message = this.buffer.subarray(0, at).toString("utf8");
+      this.buffer = this.buffer.subarray(at + Buffer.byteLength(EOM, "utf8"));
       messages.push(message);
     }
   }
@@ -129,21 +148,27 @@ export class FrameReader {
   private readChunked(): FrameStep {
     const messages: string[] = [];
     for (;;) {
-      if (this.buffer.startsWith("\n##\n")) {
-        this.buffer = this.buffer.slice(4);
-        const bytes = Buffer.byteLength(this.assembled, "utf8");
-        if (bytes > this.limits.maxMessageBytes) {
-          return this.fail({ kind: "message-too-large", bytes, cap: this.limits.maxMessageBytes });
+      if (startsWith(this.buffer, END)) {
+        this.buffer = this.buffer.subarray(END.length);
+        if (this.assembled.length > this.limits.maxMessageBytes) {
+          return this.fail({
+            kind: "message-too-large",
+            bytes: this.assembled.length,
+            cap: this.limits.maxMessageBytes,
+          });
         }
-        messages.push(this.assembled);
-        this.assembled = "";
+        // The one decode: the whole message's bytes are here, so no character can be cut.
+        messages.push(this.assembled.toString("utf8"));
+        this.assembled = Buffer.alloc(0);
         continue;
       }
-      const header = /^\n#(\d+)\n/.exec(this.buffer);
+      const header = /^\n#(\d+)\n/.exec(this.buffer.subarray(0, HEADER_MAX).toString("latin1"));
       if (!header) {
-        // Either the header has not arrived in full, or it is not a header at all.
-        if (/^\n#\d*$|^\n#?$|^$/.test(this.buffer)) return { messages };
-        return this.fail({ kind: "chunk-header-malformed", header: this.buffer.slice(0, 16) });
+        // Either the header has not arrived in full, or it is not a header at all. A header is
+        // ASCII, so reading its bytes as latin1 cannot turn a long header into a short one.
+        const seen = this.buffer.subarray(0, HEADER_MAX).toString("latin1");
+        if (/^\n#\d*$|^\n#?$|^$/.test(seen)) return { messages };
+        return this.fail({ kind: "chunk-header-malformed", header: seen.slice(0, 16) });
       }
       const size = header[1] ?? "";
       // RFC 6242 section 4.2 prohibits a leading zero. MEASURED 2026-10-13: Netopeer2 accepts
@@ -156,31 +181,30 @@ export class FrameReader {
         return this.fail({ kind: "chunk-size-out-of-range", size });
       }
       const start = header[0].length;
-      const slice = this.buffer.slice(start);
-      if (Buffer.byteLength(slice, "utf8") < value) return { messages };
-      const body = takeBytes(slice, value);
-      this.assembled += body;
-      this.buffer = slice.slice(body.length);
+      if (this.buffer.length - start < value) return { messages };
+      const body = this.buffer.subarray(start, start + value);
+      this.assembled = this.assembled.length === 0 ? Buffer.from(body) : Buffer.concat([this.assembled, body]);
+      this.buffer = this.buffer.subarray(start + value);
       // The cap is checked as the message grows, not only where it ends. A peer that keeps sending
       // chunks and never sends the terminator holds bytes here rather than in `buffer`, so
       // checking only at the terminator would leave this half of the read unbounded, and the
       // buffer cap in `feed` would never see them.
-      const held = Buffer.byteLength(this.assembled, "utf8");
-      if (held > this.limits.maxMessageBytes) {
-        return this.fail({ kind: "message-too-large", bytes: held, cap: this.limits.maxMessageBytes });
+      if (this.assembled.length > this.limits.maxMessageBytes) {
+        return this.fail({
+          kind: "message-too-large",
+          bytes: this.assembled.length,
+          cap: this.limits.maxMessageBytes,
+        });
       }
     }
   }
 }
 
-/**
- * Takes exactly `count` UTF-8 bytes from the front of `text` and answers them as a string.
- *
- * A chunk size counts bytes, not characters, and a multi byte character can be split across two
- * reads. MEASURED 2026-10-13 against an in-process peer: a four byte character split across two
- * chunks decodes correctly only when the bytes are reassembled before they are decoded.
- */
-function takeBytes(text: string, count: number): string {
-  const bytes = Buffer.from(text, "utf8");
-  return bytes.subarray(0, count).toString("utf8");
+/** The chunked framing's end of message marker, and the longest header this reader will read. */
+const END = Buffer.from("\n##\n", "utf8");
+const HEADER_MAX = 16;
+
+function startsWith(buffer: Buffer, prefix: Buffer): boolean {
+  return buffer.length >= prefix.length && buffer.subarray(0, prefix.length).equals(prefix);
 }
+

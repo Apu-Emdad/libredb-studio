@@ -85,7 +85,13 @@ XML
     printf '<interfaces xmlns="urn:ietf:params:xml:ns:yang:ietf-interfaces" xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">'
     i=0
     while [ "$i" -lt "$IFACES" ]; do
-      printf '<interface><name>ge-0/0/%s</name><type>ianaift:ethernetCsmacd</type><enabled>true</enabled><description>port %s</description></interface>' "$i" "$i"
+      # The description carries a four byte character on purpose. The chunked framing counts BYTES
+      # and this server chunks at a fixed 10,240, so with a multi byte character every ~160 bytes
+      # some character's bytes are certain to straddle a chunk boundary. That case is unreachable
+      # with ASCII data, and a reader that decodes each chunk on its own corrupts it silently, so
+      # the fixture has to be able to produce it. The emoji is also a four byte character, the
+      # widest case, rather than a two byte accented letter.
+      printf '<interface><name>ge-0/0/%s</name><type>ianaift:ethernetCsmacd</type><enabled>true</enabled><description>port %s \360\237\230\200 baglanti</description></interface>' "$i" "$i"
       i=$((i + 1))
     done
     printf '</interfaces>'

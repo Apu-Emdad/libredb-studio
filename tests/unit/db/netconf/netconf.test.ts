@@ -78,13 +78,23 @@ test("a message past the message cap ends the read", () => {
   expectBe(step.fault?.kind, "message-too-large");
 });
 
-test("a four byte character split across two reads decodes correctly", () => {
+/**
+ * The split is between characters, which is the only split the reader can be given.
+ *
+ * `feed` takes text, and the text comes from the transport, which decodes with a StringDecoder and
+ * holds an incomplete sequence back until its bytes arrive. So half a character never reaches here;
+ * that case belongs to the transport and is held in `ports.test.ts`. An earlier version of this
+ * test cut the written frame at half its string length, which can fall between the two halves of a
+ * surrogate pair: a split the transport cannot produce.
+ */
+test("a four byte character arriving in two reads decodes correctly", () => {
   const reader = new FrameReader("chunked", limits);
   const payload = "a\u{1F600}b";
   const written = frame(payload, "chunked");
-  const half = Math.floor(written.length / 2);
-  reader.feed(written.slice(0, half));
-  const step = reader.feed(written.slice(half));
+  // After the character, so neither piece holds a lone surrogate.
+  const at = written.indexOf("b");
+  reader.feed(written.slice(0, at));
+  const step = reader.feed(written.slice(at));
   expectEqual(step.messages, [payload]);
 });
 
@@ -150,6 +160,36 @@ test("chunks that never terminate are refused once they pass the message cap", (
     fault = reader.feed(`\n#32\n${"y".repeat(32)}`).fault;
   }
   expectBe((fault as { kind?: string } | undefined)?.kind, "message-too-large");
+});
+
+/**
+ * The sizes a device actually answered, fed in pieces that align with nothing.
+ *
+ * MEASURED 2026-10-13 on the fixture, over SSH: the largest module text answered 118,641 bytes, a
+ * depth-2 NMDA read of 5,000 entries 234,120, and the unfiltered read of the same list 987,956.
+ *
+ * MEASURED in the same run, and it settled a question rather than confirming a guess: with a four
+ * byte character every 160 bytes in the data, the server's chunks came back 10,240, 10,236, 10,240,
+ * 10,208, 10,240, 10,240, 10,233, 10,195, 10,240, 10,236 and 2,648 bytes. The sizes are not a fixed
+ * 10,240: Netopeer2 SHORTENS a chunk rather than cutting a character, and every one of the eleven
+ * chunks decoded on its own. So a chunk boundary inside a character is not reachable on this
+ * server, and the test does not pretend otherwise. What that case would need is written in the
+ * reader, beside the limit of the contract it runs into.
+ */
+test("the sizes a device answered arrive whole, in pieces that align with nothing", () => {
+  for (const [bytes, feeds] of [
+    [118_641, [1_024, 3_000, 10_239]],
+    [234_120, [4_096, 10_241]],
+    [987_956, [3_000, 65_537]],
+  ] as const) {
+    const payload = `<rpc-reply message-id="9">${"\u00e7".repeat(1_000)}${"x".repeat(bytes - 26 - 2_000 - 12)}</rpc-reply>`;
+    const written = framedInChunks(payload, 10_240);
+    for (const size of feeds) {
+      const messages = fedInPieces(written, size);
+      expectBe(messages.length, 1, `pieces of ${size} did not answer one message for ${bytes} bytes`);
+      expectBe(messages[0], payload);
+    }
+  }
 });
 
 test("every measured key value round trips and none keeps the separator", () => {
