@@ -164,8 +164,11 @@ Key pair avoids that requirement, though a network policy that applies to the us
 Use Key pair for npx and the desktop app, and a PAT for a server with a fixed egress address.
 A token names its own user and the SQL API takes no user beside it, so Studio compares User with the `CURRENT_USER()` the role check answers and fails the connect when they differ.
 The comparison ignores case unless User is double-quoted; `CURRENT_USER()` answers the user's NAME, so for a token enter the NAME when it differs from the login name.
-Studio does not read a token's format, with one exception: a key-pair JWT pasted as the token, which Snowflake accepts and which signs in as its own user until it expires within the hour, is refused before anything is sent:
+Spaces, tabs and line breaks around the token and a leading `Bearer ` come off before it is sent, so a token read from a file or copied from a curl example works.
+Studio does not otherwise read a token's format, but it refuses before anything is sent a token longer than 4,096 characters or holding a character an HTTP header cannot carry, and a key-pair JWT pasted as the token, which Snowflake accepts and which signs in as its own user until it expires within the hour:
 
+- `The access token is longer than Studio accepts (4,096 characters); a programmatic access token is far shorter. Paste the token alone. Nothing was sent.`
+- `The access token holds characters a token cannot have, such as a space, a line break or a non-ASCII letter. Paste the token alone. Nothing was sent.`
 - `This is a key-pair JWT, not a programmatic access token: it signs in as the user its key belongs to and expires within the hour. Choose Key pair for Sign-in and paste the private key instead. Nothing was sent.`
 
 ### 2.5 Test connection
@@ -571,6 +574,9 @@ Still unconfirmed: every Snowflake form not named above, among them `CREATE CATA
 | API disabled or network policy (403) | `AuthenticationError` | `Snowflake refused the request (403): the SQL API may not be enabled for this account, or a network policy blocks the address Studio connects from.` |
 | A command the SQL API does not run (391911) | `QueryError` | `Snowflake's SQL API does not run this command.`, then the server text |
 | Statement failed (422) | `QueryError` | `Snowflake: <message> (code <code>, SQLSTATE <sqlstate>)` |
+| A refusal with no message | `QueryError` | `Snowflake refused the request (HTTP <n>, code <code>) and sent no message.`, without the code when there is none |
+| Headers too large (431, the gateway's answer to an oversized token header) | `AuthenticationError` | `Snowflake's gateway refused the request because its headers are too large (431). The access token is the one header Studio fills from a field: paste the token alone.` |
+| Token not readable (390146, under token sign-in) | `AuthenticationError` | `Snowflake found no usable token in the request (390146). Paste the access token alone, without a Bearer prefix or anything around it.` |
 | Snowflake's 408 | `QueryError` | `Snowflake ended this statement at a timeout and cancelled it: the connection's query timeout of <n> s, or a lower STATEMENT_TIMEOUT_IN_SECONDS on the warehouse, the user or the account. Snowflake applies the lowest of these, so raising Query Timeout (ms) on the connection cannot lengthen a statement past the others.` |
 | Snowflake's 408 of a statement Studio sent on its own at its 30 s bound | `QueryError` | `Snowflake ended this Studio read at a timeout and cancelled it: the 30 s bound Studio keeps for the statements it sends on its own, or a lower STATEMENT_TIMEOUT_IN_SECONDS on the warehouse, the user or the account.` |
 | Studio's deadline | `QueryError` | `Snowflake did not finish this statement within the connection's query timeout of <n> s, so Studio cancelled it. Raise Query Timeout (ms) on the connection to allow longer statements; saving it ends statements still running on this connection.` |

@@ -27,6 +27,7 @@ import {
   SNOWFLAKE_MAX_SCRYPT_R,
   SNOWFLAKE_RSA_MAX_BITS,
   SNOWFLAKE_RSA_MIN_BITS,
+  SNOWFLAKE_TOKEN_MAX_CHARS,
   SNOWFLAKE_TOKEN_SENTENCES,
 } from "@/lib/db/providers/sql/snowflake/auth";
 import { decodeCell, SNOWFLAKE_DECODE_SENTENCES } from "@/lib/db/providers/sql/snowflake/decode";
@@ -196,6 +197,9 @@ const QUOTED: Readonly<Record<string, { readonly keys: readonly string[]; readon
       SNOWFLAKE_ERROR_SENTENCES.objectMissing("<role>", "'<role>'", ""),
       SNOWFLAKE_ERROR_SENTENCES.privileges("<role>", ""),
       SNOWFLAKE_ERROR_SENTENCES.forbidden,
+      SNOWFLAKE_ERROR_SENTENCES.headersTooLarge,
+      SNOWFLAKE_ERROR_SENTENCES.tokenMissing,
+      SNOWFLAKE_ERROR_SENTENCES.noMessage("<n>" as unknown as number, "<code>"),
       SNOWFLAKE_ERROR_SENTENCES.statementFailed("<message>", "<code>", "<sqlstate>"),
       SNOWFLAKE_ERROR_SENTENCES.deadline("<n>" as unknown as number),
       SNOWFLAKE_ERROR_SENTENCES.surfaceDeadline(30),
@@ -299,6 +303,12 @@ describe("docs/providers/snowflake.md", () => {
     ]) {
       expect(FLAT_DOC).toContain(sentence);
     }
+  });
+
+  test("states the access token's bound", () => {
+    expect(flat(sectionOf(DOC, "### 2.4 Programmatic access token"))).toContain(
+      `longer than ${n(SNOWFLAKE_TOKEN_MAX_CHARS)} characters`,
+    );
   });
 
   test("names the fields by the dialog's labels, in the dialog's order", () => {

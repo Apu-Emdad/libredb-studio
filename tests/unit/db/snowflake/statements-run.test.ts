@@ -489,7 +489,7 @@ describe("failures", () => {
       { status: 422, bytes: gzipSync(huge), contentEncoding: "gzip" },
     );
     const error = await caught(harness.statements.runSurface("SELECT 1", SNOWFLAKE_QUERY_TAGS.tree));
-    expect((error as SnowflakeError).message).toBe(SNOWFLAKE_ERROR_SENTENCES.statementFailed("", null, null));
+    expect((error as SnowflakeError).message).toBe(SNOWFLAKE_ERROR_SENTENCES.noMessage(422, null));
   });
 
   test("a statement that fails during the poll throws its sentence without a cancel", async () => {

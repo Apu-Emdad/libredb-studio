@@ -212,6 +212,41 @@ describe("failureError: every row of the error table", () => {
         "Snowflake refused the TLS certificate of this request (522). Studio sends no client certificate, so a proxy or gateway between Studio and Snowflake may be presenting one.",
     },
     {
+      name: "headers too large, 431, as the gateway answers a 100,000-character token with a text/plain body",
+      failure: failure({ status: 431 }),
+      category: "auth",
+      house: AuthenticationError,
+      sentence:
+        "Snowflake's gateway refused the request because its headers are too large (431). The access token is the one header Studio fills from a field: paste the token alone.",
+    },
+    {
+      name: "a token Snowflake cannot read, 390146, under token sign-in",
+      failure: failure({
+        status: 401,
+        code: "390146",
+        message: "Bearer token is missing in the HTTP request authorization header.",
+      }),
+      context: { authMethod: "pat" },
+      category: "auth",
+      house: AuthenticationError,
+      sentence:
+        "Snowflake found no usable token in the request (390146). Paste the access token alone, without a Bearer prefix or anything around it.",
+    },
+    {
+      name: "a failure with no message and no code",
+      failure: failure({ status: 400, message: "" }),
+      category: "query",
+      house: QueryError,
+      sentence: "Snowflake refused the request (HTTP 400) and sent no message.",
+    },
+    {
+      name: "a failure with a code and a blank message",
+      failure: failure({ status: 422, code: "000123", message: "  " }),
+      category: "query",
+      house: QueryError,
+      sentence: "Snowflake refused the request (HTTP 422, code 000123) and sent no message.",
+    },
+    {
       name: "result gone, 404",
       failure: failure({ status: 404, request: "status" }),
       category: "query",

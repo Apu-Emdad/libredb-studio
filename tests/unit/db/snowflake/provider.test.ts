@@ -184,6 +184,12 @@ describe("connect() validates the configuration before any socket", () => {
       { authMethod: "pat", password: KEY_PAIR_JWT },
       SNOWFLAKE_TOKEN_SENTENCES.keyPairJwt,
     ],
+    ["a token past the bound", { authMethod: "pat", password: "a".repeat(100_000) }, SNOWFLAKE_TOKEN_SENTENCES.tooLong],
+    [
+      "a non-Latin-1 token",
+      { authMethod: "pat", password: "abc\u00e9\u4e2d" },
+      SNOWFLAKE_TOKEN_SENTENCES.badCharacters,
+    ],
     ["an empty role", { role: "" }, SNOWFLAKE_FIELD_SENTENCES.roleEmpty],
     ["no role", { role: undefined }, SNOWFLAKE_FIELD_SENTENCES.roleEmpty],
   ];
@@ -307,6 +313,13 @@ describe("connect() sends the connect statement, then the role check", () => {
     const [request] = entry.transports.requests;
     expect(request.headers["x-snowflake-authorization-token-type"]).toBe("PROGRAMMATIC_ACCESS_TOKEN");
     expect(request.headers.authorization).toBe("Bearer pat-value");
+  });
+
+  test("a token with line breaks around it and a Bearer prefix is sent bare (SF-015)", async () => {
+    const entry = build({ authMethod: "pat", password: "\r\nBearer pat-value\r\n", privateKey: undefined });
+    entry.transports.answer(SUBMIT, RUNNING, roleAnswer("STUDIO_RO", undefined, "STUDIO_SVC"));
+    await entry.provider.connect();
+    for (const request of entry.transports.requests) expect(request.headers.authorization).toBe("Bearer pat-value");
   });
 
   test("a token that signs in as another user than User fails the connect, naming both (SF-005)", async () => {

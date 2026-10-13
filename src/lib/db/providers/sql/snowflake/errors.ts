@@ -154,6 +154,14 @@ export const SNOWFLAKE_ERROR_SENTENCES = Object.freeze({
   privileges: (role: string, text: string) => withText(`Role ${role} lacks a privilege this statement needs.`, text),
   forbidden:
     "Snowflake refused the request (403): the SQL API may not be enabled for this account, or a network policy blocks the address Studio connects from.",
+  headersTooLarge:
+    "Snowflake's gateway refused the request because its headers are too large (431). The access token is the one header Studio fills from a field: paste the token alone.",
+  tokenMissing:
+    "Snowflake found no usable token in the request (390146). Paste the access token alone, without a Bearer prefix or anything around it.",
+  noMessage: (status: number, code: string | null) =>
+    code === null
+      ? `Snowflake refused the request (HTTP ${status}) and sent no message.`
+      : `Snowflake refused the request (HTTP ${status}, code ${code}) and sent no message.`,
   statementFailed: (message: string, code: string | null, sqlState: string | null) =>
     code === null
       ? `Snowflake: ${message}`
@@ -206,6 +214,8 @@ const SYNTAX_ERROR_CODE = "001003";
 const SCRIPTING_KEYWORDS: ReadonlySet<string> = new Set(["BEGIN", "DECLARE"]);
 /** 390186 is what Snowflake answers, at HTTP 400 on the submit; 390189 and 3013 are the documented codes. */
 const ROLE_REFUSED_CODES: ReadonlySet<string> = new Set(["390186", "390189", "3013"]);
+/** Snowflake's "Bearer token is missing in the HTTP request authorization header", for a header it cannot read. */
+const TOKEN_MISSING_CODE = "390146";
 /** The code of a command the SQL API refuses to run, such as `USE`. */
 const UNSUPPORTED_COMMAND_CODE = "391911";
 /**
@@ -313,6 +323,8 @@ export function failureError(failure: SnowflakeFailure, context: SnowflakeFailur
       ),
     );
   }
+  if (code === TOKEN_MISSING_CODE && context.authMethod === "pat")
+    return new SnowflakeError("auth", sentences.tokenMissing);
   if (status === 401 || code === "PAT_INVALID") return signInError(failure, context, text);
   if (status === 403) return new SnowflakeError("auth", sentences.forbidden);
   if (status === 408) {
@@ -326,6 +338,7 @@ export function failureError(failure: SnowflakeFailure, context: SnowflakeFailur
     );
   }
   if (status === 429) return new SnowflakeError("unavailable", sentences.rateLimited);
+  if (status === 431) return new SnowflakeError("auth", sentences.headersTooLarge);
   if (UNAVAILABLE_STATUSES.has(status)) {
     return new SnowflakeError("unavailable", sentences.unavailable(status, context.attempts));
   }
@@ -346,11 +359,10 @@ export function failureError(failure: SnowflakeFailure, context: SnowflakeFailur
   }
   if (code === "003001") return new SnowflakeError("query", sentences.privileges(context.role, text));
   if (code === UNSUPPORTED_COMMAND_CODE) return new SnowflakeError("query", sentences.unsupportedCommand(text));
-  const failed = sentences.statementFailed(
-    text,
-    printable(code, context.secretForms),
-    printable(failure.sqlState, context.secretForms),
-  );
+  const printedCode = printable(code, context.secretForms);
+  // A sentence is never built from an empty message, which read as a bare "Snowflake:".
+  if (text.trim() === "") return new SnowflakeError("query", sentences.noMessage(status, printedCode));
+  const failed = sentences.statementFailed(text, printedCode, printable(failure.sqlState, context.secretForms));
   const scripting =
     status === 422 &&
     code === SYNTAX_ERROR_CODE &&

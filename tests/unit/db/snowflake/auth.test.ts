@@ -20,6 +20,7 @@ import {
   SNOWFLAKE_RSA_MAX_BITS,
   SNOWFLAKE_RSA_MIN_BITS,
   SNOWFLAKE_KEY_SENTENCES,
+  SNOWFLAKE_TOKEN_MAX_CHARS,
   SNOWFLAKE_TOKEN_SENTENCES,
 } from "@/lib/db/providers/sql/snowflake/auth";
 import { SnowflakeError } from "@/lib/db/providers/sql/snowflake/errors";
@@ -575,6 +576,53 @@ describe("keyPairTokenSource (SR21)", () => {
     const source = patTokenSource("pat-x");
     expect(source.tokenType).toBe("PROGRAMMATIC_ACCESS_TOKEN");
     expect(await source.token()).toBe("pat-x");
+  });
+});
+
+describe("readAccessToken: the token's intake (SF-015)", () => {
+  const refusal = (token: string): unknown => {
+    try {
+      readAccessToken(token);
+    } catch (error) {
+      return error;
+    }
+    return null;
+  };
+
+  for (const [label, raw] of [
+    ["a trailing line feed", "pat-abc\n"],
+    ["CR LF around it", "\r\npat-abc\r\n"],
+    ["spaces and a tab around it", "  \tpat-abc \t"],
+    ["a Bearer prefix, as a curl example writes it", "Bearer pat-abc"],
+    ["a lower-case bearer prefix with spaces around", "  bearer   pat-abc \n"],
+  ] as const) {
+    test(`${label} comes off, and the token is sent`, () => {
+      expect(readAccessToken(raw)).toBe("pat-abc");
+    });
+  }
+
+  test(`a token of ${SNOWFLAKE_TOKEN_MAX_CHARS} characters is read, one longer is refused`, () => {
+    expect(readAccessToken("a".repeat(SNOWFLAKE_TOKEN_MAX_CHARS))).toHaveLength(SNOWFLAKE_TOKEN_MAX_CHARS);
+    const error = refusal("a".repeat(SNOWFLAKE_TOKEN_MAX_CHARS + 1));
+    expect(error).toBeInstanceOf(SnowflakeError);
+    expect((error as SnowflakeError).category).toBe("config");
+    expect((error as SnowflakeError).message).toBe(SNOWFLAKE_TOKEN_SENTENCES.tooLong);
+  });
+
+  for (const [label, raw] of [
+    ["a non-Latin-1 letter", "abc\u00e9\u4e2d"],
+    ["a line break inside", "pat-\nabc"],
+    ["a space inside", "pat abc"],
+    ["a control character", "pat\u0001abc"],
+  ] as const) {
+    test(`${label} is refused as characters a token cannot have`, () => {
+      expect((refusal(raw) as SnowflakeError).message).toBe(SNOWFLAKE_TOKEN_SENTENCES.badCharacters);
+    });
+  }
+
+  test("a value that is only whitespace or a bare prefix is the empty-token refusal", () => {
+    expect((refusal(" \r\n ") as SnowflakeError).message).toBe(SNOWFLAKE_FIELD_SENTENCES.tokenEmpty);
+    expect((refusal("Bearer  \n") as SnowflakeError).message).toBe(SNOWFLAKE_FIELD_SENTENCES.tokenEmpty);
   });
 });
 

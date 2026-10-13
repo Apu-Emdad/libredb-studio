@@ -16,6 +16,7 @@
  */
 import * as crypto from "node:crypto";
 import { SignJWT } from "jose";
+import { SNOWFLAKE_FIELD_SENTENCES } from "./account-host";
 import { SnowflakeError } from "./errors";
 
 /** The largest key field read, in UTF-8 bytes; a larger one is refused before any parse. */
@@ -41,8 +42,15 @@ export const SNOWFLAKE_JWT_LIFETIME_S = 900;
 /** How long a JWT is reused after its `iat`; the 300 s left before `exp` is the official clients' margin. */
 export const SNOWFLAKE_JWT_RENEW_AFTER_S = 600;
 
+/** The longest access token read, in characters; the trial's tokens are about 210, and a longer one is refused. */
+export const SNOWFLAKE_TOKEN_MAX_CHARS = 4_096;
+
 /** The refusals of an access token, each raised by `readAccessToken` before any socket. */
 export const SNOWFLAKE_TOKEN_SENTENCES = {
+  tooLong:
+    "The access token is longer than Studio accepts (4,096 characters); a programmatic access token is far shorter. Paste the token alone. Nothing was sent.",
+  badCharacters:
+    "The access token holds characters a token cannot have, such as a space, a line break or a non-ASCII letter. Paste the token alone. Nothing was sent.",
   keyPairJwt:
     "This is a key-pair JWT, not a programmatic access token: it signs in as the user its key belongs to and expires within the hour. Choose Key pair for Sign-in and paste the private key instead. Nothing was sent.",
 } as const;
@@ -476,13 +484,25 @@ function isKeyPairJwt(token: string): boolean {
   return typeof iss === "string" && KEY_PAIR_ISSUER.test(iss);
 }
 
+/** A copied `Authorization` value's scheme, which a curl example puts before the token. */
+const BEARER_PREFIX = /^Bearer(?:\s+|$)/i;
+/** What a token can hold: printable ASCII with no space, the characters an HTTP header carries unchanged. */
+const TOKEN_CHARACTERS = /^[\x21-\x7e]+$/;
+
 /**
- * The Access token field as the bearer Studio sends, or a `config` refusal before any socket: a key-pair JWT pasted
- * there is refused, since Snowflake accepts it as a token and it signs in as its own user until its `exp`.
+ * The Access token field as the bearer Studio sends, or a `config` refusal before any socket. Surrounding whitespace
+ * and line breaks (a seed's file, a paste) and a leading `Bearer ` come off; then a token longer than
+ * `SNOWFLAKE_TOKEN_MAX_CHARS` or holding a character a header cannot carry is refused, since Node refuses such a header
+ * and Snowflake's gateway answers an oversized one with a bare 431. A key-pair JWT pasted there is refused too, since
+ * Snowflake accepts it as a token and it signs in as its own user until its `exp`.
  */
 export function readAccessToken(value: string): string {
-  if (isKeyPairJwt(value)) refuse(SNOWFLAKE_TOKEN_SENTENCES.keyPairJwt);
-  return value;
+  const token = value.trim().replace(BEARER_PREFIX, "").trim();
+  if (token === "") refuse(SNOWFLAKE_FIELD_SENTENCES.tokenEmpty);
+  if (token.length > SNOWFLAKE_TOKEN_MAX_CHARS) refuse(SNOWFLAKE_TOKEN_SENTENCES.tooLong);
+  if (!TOKEN_CHARACTERS.test(token)) refuse(SNOWFLAKE_TOKEN_SENTENCES.badCharacters);
+  if (isKeyPairJwt(token)) refuse(SNOWFLAKE_TOKEN_SENTENCES.keyPairJwt);
+  return token;
 }
 
 /** A programmatic access token, sent as its own bearer. */
