@@ -364,7 +364,13 @@ export function parseReadRequest(statement: string): ReadRequest {
   } catch {
     throw new QueryError(SENTENCES.notJson);
   }
-  if (typeof parsed !== "object" || parsed === null) throw new QueryError(SENTENCES.notJson);
+  // An array parses as an object, so it has to be refused here rather than falling through to the
+  // datastore check, where the message would say the request names no datastore when the real
+  // problem is that it is not a request at all. Found by a test whose expectation was right and
+  // whose code was not.
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new QueryError(SENTENCES.notJson);
+  }
   const body = parsed as Record<string, unknown>;
   const datastore = body["datastore"];
   const path = body["path"];
