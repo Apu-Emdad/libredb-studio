@@ -19,7 +19,7 @@
 import { test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expectEqual, expectTruthy } from "./helpers";
+import { expectEqual, expectTruthy, strippedSource } from "./helpers";
 
 const DIR = join(import.meta.dir, "../../../../src/lib/db/providers/network/netconf");
 const SRC = join(import.meta.dir, "../../../../src");
@@ -58,7 +58,10 @@ function callersInSrc(name: string): number {
         continue;
       }
       if (!entry.name.endsWith(".ts") && !entry.name.endsWith(".tsx")) continue;
-      for (const line of readFileSync(path, "utf8").split("\n")) {
+      // Comments and strings removed first: a name that appears only in a comment is not a caller,
+      // and counting one made this band pass on an export with no caller at all, which is the very
+      // thing it exists to find. Measured with a probe whose only other mention was a comment.
+      for (const line of strippedSource(readFileSync(path, "utf8")).split("\n")) {
         if (!new RegExp(`\\b${name}\\b`).test(line)) continue;
         if (new RegExp(`export (?:async )?(?:function|const|class) ${name}\\b`).test(line)) continue;
         seen += 1;

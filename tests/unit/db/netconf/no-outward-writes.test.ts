@@ -17,24 +17,10 @@
 import { test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expectEqual } from "./helpers";
+import { expectEqual, strippedSource } from "./helpers";
 
 const DIR = join(import.meta.dir, "../../../../src/lib/db/providers/network/netconf");
 
-/**
- * The text with comments and literals removed, because the ban is on CALLS.
- *
- * Without this the band would fail on its own explanation: this file's docblock names
- * `console.log`, and so does the one in the provider that explains why there is none.
- */
-function code(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/(^|[^:])\/\/[^\n]*/g, "$1 ")
-    .replace(/`(?:[^`\\]|\\.)*`/g, "``")
-    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
-    .replace(/'(?:[^'\\]|\\.)*'/g, "''");
-}
 
 const OUTWARD = [
   /\bconsole\s*\./,
@@ -49,7 +35,7 @@ const OUTWARD = [
 test("no file in this provider writes anything outward, which is what Y-S2 now rests on", () => {
   const found: string[] = [];
   for (const name of readdirSync(DIR).filter((f) => f.endsWith(".ts"))) {
-    const body = code(readFileSync(join(DIR, name), "utf8"));
+    const body = strippedSource(readFileSync(join(DIR, name), "utf8"));
     body.split("\n").forEach((line, at) => {
       for (const pattern of OUTWARD) {
         if (pattern.test(line)) found.push(`${name}:${at + 1}: ${line.trim().slice(0, 60)}`);
@@ -67,15 +53,17 @@ test("no file in this provider writes anything outward, which is what Y-S2 now r
  * broken by its own cleaning step.
  */
 test("the band goes red on a write, and its cleaning does not hide one", () => {
-  const withWrite = code('function f() {\n  console.log("x");\n}');
+  const withWrite = strippedSource('function f() {\n  console.log("x");\n}');
   expectEqual(
     OUTWARD.some((p) => p.test(withWrite)),
     true,
   );
-  // A write inside a comment or a string is not a write, and must not raise the band.
-  for (const harmless of ['const s = "console.log";', "// console.log here", "/* logger */"]) {
+  // A write inside a COMMENT is not a write. A write inside a string is not one either, and this
+  // band will raise on it anyway: strings are not removed, because every attempt to remove them
+  // deleted real code instead. That failure direction is deliberate and stated in `strippedSource`.
+  for (const harmless of ["// console.log here", "/* logger */"]) {
     expectEqual(
-      OUTWARD.some((p) => p.test(code(harmless))),
+      OUTWARD.some((p) => p.test(strippedSource(harmless))),
       false,
     );
   }

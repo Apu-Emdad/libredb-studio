@@ -31,3 +31,35 @@ export const expectRejects = async (promise: Promise<unknown>, like?: unknown): 
   if (like === undefined) await expect(promise).rejects.toThrow();
   else await expect(promise).rejects.toThrow(like as never);
 };
+
+/**
+ * Source with COMMENTS removed, and nothing else, for the bands that scan text.
+ *
+ * It is shared because two bands need it and a second copy would drift: one asks that no file
+ * performs an outward write, the other that a requirement-bound export is called from somewhere.
+ * Both are about CALLS, and both would otherwise read their own explanations as code.
+ *
+ * Strings are NOT removed, and that is the measured conclusion of three attempts rather than a
+ * shortcut.
+ *
+ * Attempt one removed comments only in one band and nothing in the other, so a name mentioned in a
+ * comment counted as a caller: the band passed on an export with no caller at all, which is the
+ * one thing it exists to find.
+ *
+ * Attempt two blanked template literals as well, and the band then reported `escapeXml` as
+ * uncalled, because every one of its calls sits inside a template literal in `requests.ts`.
+ *
+ * Attempt three skipped literals containing `${`, which made the pattern match from the END of one
+ * literal to the START of the next and swallow everything between, hiding the call to
+ * `messageIdOf`. Blanking double-quoted strings did the same thing for a larger span: a `"` inside
+ * a REGEX literal pairs with a quote far away, and `session.ts` lost more than half its text,
+ * 9,308 characters down to 4,222.
+ *
+ * So the rule is comments only. The cost is that a name written as text inside a string counts as
+ * a mention, which can make a band raise a finding that is not one, or miss one that is. The three
+ * attempts above all DELETED REAL CODE, and a scan that deletes what it is counting reports clean.
+ * Between a loud wrong answer and a quiet one, this takes the loud one.
+ */
+export function strippedSource(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
+}
