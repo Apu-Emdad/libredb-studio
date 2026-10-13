@@ -67,6 +67,8 @@ The dialog shows no port field, no SSL panel and no SSH tunnel.
 | Role | `role` | Yes | Every statement runs as this role; Studio checks it when it connects. |
 
 The key and passphrase fields show only for Key pair and the token field only for a programmatic access token; switching the method clears the other method's secret, so a saved connection holds one credential.
+User, Role, Warehouse, Database and Schema are read without the whitespace around them, so a trailing space does not turn a registered key, a granted role or an existing warehouse into a missing one; a quoted name keeps the spaces inside its quotes.
+Passphrase loses only a line break at its end, as a paste from a file leaves one; a space is part of the passphrase.
 An empty or malformed field is refused in the dialog and again by `connect()`, before any socket, with these sentences:
 
 - `Enter Account: an account identifier such as myorg-myaccount, or its URL. Nothing was sent.`

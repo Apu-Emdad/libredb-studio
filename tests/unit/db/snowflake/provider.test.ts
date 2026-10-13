@@ -321,6 +321,69 @@ describe("connect() sends the connect statement, then the role check", () => {
   });
 });
 
+describe("connect() reads the names without the whitespace around them (SF-012)", () => {
+  const claimsOf = (request: RecordedRequest): Record<string, unknown> => {
+    const token = String(request.headers.authorization).replace(/^Bearer /, "");
+    return JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+  };
+
+  test("a padded User, Role, Warehouse, Database and Schema are sent unpadded, in the JWT and every body", async () => {
+    const entry = build({
+      user: "studio_svc ",
+      role: " STUDIO_RO ",
+      warehouse: " STUDIO_WH",
+      database: " SALES ",
+      schema: "PUBLIC\t",
+    });
+    entry.transports.answer(SUBMIT, RUNNING, ROLE_OK);
+    await entry.provider.connect();
+    expect(entry.provider.isConnected()).toBe(true);
+    expect(claimsOf(entry.transports.requests[0]).sub).toBe("MYORG-MYACCT.STUDIO_SVC");
+    const bodies = entry.transports.requests.map(bodyOf);
+    expect(bodies[0].statement).toBe("SHOW WAREHOUSES LIKE 'STUDIO_WH'");
+    for (const body of bodies) {
+      expect([body.role, body.warehouse, body.database, body.schema]).toEqual([
+        "STUDIO_RO",
+        "STUDIO_WH",
+        "SALES",
+        "PUBLIC",
+      ]);
+    }
+  });
+
+  test("a quoted Role keeps the spaces inside its quotes", async () => {
+    const entry = build({ role: ' "Studio RO " ' });
+    entry.transports.answer(SUBMIT, RUNNING, roleAnswer("Studio RO "));
+    await entry.provider.connect();
+    expect(bodyOf(entry.transports.requests[0]).role).toBe("Studio RO ");
+  });
+
+  test("a passphrase with a line break at its end opens the key; a space in it is the passphrase's own", async () => {
+    const pem = pbes2Pbkdf2Pem(KEY, KEY_TEST_PASSPHRASE, 2_048);
+    const entry = await connected({ privateKey: pem, privateKeyPassphrase: `${KEY_TEST_PASSPHRASE}\r\n` });
+    expect(entry.provider.isConnected()).toBe(true);
+    const padded = build({ privateKey: pem, privateKeyPassphrase: `${KEY_TEST_PASSPHRASE} ` });
+    const error = await caught(padded.provider.connect());
+    expect((error as Error).message).toBe("The passphrase does not open this key. Nothing was sent.");
+  });
+
+  test("the tree marks the configured database and schema when they were typed padded", async () => {
+    const entry = await connected({ database: "SALES ", schema: " PUBLIC" });
+    const names = (...rows: string[]) =>
+      resultAnswer({ columns: [{ name: "name", type: "text" }], rows: rows.map((name) => [name]) });
+    entry.transports.answer(SUBMIT, names("SALES"), names("PUBLIC"));
+    expect((await entry.provider.listContainers()).map((c) => c.isSessionDefault)).toEqual([true]);
+    expect((await entry.provider.listContainers(["SALES"])).map((c) => c.isSessionDefault)).toEqual([true]);
+  });
+
+  test("getHealth() reads the warehouse unpadded too", async () => {
+    const entry = await connected({ warehouse: "STUDIO_WH " });
+    entry.transports.answer(SUBMIT, RUNNING);
+    await entry.provider.getHealth();
+    expect(bodyOf(entry.transports.requests[0]).statement).toBe("SHOW WAREHOUSES LIKE 'STUDIO_WH'");
+  });
+});
+
 describe("the connect cautions", () => {
   test("an answer holding A_B and AXB for A_B reads A_B only", async () => {
     const entry = await connected(

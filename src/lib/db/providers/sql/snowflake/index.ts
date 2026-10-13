@@ -209,6 +209,19 @@ interface SnowflakeSettings {
 
 const isBlank = (value: unknown): boolean => typeof value !== "string" || value.trim() === "";
 
+/**
+ * A name field as Snowflake should read it: without the whitespace around it, which no unquoted name holds and which
+ * Snowflake reads as part of the name, so a trailing space made a registered key, a granted role or an existing
+ * warehouse read as absent (SF-012). A quoted name keeps the spaces inside its quotes.
+ */
+const unpadded = (value: string | undefined): string | undefined => value?.trim();
+
+/**
+ * The passphrase without the line break a paste or a file read leaves at its end. Only CR and LF are removed: a space
+ * may be part of a passphrase, and removing one would open no key that the exact text does not.
+ */
+const withoutLineEnd = (value: unknown): unknown => (typeof value === "string" ? value.replace(/[\r\n]+$/, "") : value);
+
 function refuse(sentence: string): never {
   throw new SnowflakeError("config", sentence);
 }
@@ -227,8 +240,8 @@ function readSettings(config: DatabaseConnection): SnowflakeSettings {
   if (isBlank(config.role)) refuse(SNOWFLAKE_FIELD_SENTENCES.roleEmpty);
   return {
     endpoint,
-    user: config.user as string,
-    role: config.role as string,
+    user: (config.user as string).trim(),
+    role: (config.role as string).trim(),
     method: method as "keypair" | "pat",
   };
 }
@@ -371,7 +384,9 @@ export class SnowflakeProvider extends SQLBaseProvider {
     try {
       const settings = readSettings(this.config);
       const loaded: LoadedKey | null =
-        settings.method === "keypair" ? loadPrivateKey(this.config.privateKey, this.config.privateKeyPassphrase) : null;
+        settings.method === "keypair"
+          ? loadPrivateKey(this.config.privateKey, withoutLineEnd(this.config.privateKeyPassphrase))
+          : null;
       const deps: SnowflakeTransportDeps = { ...snowflakeProductionDeps(), ...this.deps };
       const { endpoint, user, role } = settings;
       const claim = jwtClaim(endpoint.accountClaim, user);
@@ -381,7 +396,9 @@ export class SnowflakeProvider extends SQLBaseProvider {
         { origin: endpoint.origin, tls: { rejectUnauthorized: true, identity: endpoint.host }, tokens },
         deps,
       );
-      const { database, schema, warehouse } = this.config;
+      const [database, schema, warehouse] = [this.config.database, this.config.schema, this.config.warehouse].map(
+        unpadded,
+      );
       const statements = createSnowflakeStatements({
         transport,
         origin: endpoint.origin,
@@ -552,9 +569,10 @@ export class SnowflakeProvider extends SQLBaseProvider {
       this.ensureConnected();
       return [];
     }
-    if (parent.length === 0) return this.surface((run) => listDatabases(run, this.config.database));
-    const configured = this.config.database ? foldIdentifier(this.config.database) : null;
-    const sessionSchema = parent[0] === configured ? this.config.schema : undefined;
+    const database = unpadded(this.config.database);
+    if (parent.length === 0) return this.surface((run) => listDatabases(run, database));
+    const configured = database ? foldIdentifier(database) : null;
+    const sessionSchema = parent[0] === configured ? unpadded(this.config.schema) : undefined;
     return this.surface((run) => listSchemas(run, parent[0], sessionSchema));
   }
 
@@ -616,7 +634,7 @@ export class SnowflakeProvider extends SQLBaseProvider {
   }
 
   public async getHealth(): Promise<HealthInfo> {
-    return this.surface((run) => readHealth(run, this.config.warehouse));
+    return this.surface((run) => readHealth(run, unpadded(this.config.warehouse)));
   }
 
   /** No operation runs: a kill would reach other users' statements, and the base defaults are PostgreSQL's. */
