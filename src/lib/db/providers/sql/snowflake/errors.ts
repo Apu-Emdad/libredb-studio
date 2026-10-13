@@ -142,6 +142,8 @@ export const SNOWFLAKE_ERROR_SENTENCES = Object.freeze({
     "Snowflake signs in with an access token only for a user under a network policy, and this user has none. An administrator either attaches a network policy that allows the address Studio connects from, or sets an authentication policy with PAT_POLICY = (NETWORK_POLICY_EVALUATION = ENFORCED_NOT_REQUIRED).",
   roleRefused: (role: string, user: string, roleId: string, userId: string) =>
     `Snowflake refused role ${role} for user ${user}: the role does not exist, it is not granted to this user, or the key pair or access token is restricted to another role. Check the Role field; an administrator grants it with GRANT ROLE ${roleId} TO USER ${userId}.`,
+  tokenRoleRefused: (role: string, user: string) =>
+    `Snowflake refused role ${role} for this access token: the token may be restricted to another role, since a token generated with a role restriction signs in only as that role, or role ${role} is not granted to user ${user}. Set Role to the token's role, which SHOW USER PROGRAMMATIC ACCESS TOKENS lists under role_restriction, or use a token restricted to ${role}.`,
   roleMismatch: (actual: string, role: string) =>
     `Snowflake ran this connection as role ${actual}, not ${role}. Check the Role field; a role-restricted key or token signs in only as its own role.`,
   tokenUserMismatch: (actual: string, user: string) =>
@@ -216,7 +218,11 @@ const CODE_SHAPE = /^[A-Za-z0-9_]{1,32}$/;
 /** Snowflake's syntax error code, which a bare Scripting block fails with. */
 const SYNTAX_ERROR_CODE = "001003";
 const SCRIPTING_KEYWORDS: ReadonlySet<string> = new Set(["BEGIN", "DECLARE"]);
-/** 390186 is what Snowflake answers, at HTTP 400 on the submit; 390189 and 3013 are the documented codes. */
+/**
+ * 390186 is what Snowflake answers, at HTTP 400 on the submit; 390189 and 3013 are the documented codes. 390186 also
+ * answers a role the credential may not use, which for a token is a role restriction no GRANT changes.
+ */
+const ROLE_NOT_PERMITTED_CODE = "390186";
 const ROLE_REFUSED_CODES: ReadonlySet<string> = new Set(["390186", "390189", "3013"]);
 /** Snowflake's "Bearer token is missing in the HTTP request authorization header", for a header it cannot read. */
 const TOKEN_MISSING_CODE = "390146";
@@ -316,6 +322,9 @@ export function deadlineError(timeoutS: number, bound: SnowflakeDeadlineBound): 
 export function failureError(failure: SnowflakeFailure, context: SnowflakeFailureContext): SnowflakeError {
   const text = serverMessage(failure.message ?? "", context.secretForms);
   const { status, code } = failure;
+  if (code === ROLE_NOT_PERMITTED_CODE && context.authMethod === "pat") {
+    return new SnowflakeError("auth", sentences.tokenRoleRefused(context.role, context.user));
+  }
   if (code !== null && ROLE_REFUSED_CODES.has(code)) {
     return new SnowflakeError(
       "auth",

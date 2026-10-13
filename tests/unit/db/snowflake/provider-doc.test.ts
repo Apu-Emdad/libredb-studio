@@ -191,6 +191,7 @@ const QUOTED: Readonly<Record<string, { readonly keys: readonly string[]; readon
       SNOWFLAKE_ERROR_SENTENCES.networkPolicyRefused,
       SNOWFLAKE_ERROR_SENTENCES.networkPolicyRequired,
       SNOWFLAKE_ERROR_SENTENCES.roleRefused("<role>", "<user>", "<role>", "<user>"),
+      SNOWFLAKE_ERROR_SENTENCES.tokenRoleRefused("<role>", "<user>"),
       SNOWFLAKE_ERROR_SENTENCES.roleMismatch("<r>", "<role>"),
       SNOWFLAKE_ERROR_SENTENCES.tokenUserMismatch("<u>", "<user>"),
       SNOWFLAKE_ERROR_SENTENCES.noWarehouse,

@@ -133,6 +133,30 @@ describe("failureError: every row of the error table", () => {
       sentence: SNOWFLAKE_ERROR_SENTENCES.roleRefused("STUDIO_NOWH", "studio_svc", "STUDIO_NOWH", "studio_svc"),
     },
     {
+      // F's live answer to a token restricted to STUDIO_RO with Role STUDIO_RW, a role the user also holds (SF-017).
+      name: "role not permitted for the token, 390186 under token sign-in: no GRANT advice",
+      failure: failure({
+        status: 400,
+        code: "390186",
+        message:
+          "Role 'STUDIO_RW' specified in the connect string is not granted to this user, or is not permitted for the credentials being used.",
+        request: "submit",
+      }),
+      context: { role: "STUDIO_RW", user: "studio_pat", authMethod: "pat" },
+      category: "auth",
+      house: AuthenticationError,
+      sentence:
+        "Snowflake refused role STUDIO_RW for this access token: the token may be restricted to another role, since a token generated with a role restriction signs in only as that role, or role STUDIO_RW is not granted to user studio_pat. Set Role to the token's role, which SHOW USER PROGRAMMATIC ACCESS TOKENS lists under role_restriction, or use a token restricted to STUDIO_RW.",
+    },
+    {
+      name: "role refused, 390189 under token sign-in keeps the shared sentence",
+      failure: failure({ status: 401, code: "390189", message: "Role 'X' does not exist or not authorized" }),
+      context: { authMethod: "pat" },
+      category: "auth",
+      house: AuthenticationError,
+      sentence: SNOWFLAKE_ERROR_SENTENCES.roleRefused("STUDIO_RO", "studio_svc", "STUDIO_RO", "studio_svc"),
+    },
+    {
       name: "key pair refused, 390144",
       failure: failure({ status: 401, code: "390144", message: `JWT token is invalid. [${UUID}]` }),
       category: "auth",

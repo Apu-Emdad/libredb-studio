@@ -1062,9 +1062,8 @@ describe("a role-restricted PAT with another configured role", () => {
     expect(bodyOf(entry.transports.requests[0]).role).toBe("STUDIO_NOWH");
     expect(scenario.exchanges[0].response.body.code).toBe("390186");
     expect(error).toBeInstanceOf(AuthenticationError);
-    expect(error.message).toBe(
-      SNOWFLAKE_ERROR_SENTENCES.roleRefused("STUDIO_NOWH", "studio_pat", "STUDIO_NOWH", "studio_pat"),
-    );
+    expect(error.message).toBe(SNOWFLAKE_ERROR_SENTENCES.tokenRoleRefused("STUDIO_NOWH", "studio_pat"));
+    expect(error.message).not.toContain("GRANT");
     expect(statementsSent(entry)).not.toContain('SHOW TABLES IN SCHEMA "STUDIO_DEMO"."PROBE"');
     expect(entry.provider.isConnected()).toBe(false);
   });
