@@ -23,7 +23,7 @@
  */
 
 import { BaseDatabaseProvider } from "@/lib/db/base-provider";
-import { QueryError } from "@/lib/db/errors";
+import { QueryError, TimeoutError } from "@/lib/db/errors";
 import type {
   ActiveSessionDetails,
   Container,
@@ -214,7 +214,18 @@ export class NetconfProvider extends BaseDatabaseProvider {
     } catch (error) {
       // A refused read is `{ unavailable }`, never 0: the type says so, and a zero would draw an
       // empty module where the truth is that the read was refused.
-      return { node: { unavailable: messageOf(error) } };
+      //
+      // Which errors answer here and which rise is the house rule at
+      // `providers/platform/kubernetes/objects.ts:348`, and its reason is scope: an error that
+      // spoils this one read answers for this kind alone, while one that spoils the whole
+      // connection has to rise, or every module would read "unavailable" while the connection
+      // itself still looked healthy. An earlier version caught everything and turned it into a
+      // sentence, which also dressed this provider's own defects as facts about the device: a
+      // TypeError here would have been drawn in the tree as the module's count.
+      if (error instanceof QueryError || error instanceof TimeoutError) {
+        return { node: { unavailable: error.message } };
+      }
+      throw error;
     }
   }
 
@@ -407,8 +418,4 @@ function parsePathArgument(path: string): readonly PathNode[] {
     });
   if (nodes.length === 0) throw new QueryError(SENTENCES.noPath);
   return nodes;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

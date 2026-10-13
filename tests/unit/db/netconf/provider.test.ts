@@ -11,7 +11,7 @@ import { test } from "bun:test";
 import { expectBe, expectEqual, expectRejects, expectTruthy } from "./helpers";
 import { NetconfProvider, parseReadRequest, type DeviceReader } from "@/lib/db/providers/network/netconf/index";
 import type { DatabaseConnection } from "@/lib/db/types";
-import { QueryError } from "@/lib/db/errors";
+import { QueryError, TimeoutError } from "@/lib/db/errors";
 import { encodeSegment } from "@/lib/db/providers/network/netconf/keypath";
 import { buildRpc } from "@/lib/db/providers/network/netconf/requests";
 
@@ -96,17 +96,61 @@ test("the key kind is not counted and not listed here, because the Keys panel en
   await expectRejects(provider.listObjects(["running", "ietf-interfaces"], "key"), /Browse Keys/);
 });
 
+/**
+ * What answers `{ unavailable }` and what rises is decided by scope, which is the rule at
+ * `providers/platform/kubernetes/objects.ts:348`: a refusal of this one read belongs to this kind,
+ * and anything that spoils the whole connection has to rise, or every module would be drawn
+ * "unavailable" while the connection still looked healthy.
+ *
+ * The three cases below are the boundary's whole contract. The third is the one that matters most:
+ * an earlier version of this provider caught everything and turned it into a sentence, so a
+ * TypeError of its own would have been drawn in the tree as the module's count, and an audit would
+ * have read it as a fact about the device.
+ */
 test("a refused count is a sentence, not a zero", async () => {
   const provider = await open(
     reader({
       topLevelNodes: async () => {
-        throw new Error("access-denied on this module");
+        throw new QueryError("access-denied on this module");
       },
     }),
   );
   expectEqual(await provider.countObjects(["running", "ietf-interfaces"]), {
     node: { unavailable: "access-denied on this module" },
   });
+});
+
+test("a deadline on the count is the same answer: the kind alone, with the wait as its sentence", async () => {
+  const provider = await open(
+    reader({
+      topLevelNodes: async () => {
+        throw new TimeoutError("the device did not answer within 5 seconds");
+      },
+    }),
+  );
+  expectEqual(await provider.countObjects(["running", "ietf-interfaces"]), {
+    node: { unavailable: "the device did not answer within 5 seconds" },
+  });
+});
+
+test("an unrelated failure rises unchanged, so this provider's own defect is never drawn as a count", async () => {
+  const planted = new RangeError("a defect in this provider, not a fact about the device");
+  const provider = await open(
+    reader({
+      topLevelNodes: async () => {
+        throw planted;
+      },
+    }),
+  );
+  let caught: unknown;
+  try {
+    await provider.countObjects(["running", "ietf-interfaces"]);
+  } catch (error) {
+    caught = error;
+  }
+  // The same object, not a copy and not a conversion: nothing read it and rewrote it on the way out.
+  expectBe(caught, planted);
+  expectTruthy(caught instanceof RangeError);
 });
 
 test("a write typed into the console is answered with what this provider is", async () => {
