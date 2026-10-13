@@ -41,7 +41,8 @@ const PERMITTED = [
 function session(requests) {
   return new Promise((resolve, reject) => {
     const client = new Client();
-    const replies = [];
+    const replies = new Map();
+    let notifications = 0;
     let fingerprint = null;
     const timer = setTimeout(() => reject(new Error("the fixture did not answer within 30s")), 30000);
     client.on("ready", () => {
@@ -58,16 +59,33 @@ function session(requests) {
           buffer += chunk.toString("utf8");
           let at;
           while ((at = buffer.indexOf(EOM)) !== -1) {
-            replies.push(buffer.slice(0, at));
+            const message = buffer.slice(0, at);
             buffer = buffer.slice(at + EOM.length);
-            if (replies.length > 1) sent += 1;
-            next();
+            // Replies are matched by message-id, not by arrival order. A server that accepts
+            // create-subscription starts sending notifications, and an order based reader counts
+            // those as replies and then blames the wrong operation. Measured 2026-10-13 while
+            // breaking this check on purpose: it reported 17 replies to 12 requests and named the
+            // wrong request as the failing one.
+            const id = /message-id="(\d+)"/.exec(message);
+            if (id) {
+              replies.set(Number(id[1]), message);
+              sent += 1;
+              next();
+            } else if (message.includes("<hello")) {
+              replies.set(0, message);
+              next();
+            } else {
+              notifications += 1;
+            }
           }
         });
-        stream.on("close", () => { clearTimeout(timer); client.end(); resolve({ fingerprint, replies }); });
+        stream.on("close", () => { clearTimeout(timer); client.end(); resolve({ fingerprint, replies, notifications }); });
       });
     });
     client.on("error", (error) => { clearTimeout(timer); reject(error); });
+    // A fixture whose accounts are half configured refuses the login, and the reason has to be a
+    // sentence rather than an unhandled rejection: measured 2026-10-13, removing the configured
+    // users made this script print an ssh2 stack trace instead of saying what was wrong.
     client.connect({
       host: HOST, port: PORT, username: USER, privateKey: readFileSync(KEY), readyTimeout: 20000,
       hostVerifier: (key) => { fingerprint = key.length > 0; return true; },
@@ -76,22 +94,36 @@ function session(requests) {
 }
 
 const requests = [...REFUSED, ...PERMITTED].map(([, body]) => body);
-const { replies } = await session(requests);
-const hello = replies[0] ?? "";
-const answers = replies.slice(1);
+let result;
+try {
+  result = await session(requests);
+} catch (error) {
+  console.error("NETCONF fixture check FAILED");
+  console.error(`  no session could be opened on 127.0.0.1:${PORT} as ${USER}: ${error.message}`);
+  console.error("  a login refusal here usually means the fixture's accounts were not fully applied");
+  process.exit(1);
+}
+const { replies, notifications } = result;
+const hello = replies.get(0) ?? "";
 
 const failures = [];
 if (!hello.includes("<session-id>")) failures.push("the hello carried no session-id");
-if (answers.length !== requests.length) failures.push(`asked ${requests.length} operations, got ${answers.length} replies`);
+if (notifications > 0) {
+  failures.push(`the server sent ${notifications} notifications, so a subscription was accepted`);
+}
 
+[...REFUSED, ...PERMITTED].forEach(([name], index) => {
+  const reply = replies.get(index + 1);
+  if (reply === undefined) failures.push(`${name} got no reply carrying its message-id`);
+});
 REFUSED.forEach(([name], index) => {
-  const reply = answers[index] ?? "";
+  const reply = replies.get(index + 1) ?? "";
   if (!reply.includes("<error-tag>access-denied</error-tag>")) {
     failures.push(`${name} was not refused with access-denied: ${reply.slice(0, 120)}`);
   }
 });
 PERMITTED.forEach(([name], index) => {
-  const reply = answers[REFUSED.length + index] ?? "";
+  const reply = replies.get(REFUSED.length + index + 1) ?? "";
   if (reply.includes("<rpc-error>") || !reply.includes("<data")) {
     failures.push(`${name} did not return data: ${reply.slice(0, 120)}`);
   }
