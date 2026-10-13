@@ -1013,10 +1013,13 @@ describe("the dashboard's other panels, the inventory and a view's source", () =
     entry.transports.requests.splice(0);
     statement(entry, WAREHOUSE, [["STUDIO_PROBE_WH", "STARTED", "X-Small", "1", "0"]]);
     statement(entry, ["name"], [["STUDIO_DEMO"]]);
+    statement(entry, ["name"], [["E_TYPES"]]);
+    statement(entry, ["name"], []);
     const overview = await entry.provider.getOverview();
     expect(overview.version).toBe(
-      "Snowflake: 1 databases visible to role STUDIO_RW; warehouse STUDIO_PROBE_WH STARTED, X-Small, 1 running, 0 queued",
+      "Snowflake: 1 databases visible to role STUDIO_RW; warehouse STUDIO_PROBE_WH STARTED, X-Small, 1 running and 0 queued, Studio's own reads included",
     );
+    expect([overview.tableCount, overview.indexCount]).toEqual([1, 0]);
     statement(entry, WAREHOUSE, [["STUDIO_PROBE_WH", "STARTED", "X-Small", "1", "0"]]);
     statement(
       entry,

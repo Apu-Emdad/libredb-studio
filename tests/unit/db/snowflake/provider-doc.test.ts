@@ -45,6 +45,7 @@ import {
   SNOWFLAKE_TREE_PAGE_LIMIT,
 } from "@/lib/db/providers/sql/snowflake/introspect";
 import {
+  createSnowflakeMonitoring,
   SNOWFLAKE_MONITORING_LABELS,
   SNOWFLAKE_MONITORING_SENTENCES,
   SNOWFLAKE_MONITORING_TTL_MS,
@@ -569,6 +570,34 @@ describe("every other number and sentence the doc states is the code's", () => {
     expect(FLAT_DOC).toContain(
       `The wait has its own bound of the same length (\`timeout\` plus ${seconds(SNOWFLAKE_DEADLINE_GRACE_MS)})`,
     );
+  });
+
+  test("the Overview's measured counts and its warehouse load wording are the provider's (SF-036)", async () => {
+    const answers: Record<string, string[][]> = {
+      "SHOW WAREHOUSES": [["WH", "STARTED", "X-Small", "2", "0"]],
+      "SHOW DATABASES": [["DB"]],
+      "SHOW TERSE TABLES": [["T"]],
+      "SHOW INDEXES": [],
+    };
+    const monitoring = createSnowflakeMonitoring({
+      run: async (sql) => {
+        const key = Object.keys(answers).find((prefix) => sql.startsWith(prefix)) ?? "";
+        const columns = ["name", "state", "size", "running", "queued"];
+        const rows = answers[key].map((row) => Object.fromEntries(row.map((cell, index) => [columns[index], cell])));
+        return { rows, fields: columns, columnTypes: {}, warnings: [], cut: false, numRows: rows.length };
+      },
+      warehouse: "WH",
+      database: "DB",
+      schema: undefined,
+      role: "R",
+      now: () => 0,
+    });
+    const overview = await monitoring.getOverview();
+    expect(overview.version).toEndWith("STARTED, X-Small, 2 running and 0 queued, Studio's own reads included");
+    expect(FLAT_DOC).toContain("as `<n> running and <m> queued, Studio's own reads included`");
+    for (const statement of ["SHOW WAREHOUSES LIKE", "SHOW DATABASES", "SHOW TERSE TABLES", "SHOW INDEXES"]) {
+      expect(FLAT_DOC).toContain(`\`${statement}\``);
+    }
   });
 
   test("an oversized first partition is reread under the budget plus the slack, not refused (SF-032)", () => {

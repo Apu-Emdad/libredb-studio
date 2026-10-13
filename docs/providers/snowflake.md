@@ -528,6 +528,9 @@ So a statement whose code names a `SYSTEM$` function (the confirmation gate's co
 ### 8.2 Monitoring
 
 Overview, table stats, index stats and health send only `SHOW`.
+The Overview reads the warehouse row (`SHOW WAREHOUSES LIKE`), `SHOW DATABASES`, `SHOW TERSE TABLES` and `SHOW INDEXES`, the last two in the configured database, or in the account when Database is empty.
+Its Tables card is that table count (from 10,000, Studio's `LIMIT`, it reads `10,000+`, "counted from the first 10,000 tables Snowflake listed in database <db>"), and its index count is the hybrid-table indexes `SHOW INDEXES` lists.
+The warehouse's running and queued counts are shown only while it is `STARTED` or `RESIZING`, as `<n> running and <m> queued, Studio's own reads included`: Snowflake counts every statement that names the warehouse, Studio's own `SHOW` reads too, and measured on the trial it reported `running 3` for a `SUSPENDED` warehouse while three `SHOW COLUMNS` named it, so a suspended warehouse shows its state and size alone.
 Performance, slow queries and running statements read Information Schema, and each first sends a fresh `SHOW WAREHOUSES LIKE` and reads only when the warehouse is running; otherwise the panel reads `Warehouse <wh> is suspended, and Studio does not start it to fill this panel. Run a query, then Refresh.`
 A warehouse that suspends in the moment between that state read and the Information Schema statement is resumed once by the statement.
 Information Schema reads are cached for 60 s, and auto-refresh stays off until the user starts it, since `resumesBilledCompute` is declared.
