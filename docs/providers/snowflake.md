@@ -13,7 +13,7 @@
 | **Query language**     | `sql` (Snowflake SQL)                                                                               |
 | **Default port**       | None: the endpoint is always the account host on 443                                                |
 | **Connection string**  | Not stored: a pasted Snowflake URL is decomposed into fields                                        |
-| **EXPLAIN**            | `snowflake-json`: `EXPLAIN USING JSON`, which compiles the statement and never runs it              |
+| **EXPLAIN**            | `snowflake-json`: `EXPLAIN USING JSON`, which compiles the statement; never sent for a `SYSTEM$` call |
 | **Writes**             | Whatever the role allows; the confirmation gate asks before Snowflake's destructive forms            |
 | **Transactions**       | None across statements; a transaction runs inside one `EXECUTE IMMEDIATE $$ ... $$` block           |
 | **Maintenance**        | None                                                                                                |
@@ -300,8 +300,8 @@ A statement that needs a warehouse resumes a suspended one when AUTO_RESUME is T
 | --- | --- | --- | --- |
 | Editor run | the user's statement | yes, if the statement needs one | the user's click; Query Timeout; cancel |
 | Multi-statement script | one request per statement | per statement | Stop, a closed tab or a dropped request stops the remaining statements |
-| Explain button | `EXPLAIN USING JSON` | no | the user's click |
-| Background explain estimate | `EXPLAIN USING JSON` beside each run of a single `SELECT` | no | the user's run; typing sends nothing |
+| Explain button | `EXPLAIN USING JSON`, never for a statement naming a `SYSTEM$` function | no | the user's click |
+| Background explain estimate | `EXPLAIN USING JSON` beside each run of a single `SELECT` that names no `SYSTEM$` function | no | the user's run; typing sends nothing |
 | Monitoring dashboard | `SHOW` for every panel; three Information Schema reads only on a warehouse a fresh state read shows running | no; it resumes one only if the warehouse suspends between that read and the statement | opening the dashboard, which selects a connection by itself; a 60 s cache; auto-refresh off by default |
 | Tree, object counts, describe, inventory, autocomplete | `SHOW`; one `SHOW TERSE OBJECTS` per schema expand | no | `resumesBilledCompute`; the user's open |
 | View source of a non-view | `GET_DDL` | no | the user's click; a Source tab restored on reload or sign-in reads nothing until the user presses Read definition, or otherwise uses the connection |
@@ -450,6 +450,8 @@ Every statement Studio writes quotes each name with `"`, so a lower-case catalog
 The Explain button sends `EXPLAIN USING JSON <statement>`, which compiles the statement without running it and needs no warehouse, and renders the plan's partition and byte totals and its operations tree.
 Snowflake has no executing `EXPLAIN`, so the button's analyze request gets the same form.
 The background estimate beside each run of a single `SELECT` sends the same `EXPLAIN USING JSON`, with the same declines, and needs no running warehouse either; typing in the editor sends nothing.
+Compiling is not inert for a `SYSTEM$` function: Snowflake evaluates it while it explains the statement, measured on the trial (Snowflake 10.37.100), where `EXPLAIN USING JSON SELECT SYSTEM$WAIT(5)` took 6.5 s and an Explain of `SELECT SYSTEM$CANCEL_QUERY('<id>')` cancelled the other statement.
+So a statement whose code names a `SYSTEM$` function (the confirmation gate's code forms, [section 9](#9-the-confirmation-gate)) is never explained: the Explain button says `Snowflake runs a SYSTEM$ function while it explains a statement, so Studio does not explain one. Run it instead; the confirmation gate asks first.`, and a run of one sends no background estimate, so a confirmed call runs once.
 
 ### 8.2 Monitoring
 

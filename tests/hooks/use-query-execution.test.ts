@@ -29,6 +29,7 @@ import { milvusRefusal } from "@/lib/db/providers/vector/milvus/guard";
 import { qdrantRefusal } from "@/lib/db/providers/vector/qdrant/guard";
 import { statementRefusal } from "@/lib/db/destructive-commands";
 import { DATABEND_EXPLAIN_DECLINES } from "@/lib/explain/databend-text";
+import { SNOWFLAKE_EXPLAIN_GATED_DECLINE } from "@/lib/explain/snowflake-json";
 import { resolveSqlGrammar } from "@/lib/sql/grammar";
 import { isMultiStatement } from "@/lib/sql/statement-splitter";
 import type { DatabaseConnection, QueryTab } from "@/lib/types";
@@ -2716,6 +2717,69 @@ describe("useQueryExecution", () => {
     const body = JSON.parse(queryCall![1]!.body as string);
     expect(body.sql).toBe("SELECT * FROM users");
     expect(body.explain).toEqual({ mode: "analyze" });
+  });
+
+  /**
+   * SF-001: Snowflake's compiler evaluates a SYSTEM$ function while it explains the statement, so the Explain button
+   * and the background estimate, which both skip the gate, may never send one. Measured on the trial (Snowflake
+   * 10.37.100): Explain of `SELECT SYSTEM$CANCEL_QUERY('<id>')` cancelled the other statement, and a confirmed RUN of
+   * `SELECT SYSTEM$WAIT(60)` evaluated the wait a second time in its background plan.
+   */
+  describe("Snowflake SYSTEM$ statements are never explained (SF-001)", () => {
+    const snowflakeConnection = { ...mockConnection, type: "snowflake" as const };
+    const snowflakeMetadata: ProviderMetadata = {
+      ...mockMetadata,
+      capabilities: { ...mockMetadata.capabilities, explainFormat: "snowflake-json" as const },
+    };
+    const cancelCall = "SELECT SYSTEM$CANCEL_QUERY('01b2') AS E_EXPLBTN_1";
+
+    test("the Explain button sends nothing and says why", async () => {
+      const fetchMock = mockGlobalFetch({ "/api/db/query": { ok: true, json: mockQueryResult } });
+      const params = createDefaultParams({ activeConnection: snowflakeConnection, metadata: snowflakeMetadata });
+      const { result } = renderHook(() => useQueryExecution(params));
+
+      let answer: boolean | undefined;
+      await act(async () => {
+        answer = await result.current.executeQuery(cancelCall, undefined, true);
+      });
+
+      expect(answer).toBe(false);
+      expect(fetchMock.mock.calls.filter((call) => String(call[0]).includes("/api/db/query"))).toHaveLength(0);
+      expect(mockToastError).toHaveBeenCalledWith(
+        "Not Supported",
+        expect.objectContaining({ description: SNOWFLAKE_EXPLAIN_GATED_DECLINE }),
+      );
+    });
+
+    // The gate's own verdict on a SYSTEM$ call is pinned in tests/components/QuerySafetyDialog.test.tsx.
+    test("a confirmed RUN sends no background plan beside it", async () => {
+      const fetchMock = mockGlobalFetch({ "/api/db/query": { ok: true, json: mockQueryResult } });
+      const params = createDefaultParams({ activeConnection: snowflakeConnection, metadata: snowflakeMetadata });
+      const { result } = renderHook(() => useQueryExecution(params));
+
+      await act(async () => {
+        await result.current.executeQuery(cancelCall, undefined, false, { skipSafety: true });
+      });
+      const bodies = fetchMock.mock.calls
+        .filter((call) => String(call[0]).includes("/api/db/query"))
+        .map((call) => JSON.parse((call[1] as RequestInit).body as string));
+      expect(bodies).toHaveLength(1);
+      expect(bodies[0].explain).toBeUndefined();
+    });
+
+    test("a SELECT without one keeps its background plan", async () => {
+      const fetchMock = mockGlobalFetch({ "/api/db/query": { ok: true, json: mockQueryResult } });
+      const params = createDefaultParams({ activeConnection: snowflakeConnection, metadata: snowflakeMetadata });
+      const { result } = renderHook(() => useQueryExecution(params));
+
+      await act(async () => {
+        await result.current.executeQuery("SELECT 'SYSTEM$WAIT(1)' AS s");
+      });
+      const modes = fetchMock.mock.calls
+        .filter((call) => String(call[0]).includes("/api/db/query"))
+        .map((call) => JSON.parse((call[1] as RequestInit).body as string).explain?.mode);
+      expect(modes).toEqual([undefined, "estimate"]);
+    });
   });
 
   test("executeQuery posts the original statement and the estimate mode for the background plan", async () => {

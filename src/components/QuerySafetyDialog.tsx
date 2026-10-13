@@ -22,11 +22,12 @@ import {
   vocabularyTypedConfirmation,
 } from "@/lib/db/destructive-commands";
 import type { TypedConfirmationAsk } from "@/lib/db/types";
-import { type ConfirmCodeForm, readsSqlText, resolveSqlGrammar, type SqlGrammar } from "@/lib/sql/grammar";
+import { hasConfirmCodeForm, sequenceInCode, wordsFollow } from "@/lib/sql/confirm-forms";
+import { readsSqlText, resolveSqlGrammar, type SqlGrammar } from "@/lib/sql/grammar";
 import { readOperativeKeyword } from "@/lib/sql/operative-keyword";
-import { hasUnterminatedSpan, readSqlSpan } from "@/lib/sql/spans";
+import { hasUnterminatedSpan } from "@/lib/sql/spans";
 import { splitStatements } from "@/lib/sql/statement-splitter";
-import { findCodeWord, readSqlWord } from "@/lib/sql/words";
+import { findCodeWord } from "@/lib/sql/words";
 import type { DatabaseType } from "@/lib/types";
 
 interface SafetyAnalysis {
@@ -641,91 +642,6 @@ function blockWrites(text: string, grammar: SqlGrammar): boolean {
   return false;
 }
 
-/** The code word after `from`, past whitespace and comments, or `null` when the next code is not a word. */
-function nextCodeWord(text: string, from: number, grammar: SqlGrammar): { word: string; end: number } | null {
-  let i = from;
-  for (;;) {
-    const span = readSqlSpan(text, i, grammar);
-    if (
-      span === null ||
-      (span.kind !== "whitespace" && span.kind !== "line-comment" && span.kind !== "block-comment")
-    ) {
-      break;
-    }
-    i = span.end;
-  }
-  const found = readSqlWord(text, i);
-  return found === null ? null : { word: found.text, end: found.end };
-}
-
-/** Whether the code words after `from` are `words`, in order. */
-function wordsFollow(text: string, from: number, words: readonly string[], grammar: SqlGrammar): boolean {
-  let at = from;
-  for (const expected of words) {
-    const next = nextCodeWord(text, at, grammar);
-    if (next === null || next.word !== expected.toUpperCase()) return false;
-    at = next.end;
-  }
-  return true;
-}
-
-/** Whether the word sequence `form` appears anywhere in the code of `text`. */
-function sequenceInCode(text: string, form: readonly string[], grammar: SqlGrammar): boolean {
-  let found = findCodeWord(text, form[0], 0, grammar);
-  while (found !== null) {
-    if (wordsFollow(text, found.end, form.slice(1), grammar)) return true;
-    found = findCodeWord(text, form[0], found.end, grammar);
-  }
-  return false;
-}
-
-/** Whether the next code after `from`, past whitespace and comments, is `(`. */
-function callFollows(text: string, from: number, grammar: SqlGrammar): boolean {
-  let i = from;
-  for (let span = readSqlSpan(text, i, grammar); span !== null; span = readSqlSpan(text, i, grammar)) {
-    if (span.kind !== "whitespace" && span.kind !== "line-comment" && span.kind !== "block-comment") return false;
-    i = span.end;
-  }
-  return text[i] === "(";
-}
-
-/**
- * Whether a code word of `text` starts with `prefix`, compared case-insensitively, or a quoted name called as a
- * function does, compared exactly: a quoted upper-case name resolves as the bare one, and a quoted name is
- * case-sensitive, so `"SYSTEM$WAIT"(10)` is the bare call and `"system$wait"(10)` is another function.
- */
-function prefixInCode(text: string, prefix: string, grammar: SqlGrammar): boolean {
-  const target = prefix.toUpperCase();
-  let i = 0;
-  while (i < text.length) {
-    const span = readSqlSpan(text, i, grammar);
-    if (span !== null) {
-      if (
-        span.kind === "quoted-identifier" &&
-        span.terminated &&
-        text.slice(i + 1, span.end - 1).startsWith(target) &&
-        callFollows(text, span.end, grammar)
-      ) {
-        return true;
-      }
-      i = span.end;
-      continue;
-    }
-    const found = readSqlWord(text, i);
-    if (found === null) {
-      i++;
-      continue;
-    }
-    if (found.text.startsWith(target)) return true;
-    i = found.end;
-  }
-  return false;
-}
-
-function codeFormInText(text: string, form: ConfirmCodeForm, grammar: SqlGrammar): boolean {
-  return "prefix" in form ? prefixInCode(text, form.prefix, grammar) : sequenceInCode(text, form, grammar);
-}
-
 function writesUnderGrammar(text: string, grammar: SqlGrammar): boolean {
   const reading = readOperativeKeyword(text, grammar);
   const keyword = reading?.keyword;
@@ -741,7 +657,7 @@ function writesUnderGrammar(text: string, grammar: SqlGrammar): boolean {
   ) {
     return true;
   }
-  if ((grammar.confirmCodeForms ?? []).some((form) => codeFormInText(text, form, grammar))) return true;
+  if (hasConfirmCodeForm(text, grammar)) return true;
 
   // A statement led by a control-flow word, or by a `<<label>>` no keyword reading
   // passes, does what the words AFTER it say: `BEGIN DELETE FROM emp; END;` is a PL/SQL
