@@ -289,6 +289,11 @@ export interface SqlGrammar {
    * later statement sees. Absent means none, and every shared keyword asks.
    */
   readonly confirmExemptForms?: readonly (readonly string[])[];
+  /**
+   * The sql-formatter language the editor's Format uses for this dialect. Absent means `postgresql`, the language
+   * every dialect formatted with before a dialect declared one (SF-041).
+   */
+  readonly formatterLanguage?: "snowflake";
 }
 
 /** A form `SqlGrammar.confirmFormsWhen` looks for: a keyword sequence and the code word that makes it ask. */
@@ -897,6 +902,10 @@ const SNOWFLAKE_GRAMMAR: SqlGrammar = {
     { form: ["CREATE", "TEMPORARY", "STAGE"], when: "URL" },
     { form: ["CREATE", "TEMP", "STAGE"], when: "URL" },
   ],
+  // Formatted as PostgreSQL, `QUALIFY` was lower-cased and joined to the GROUP BY list, and `@stage` became `@ stage`
+  // (SF-041); sql-formatter's Snowflake language keeps the clause and refuses the stage reference, which leaves the
+  // text as written.
+  formatterLanguage: "snowflake",
   // Each statement runs in its own session (see `snowflake/statements.ts`), so `ALTER SESSION SET | UNSET` cannot
   // outlive it, and the result already says the setting does not carry over (SF-030).
   confirmExemptForms: [["ALTER", "SESSION"]],

@@ -502,6 +502,10 @@ Snowflake commits every DDL statement implicitly, so an edit spanning several st
 Snowflake also enforces no primary key on a standard table, so a row edit would have no row identity.
 The absence is `snowflake`'s entry in `EXPECTED_EDIT_ABSTAINERS` (`tests/helpers/object-edit-expectation.ts`), and `tests/isolated/object-edit-declarations.test.ts` holds that entry and this section together.
 
+### 8.7 Editor
+
+Format uses sql-formatter's Snowflake language (the grammar's `formatterLanguage`), so `QUALIFY` stays a clause on its own line; text that language cannot read, such as a `@stage` reference, is left as written.
+
 ## 9. The confirmation gate
 
 The gate is a browser confirmation, not a boundary: it asks before a statement runs from the editor, and the role decides what can happen.

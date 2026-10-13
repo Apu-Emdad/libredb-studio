@@ -358,6 +358,12 @@ describe("docs/providers/snowflake.md", () => {
     expect(FLAT_DOC).toContain(SNOWFLAKE_ROLE_CHECK_SQL);
   });
 
+  test("says which formatter language Format uses, as the grammar declares", () => {
+    const editor = flat(sectionOf(DOC, "### 8.7 Editor"));
+    expect(resolveSqlGrammar("snowflake").formatterLanguage).toBe("snowflake");
+    expect(editor).toContain("sql-formatter's Snowflake language (the grammar's `formatterLanguage`)");
+  });
+
   test("names every confirmation form the grammar declares", () => {
     const grammar = resolveSqlGrammar("snowflake");
     const gate = flat(sectionOf(DOC, "## 9. The confirmation gate"));
