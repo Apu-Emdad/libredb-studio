@@ -40,6 +40,7 @@ const LIBRARY = reply([
   ]),
 ]);
 
+const DEFAULT_REPLY = '<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="1"><data/></rpc-reply>';
 const CANDIDATE = "urn:ietf:params:netconf:capability:candidate:1.0";
 const STARTUP = "urn:ietf:params:netconf:capability:startup:1.0";
 
@@ -48,23 +49,26 @@ interface Harness {
   readonly xml: XmlReaderPort;
   readonly asked: NetconfRequest[];
   readonly closed: { count: number };
-  answer(tree: XmlElement): void;
+  answer(tree: XmlElement, text?: string): void;
 }
 
 function harness(trees: XmlElement[] = []): Harness {
   const asked: NetconfRequest[] = [];
-  const queue = [...trees];
+  const queue: { tree: XmlElement; text: string }[] = trees.map((tree) => ({ tree, text: DEFAULT_REPLY }));
   const closed = { count: 0 };
   let next: XmlElement | undefined;
   return {
     asked,
     closed,
-    answer: (tree) => void queue.push(tree),
+    answer: (tree, text) => void queue.push({ tree, text: text ?? DEFAULT_REPLY }),
     session: {
       request: async (request) => {
         asked.push(request);
-        next = queue.shift();
-        return "<the text the port is handed, which the fake port ignores>";
+        const entry = queue.shift();
+        next = entry?.tree;
+        // The TEXT matters as well as the tree: `sourceXml` slices the reply rather than printing
+        // the tree, so a fake that answered a placeholder could not exercise that path at all.
+        return entry?.text ?? DEFAULT_REPLY;
       },
       close: async () => void (closed.count += 1),
     },
@@ -291,4 +295,72 @@ test("the reader hands the published limits to the parser, not numbers of its ow
   expectBe(READER_LIMITS.maxDepth, 64);
   expectBe(READER_LIMITS.maxElements, 500_000);
   expectBe(READER_LIMITS.maxTextBytes, 4_194_304);
+});
+
+/**
+ * The Source tab's text is sliced from the reply, so the validation has to run FIRST.
+ *
+ * Without it an `rpc-error` reply has no `<data>` to slice and, worse, a reply that carried both
+ * would put the device's refusal into an editor buffer as though it were the object's text. The
+ * part type exists to stop exactly that: its refusal arm declares no `text`, and its docblock names
+ * a product that gets it wrong. A planted mutation removing the validation survived until this
+ * case existed.
+ */
+test("a refused source read is the device's sentence, never text sliced out of the refusal", async () => {
+  const h = harness([LIBRARY]);
+  const reader = await open(h);
+  h.answer(
+    el("rpc-reply", undefined, [
+      el("rpc-error", undefined, [
+        el("error-tag", "access-denied"),
+        el("error-message", "Access to the requested data model is denied."),
+      ]),
+    ]),
+  );
+  await expectRejects(
+    reader.sourceXml("running", [{ name: "interfaces", module: "ietf-interfaces" }]),
+    /Access to the requested data model/,
+  );
+});
+
+/**
+ * The slicing arithmetic, which has three cases a device really produces: a filled `<data>`, a
+ * self-closing `<data/>` for an empty answer, and a `<data>` carrying attributes.
+ */
+test("the source text is the bytes between the data element's tags, and an empty answer is empty", async () => {
+  const h = harness([LIBRARY]);
+  const reader = await open(h);
+  const path = [{ name: "interfaces", module: "ietf-interfaces" }];
+  const body = "<interfaces><interface><name>ge-0/0/1</name></interface></interfaces>";
+
+  h.answer(el("rpc-reply", undefined, [el("data", undefined, [])]), `<rpc-reply message-id="1"><data>${body}</data></rpc-reply>`);
+  expectBe(await reader.sourceXml("running", path), body);
+
+  h.answer(el("rpc-reply", undefined, [el("data", undefined, [])]), '<rpc-reply message-id="2"><data/></rpc-reply>');
+  expectBe(await reader.sourceXml("running", path), "", "a self-closing data element is an empty answer, not a fault");
+
+  h.answer(
+    el("rpc-reply", undefined, [el("data", undefined, [])]),
+    `<rpc-reply message-id="3"><data xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">${body}</data></rpc-reply>`,
+  );
+  expectBe(await reader.sourceXml("running", path), body, "a data element with attributes is sliced at its tags");
+});
+
+/**
+ * The closing tag taken is the LAST one, and a YANG model is what makes the difference reachable:
+ * nothing stops a module from naming a container or a leaf `data`, and then the reply carries a
+ * `</data>` inside the payload as well as at the end of it. Taking the first would cut the text
+ * mid-tree and the result would still look like XML, which is the quiet kind of wrong.
+ *
+ * A mutation changing `lastIndexOf` to `indexOf` survived until this case existed.
+ */
+test("a payload holding its own data element is sliced at the reply's closing tag, not the first", async () => {
+  const h = harness([LIBRARY]);
+  const reader = await open(h);
+  const body = "<sensors><sensor><name>s1</name><data>41.2</data></sensor></sensors>";
+  h.answer(
+    el("rpc-reply", undefined, [el("data", undefined, [])]),
+    `<rpc-reply message-id="1"><data>${body}</data></rpc-reply>`,
+  );
+  expectBe(await reader.sourceXml("running", [{ name: "sensors", module: "example-sensors" }]), body);
 });

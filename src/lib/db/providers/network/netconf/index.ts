@@ -25,6 +25,8 @@
 import { BaseDatabaseProvider } from "@/lib/db/base-provider";
 import { QueryError, TimeoutError } from "@/lib/db/errors";
 import type {
+  ObjectSourceDocument,
+  ObjectSourcePart,
   ActiveSessionDetails,
   Container,
   DatabaseConnection,
@@ -46,7 +48,7 @@ import type {
   TableStats,
 } from "@/lib/db/types";
 import { NETCONF_PORT } from "./dial";
-import { buildKeyPath, levelPage, type LevelEntry, type PathNode } from "./keypath";
+import { buildKeyPath, levelPage, parseKeyPath, type LevelEntry, type PathNode } from "./keypath";
 import { NETCONF_KEY_SCAN, NETCONF_OBJECT_KINDS, assertDeclarationIsSound } from "./objectkinds";
 import { NETCONF_LABELS } from "./labels";
 import { safeForWriting } from "./secrets";
@@ -74,6 +76,7 @@ export interface DeviceReader {
   children(datastore: string, path: readonly PathNode[]): Promise<readonly LevelEntry[]>;
   rows(datastore: string, path: readonly PathNode[], limit: number): Promise<QueryResult>;
   moduleText(module: string): Promise<string>;
+  sourceXml(datastore: string, path: readonly PathNode[]): Promise<string>;
   close(): Promise<void>;
 }
 
@@ -93,6 +96,9 @@ const SENTENCES = Object.freeze({
   readsOnly:
     "This provider reads a device and does not write to it: it sends get, get-config, get-data, get-schema and close-session, and nothing else. A read request names a datastore and a path.",
   notJson: "A NETCONF read request is JSON: it names a datastore, a path and a limit.",
+  sourceNodePath:
+    "A node's source is addressed by its datastore, its module and the node, so the path is three names.",
+  sourceKeyPath: "A key's source is addressed by its datastore and then the key path, so the path is two names.",
   noDatastore: "This read names no datastore, and this provider sends no unfiltered read.",
   noPath: "This read names no path, and this provider sends no unfiltered read.",
   badLimit: "A limit is a whole number of rows, one or more.",
@@ -287,6 +293,57 @@ export class NetconfProvider extends BaseDatabaseProvider {
     };
   }
 
+  /**
+   * The Source tab's text (#789), which the declaration promises and nothing served until now.
+   *
+   * `readObjectSource` is optional on the provider interface, so omitting it compiles; what it does
+   * NOT do is stay invisible. MEASURED in `src/lib/api/object-route.ts:549`: the route answers 400,
+   * `netconf declares no readable source for kind "node"`, for a provider that declares the kind
+   * and omits the method, and its docblock names that exact case. So the tree drew a Source tab and
+   * the tab answered that the engine has none, while section 1 of the specification promises a
+   * module's YANG text there.
+   *
+   * The two kinds answer two different texts, which is why `sourceLanguage` differs between them:
+   * a `node` answers the module's YANG, which is the schema the node belongs to, and a `key`
+   * answers the entry's own XML as the device sent it.
+   *
+   * The path shape is this provider's own contract and is written here because it is the one thing
+   * NOT measured: a node is `[datastore, module, node]`, the shape `describeObject` already
+   * receives, and a key is `[datastore, keyPath]`, the key path as `scanKeysPage` spelled it, with
+   * the datastore in front because a key path carries a module and not a datastore. A path of
+   * another shape is refused with a sentence that says what was expected rather than reading the
+   * wrong segment. This is the first thing to check against the live client once this type id is
+   * registered, and it is in the specification's open list.
+   */
+  public async readObjectSource(path: readonly string[], kind: string, limit?: number): Promise<ObjectSourceDocument> {
+    const reader = this.open();
+    const bound = limit !== undefined && limit > 0 ? limit : undefined;
+    if (kind === "node") {
+      const [datastore, moduleName, node] = path;
+      if (datastore === undefined || moduleName === undefined || node === undefined) {
+        throw new QueryError(SENTENCES.sourceNodePath);
+      }
+      const text = await reader.moduleText(moduleName);
+      return {
+        path: [...path],
+        kind,
+        parts: [part(`${moduleName}.yang`, moduleName, cut(text, bound), "yang")],
+      };
+    }
+    if (kind !== "key") throw new QueryError(`This engine publishes no source text for the kind ${kind}.`);
+    const [datastore, keyPath] = path;
+    if (datastore === undefined || keyPath === undefined || path.length !== 2) {
+      throw new QueryError(SENTENCES.sourceKeyPath);
+    }
+    const nodes = parseKeyPath(keyPath);
+    const text = await reader.sourceXml(datastore, nodes);
+    return {
+      path: [...path],
+      kind,
+      parts: [part(keyPath, keyPath, cut(text, bound), "xml")],
+    };
+  }
+
   public async getHealth(): Promise<HealthInfo> {
     const facts = this.open().facts;
     return {
@@ -418,4 +475,38 @@ function parsePathArgument(path: string): readonly PathNode[] {
     });
   if (nodes.length === 0) throw new QueryError(SENTENCES.noPath);
   return nodes;
+}
+
+/** The text under the caller's bound, with the cut declared rather than silent. */
+function cut(text: string, limit: number | undefined): { text: string; truncated?: { limit: number; reason: string } } {
+  if (limit === undefined || text.length <= limit) return { text };
+  return {
+    text: text.slice(0, limit),
+    truncated: { limit, reason: `this text is longer than the ${limit} characters this read asked for` },
+  };
+}
+
+/**
+ * One part of a source document.
+ *
+ * `origin` is `stored` and that is a claim this provider can defend: the YANG text is the module's
+ * own text as `<get-schema>` served it, and the XML is the bytes the device sent, sliced rather
+ * than re-printed from a parsed tree. Neither is a reconstruction, which is what `regenerated`
+ * would have to say.
+ */
+function part(
+  id: string,
+  label: string,
+  body: { text: string; truncated?: { limit: number; reason: string } },
+  language: "yang" | "xml",
+): ObjectSourcePart {
+  return {
+    id,
+    label,
+    text: body.text,
+    language,
+    form: body.truncated === undefined ? "complete" : "partial",
+    origin: "stored",
+    ...(body.truncated === undefined ? {} : { truncated: body.truncated }),
+  };
 }

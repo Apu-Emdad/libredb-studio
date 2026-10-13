@@ -199,6 +199,32 @@ export class DeviceReaderImpl {
     };
   }
 
+  /**
+   * The raw XML the device sent for `path`, for the Source tab.
+   *
+   * The reply is validated through the port, so a refusal is still the device's own sentence, and
+   * the TEXT is sliced from the reply rather than printed from the tree. That is the point: a
+   * Source tab shows what the device sent, and anything this provider re-printed from a parsed tree
+   * would be a reconstruction wearing the device's name. The house vocabulary has a word for the
+   * difference (`ObjectSourceOrigin`: `stored` against `regenerated`), and slicing is what lets
+   * this answer `stored` honestly.
+   */
+  async sourceXml(datastore: string, path: readonly PathNode[]): Promise<string> {
+    if (path.length === 0) throw new QueryError("a source read names a node, so the path cannot be empty");
+    const reply = await this.session.request(this.readOf(datastore, path, undefined));
+    // Validation first, and through the port, so an `rpc-error` becomes the device's sentence
+    // instead of being sliced into the editor as though it were data.
+    parseReply(this.xml, reply);
+    const opening = reply.search(/<data[\s>/]/);
+    if (opening === -1) throw new QueryError("this device answered no data for this path");
+    const selfClosing = /<data[^>]*\/>/.exec(reply.slice(opening, opening + 200));
+    if (selfClosing !== null && selfClosing.index === 0) return "";
+    const from = reply.indexOf(">", opening) + 1;
+    const to = reply.lastIndexOf("</data>");
+    if (to <= from) throw new QueryError("this device answered no data for this path");
+    return reply.slice(from, to);
+  }
+
   async close(): Promise<void> {
     await this.session.close();
   }

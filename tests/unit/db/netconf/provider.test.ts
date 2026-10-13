@@ -8,7 +8,7 @@
  * pointed at the stand-in. The stand-in is gone and these point at the class the repository loads.
  */
 import { test } from "bun:test";
-import { expectBe, expectEqual, expectRejects, expectTruthy } from "./helpers";
+import { expectBe, expectEqual, expectMatch, expectRejects, expectTruthy } from "./helpers";
 import { NetconfProvider, parseReadRequest, type DeviceReader } from "@/lib/db/providers/network/netconf/index";
 import type { DatabaseConnection } from "@/lib/db/types";
 import { QueryError, TimeoutError } from "@/lib/db/errors";
@@ -42,6 +42,7 @@ function reader(over: Partial<DeviceReader> = {}): DeviceReader {
     ],
     rows: async () => ({ columns: ["name"], rows: [{ name: "ge-0/0/0" }], rowCount: 1 }) as never,
     moduleText: async () => "module ietf-interfaces { }",
+    sourceXml: async () => '<interface><name>ge-0/0/1</name><description>port 1</description></interface>',
     close: async () => {},
     ...over,
   };
@@ -326,4 +327,57 @@ test("the capabilities carry the declared key scan and object kinds themselves",
   const capabilities = new NetconfProvider(connection).getCapabilities();
   expectBe(capabilities.keyScan, NETCONF_KEY_SCAN);
   expectBe(capabilities.objectKinds, NETCONF_OBJECT_KINDS);
+});
+
+/**
+ * The Source tab the declaration promises.
+ *
+ * MEASURED in `src/lib/api/object-route.ts:549`: a provider that declares a kind with `hasSource`
+ * and omits `readObjectSource` is answered 400, `declares no readable source for kind`, because the
+ * method is optional on the interface. So the tree drew the tab and the tab refused, which is what
+ * these cases are here to stop happening again.
+ */
+test("a node's source is the module's YANG text, and it says the text is the device's own", async () => {
+  const provider = await open();
+  const document = await provider.readObjectSource(["running", "ietf-interfaces", "interfaces"], "node");
+  expectBe(document.kind, "node");
+  expectEqual(document.path, ["running", "ietf-interfaces", "interfaces"]);
+  expectBe(document.parts.length, 1);
+  // The part type is a union whose other arm is a refusal carrying no text, so it is narrowed
+  // rather than cast: a cast here would assert exactly what the union exists to make the caller
+  // check, and the refusal arm reaching an editor buffer is the failure it was built against.
+  const part = document.parts[0];
+  expectTruthy(part !== undefined && "text" in part);
+  expectBe(part.language, "yang");
+  expectBe(part.origin, "stored");
+  expectBe(part.form, "complete");
+  expectMatch(part.text, /module ietf-interfaces/);
+});
+
+test("a key's source is the entry's own XML, sliced from the reply rather than reprinted", async () => {
+  const provider = await open();
+  const document = await provider.readObjectSource(["running", "ietf-interfaces:interfaces/ge-0%2F0%2F1"], "key");
+  const part = document.parts[0];
+  expectTruthy(part !== undefined && "text" in part);
+  expectBe(part.language, "xml");
+  expectBe(part.origin, "stored");
+  expectMatch(part.text, /<description>port 1<\/description>/);
+});
+
+test("a bound is applied and declared, so a cut text never reads as the whole text", async () => {
+  const provider = await open();
+  const document = await provider.readObjectSource(["running", "ietf-interfaces", "interfaces"], "node", 6);
+  const part = document.parts[0];
+  expectTruthy(part !== undefined && "text" in part);
+  expectBe(part.text, "module");
+  expectBe(part.form, "partial");
+  expectBe(part.truncated?.limit, 6);
+  expectMatch(part.truncated?.reason ?? "", /longer than the 6 characters/);
+});
+
+test("a path of the wrong shape is refused with what was expected, not read wrongly", async () => {
+  const provider = await open();
+  await expectRejects(provider.readObjectSource(["running"], "node"), /three names/);
+  await expectRejects(provider.readObjectSource(["running", "a", "b"], "key"), /two names/);
+  await expectRejects(provider.readObjectSource(["running", "x", "y"], "folder"), /no source text for the kind folder/);
 });
