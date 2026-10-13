@@ -231,7 +231,9 @@ test("every measured key value round trips and none keeps the separator", () => 
 });
 
 test("an unpaired surrogate is refused rather than encoded", () => {
-  expectThrows(() => encodeSegment("\uD800"));
+  // The type as well as the refusal: this is a user-reachable value, so it has to arrive as the
+  // one type the boundary turns into a stated refusal rather than as any thrown thing.
+  expectThrows(() => encodeSegment("\uD800"), QueryError);
 });
 
 test("the built path matches the one issue #1724 section 3 writes", () => {
@@ -357,7 +359,9 @@ test("a crypt hash and a PEM block are caught even where no path said so", () =>
   expectBe(looksLikeSecret("$6$3YBmnHaul54TEa/k$abcdefghij"), true);
   expectBe(looksLikeSecret("-----BEGIN OPENSSH PRIVATE KEY-----"), true);
   expectBe(looksLikeSecret("ge-0/0/0"), false);
-  expectThrows(() => assertWritable("user alice $6$3YBmnHaul54TEa/k$abcdefghij"));
+  // A refusal for the wrong reason is the dangerous outcome here: the guard exists to stop a
+  // password hash being written out, so the test holds what it refused and not merely that it did.
+  expectThrows(() => assertWritable("user alice $6$3YBmnHaul54TEa/k$abcdefghij"), /withheld|secret|password/i);
 });
 
 test("the operation set is five, and each of the five builds", () => {
@@ -447,8 +451,8 @@ test("the filter element is the only difference: the node chain inside it is the
 });
 
 test("max-depth 0 and 1 are never sent, because the server refuses one and empties the other", () => {
-  expectThrows(() => buildRpc({ operation: "get-data", datastore: "running", maxDepth: 0 }, 1));
-  expectThrows(() => buildRpc({ operation: "get-data", datastore: "running", maxDepth: 1 }, 1));
+  expectThrows(() => buildRpc({ operation: "get-data", datastore: "running", maxDepth: 0 }, 1), /2 or more/);
+  expectThrows(() => buildRpc({ operation: "get-data", datastore: "running", maxDepth: 1 }, 1), /2 or more/);
   expectMatch(buildRpc({ operation: "get-data", datastore: "running", maxDepth: 2 }, 1), /<max-depth>2<\/max-depth>/);
 });
 
@@ -459,7 +463,12 @@ test("get-schema asks for yang and never for yin, which is listed and refused", 
 });
 
 test("a module the YANG library did not name is a configuration error, not a guess", () => {
-  expectThrows(() => buildRpc({ operation: "get", filter: { nodes: [{ module: "no-such-module", name: "x" }] } }, 4));
+  // The sentence names the module, because the whole point of refusing is that the reader learns
+  // WHICH module the library did not name; a bare refusal would send them looking at the wrong one.
+  expectThrows(
+    () => buildRpc({ operation: "get", filter: { nodes: [{ module: "no-such-module", name: "x" }] } }, 4),
+    /no-such-module/,
+  );
 });
 
 test("request text cannot break the framing or the filter", () => {

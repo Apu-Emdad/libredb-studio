@@ -172,6 +172,8 @@ test("an address or an account the connection does not carry is refused by name"
  */
 test("a failure after the session is open closes the session", async () => {
   const { ports: p, seen } = ports({ parseThrows: true });
-  await expectRejects(openNetconfReader(connection, credential, p));
+  // The parser's own refusal has to be the one that comes out: a close that swallowed it and threw
+  // its own error would still "reject", and the test would pass while the cause was lost.
+  await expectRejects(openNetconfReader(connection, credential, p), /the parser refused this message/);
   expectTruthy(seen.closed.count >= 1, "the session was left open after the reader failed");
 });

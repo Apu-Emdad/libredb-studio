@@ -144,7 +144,9 @@ test("an empty pin is refused before anything is dialled", async () => {
 
 test("a link-local literal is refused before anything is dialled", async () => {
   const { ssh, socket, seen } = ports();
-  await expectRejects(dialNetconf(config({ host: "169.254.169.254" }), ssh, socket));
+  // The SENTENCE as well as the refusal: a dial refused for a different reason, a bad pin say,
+  // would satisfy "it was refused" while proving nothing about the address rule.
+  await expectRejects(dialNetconf(config({ host: "169.254.169.254" }), ssh, socket), /link-local/);
   expectBe(seen.dialled.length, 0);
 });
 
@@ -210,7 +212,7 @@ test("the host key failure carries its fields even when the library raises its o
 
 test("a refused host key has no second path: the session is never reached", async () => {
   const { ssh, socket, seen } = ports({ hostKey: Buffer.from("another host's key") });
-  await expectRejects(dialNetconf(config(), ssh, socket));
+  await expectRejects(dialNetconf(config(), ssh, socket), DialError);
   // The socket was dialled, the key was offered, and the subsystem was never asked for.
   expectBe(seen.dialled.length, 1);
   expectEqual(seen.subsystems, []);
