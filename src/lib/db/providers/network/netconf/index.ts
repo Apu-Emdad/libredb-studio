@@ -472,7 +472,17 @@ function looksLikeReadRequest(statement: string): boolean {
   return text.startsWith("{") && text.includes('"datastore"') && text.includes('"path"');
 }
 
-/** Reads the console's JSON request. It refuses rather than defaults. */
+/**
+ * Reads the console's JSON request.
+ *
+ * MEASURED by calling this function with eleven bodies, because the sentence that stood here
+ * said it refuses rather than defaults and that is true of two of the three fields, not of the
+ * request. `datastore` and `path` are required and refused by name, so a request missing one is
+ * told which. `limit` is the only field with a default, and only when it is ABSENT: present and
+ * not a positive integer it is refused like the other two, `null` included, because `null` is
+ * not `undefined`. A field this shape does not name is neither refused nor defaulted, it is
+ * ignored. `docs/providers/netconf.md` section 3.1 states the same three rules.
+ */
 export function parseReadRequest(statement: string): ReadRequest {
   let parsed: unknown;
   try {
