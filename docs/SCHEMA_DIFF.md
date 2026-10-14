@@ -44,7 +44,9 @@ reading shares, with both sides dropping the same, smaller number of leading seg
 `t1` are two objects, and two connections rooted in different databases or schemas compare table by
 table. A snapshot taken before objects carried paths is compared by name, as it always was. Every
 table is named by its full path (`"b2a"."t1"`, `` `app`.`t1` ``), an added table under the source's
-root, and an index dropped without `ON <table>` is named in its table's container. A view, a
+root, and an index dropped without `ON <table>` is named in its table's container. An empty source has
+no root, so its added tables keep only their path below the target's root, which the session running the
+migration resolves, and never name the target's own database or schema. A view, a
 materialized view or any other object that is not a table is named in a `-- Skipped` comment rather
 than altered, created or dropped (SF-047).
 

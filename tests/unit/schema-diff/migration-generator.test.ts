@@ -2212,6 +2212,15 @@ describe("generateMigrationSQL: qualified names and non-table objects", () => {
     expect(sql).toContain("-- Skipped REPORTING.SUMMARY (materialized_query_table):");
   });
 
+  test("an empty source creates each table in the session's own schema, not in the target's database", () => {
+    const sql = generateMigrationSQL(
+      diffSchemas([], [object(["DB2", "D_DIFF", "T1"], [col("A", "INTEGER")])]),
+      "snowflake",
+    );
+    expect(sql).toContain('CREATE TABLE "T1" (');
+    expect(sql).not.toContain('"DB2"');
+  });
+
   test("a diff built without paths names its tables exactly as before", () => {
     const sql = generateMigrationSQL(
       diffSchemas(

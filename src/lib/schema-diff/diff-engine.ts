@@ -303,12 +303,14 @@ export function diffSchemas(source: readonly StoredObject[], target: readonly St
   const readings = keyedReadings(source, target);
   const sourceMap = new Map(readings.source.map((entry) => [entry.key, entry]));
   const targetMap = new Map(readings.target.map((entry) => [entry.key, entry]));
-  // Where an added object goes: the target's path below the roots, under the source's root.
+  // Where an added object goes: the target's path below the roots, under the source's root. An empty source has no
+  // root, so the path stays below the roots, where the session running the migration resolves it; the target's own
+  // path would name the target's database and schema.
   const addedPath = (entry: Keyed) =>
     entry.relative === undefined
       ? undefined
       : readings.root === undefined
-        ? entry.object.path
+        ? entry.relative
         : [...readings.root, ...entry.relative];
 
   const tables: TableDiff[] = [];

@@ -618,9 +618,14 @@ describe("diffSchemas: objects keyed by their path below the compared roots", ()
     expect(diff.tables.map((t) => [t.action, t.label])).toEqual([["removed", "s2.u"]]);
   });
 
-  test("an empty source places an added object at the target's own path", () => {
-    const diff = diffSchemas([], [at(["s1", "t"], ["a"])]);
-    expect(diff.tables[0]).toMatchObject({ action: "added", label: "t", path: ["s1", "t"] });
+  test("an empty source places an added object at its path below the target's root, never at the target's own", () => {
+    // The migration runs on the source, so the target's database and schema are not where it creates anything.
+    const diff = diffSchemas([], [at(["DB2", "D_DIFF", "T1"], ["a"]), at(["DB2", "D_DIFF", "T2"], ["a"])]);
+    expect(diff.tables.map((table) => table.path)).toEqual([["T1"], ["T2"]]);
+    expect(diffSchemas([], [at(["s1", "t"], ["a"]), at(["s2", "t"], ["a"])]).tables.map((t) => t.path)).toEqual([
+      ["s1", "t"],
+      ["s2", "t"],
+    ]);
     expect(diffSchemas([], []).hasChanges).toBe(false);
   });
 
