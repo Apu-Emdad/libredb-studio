@@ -396,12 +396,22 @@ function analyzeUnderGrammar(sql: string, grammar: SqlGrammar): ParsedQueryInfo 
     hasLimit = true;
   }
 
-  // OFFSET without LIMIT (rare but possible in PostgreSQL)
-  const offsetOnlyMatch = !hasLimit && clauseStripped.match(/\bOFFSET\s+(\d+)\s*$/i);
-  const hasOffset = hasLimit ? existingOffset !== undefined : !!offsetOnlyMatch;
+  // OFFSET without LIMIT (rare but possible in PostgreSQL). The value may also be one the dialect declares, read as
+  // code only, as for LIMIT above.
+  const offsetOnlyMatch = hasLimit ? null : clauseStripped.match(new RegExp(`\\bOFFSET\\s+(${value})\\s*$`, "i"));
+  const offsetOnly =
+    offsetOnlyMatch !== null &&
+    (!declaredValue(offsetOnlyMatch[1]) || isCodeWordAt(clauseStripped, "OFFSET", offsetOnlyMatch.index ?? 0, grammar))
+      ? offsetOnlyMatch
+      : null;
+  const hasOffset = hasLimit ? existingOffset !== undefined : offsetOnly !== null;
 
-  if (offsetOnlyMatch && !hasLimit) {
-    existingOffset = parseInt(offsetOnlyMatch[1]);
+  if (offsetOnly !== null) {
+    existingOffset = boundOffset(offsetOnly[1]);
+    // A lone declared OFFSET (Snowflake's `OFFSET NULL`, SF-021) is the statement's own bound: Snowflake takes no
+    // LIMIT after an OFFSET, so appending one only turned its own "unexpected '<EOF>'" into an error about Studio's
+    // LIMIT. Nothing is appended and the engine answers the text as written.
+    if (declaredValue(offsetOnly[1])) hasLimit = true;
   }
 
   // UNION detection - the code word, for the same reason: a comment reading
@@ -521,6 +531,13 @@ export function applyQueryLimit(
     // Standard style: LIMIT count OFFSET offset, either value one the dialect declares (SF-021)
     statement = statement
       .replace(new RegExp(`\\bLIMIT\\s+(?:${value})(?:\\s+OFFSET\\s+(?:${value}))?\\s*$`, "i"), "")
+      .trim();
+    // A lone declared OFFSET skips nothing, so it goes too and the bound written below is the whole bound; a digit
+    // OFFSET stays where it stood, as it always did.
+    statement = statement
+      .replace(new RegExp(`\\bOFFSET\\s+(${value})\\s*$`, "i"), (match, bound: string, index: number) =>
+        boundCount(bound) === undefined && isCodeWordAt(statement, "OFFSET", index, grammar) ? "" : match,
+      )
       .trim();
   }
 

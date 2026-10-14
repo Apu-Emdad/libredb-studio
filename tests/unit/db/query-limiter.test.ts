@@ -1663,6 +1663,48 @@ describe("a dialect's declared non-numeric LIMIT and OFFSET values are bounds (S
     expect(analyzeQuery(`${read} LIMIT NULL OFFSET 1`, "snowflake")).toMatchObject({ existingOffset: 1 });
   });
 
+  for (const value of ["NULL", "null", "''", "$$$$"]) {
+    test(`Snowflake lone OFFSET ${value} is the statement's own bound: nothing is appended after it`, () => {
+      // Measured on Snowflake (2026-10-14): a lone OFFSET, with or without ROWS, is "unexpected '<EOF>'", and an
+      // OFFSET followed by LIMIT is "unexpected 'LIMIT'". Appending nothing leaves Snowflake's own error, about the
+      // text as written, instead of one that names a LIMIT Studio added.
+      const sql = `${read} OFFSET ${value}`;
+      const result = applyQueryLimit(sql, 501, 0, {}, "snowflake");
+      expect(result).toMatchObject({ sql, wasLimited: false, appliedLimit: 0, appliedOffset: 0 });
+      expect(result.originalLimit).toBeUndefined();
+      expect(analyzeQuery(sql, "snowflake")).toMatchObject({
+        hasLimit: true,
+        existingLimit: undefined,
+        hasOffset: true,
+        existingOffset: 0,
+      });
+      expect(applyQueryLimit(`${read} OFFSET ${value} -- skip none`, 501, 0, {}, "snowflake").wasLimited).toBe(false);
+    });
+  }
+
+  test("forceLimit drops a lone non-numeric OFFSET, which skips nothing, and writes its own bound", () => {
+    expect(applyQueryLimit(`${read} OFFSET NULL`, 10, 0, { forceLimit: true }, "snowflake").sql).toBe(
+      `${read} LIMIT 10`,
+    );
+    expect(applyQueryLimit(`${read} offset $$$$`, 10, 20, { forceLimit: true }, "snowflake").sql).toBe(
+      `${read} LIMIT 10 OFFSET 20`,
+    );
+  });
+
+  test("a lone OFFSET spelled inside a literal is not a bound, and a lone digit OFFSET reads as before", () => {
+    expect(analyzeQuery("SELECT $$ OFFSET $$$$", "snowflake")).toMatchObject({ hasLimit: false, hasOffset: false });
+    expect(applyQueryLimit(`${read} OFFSET 2`, 501, 0, {}, "snowflake").sql).toBe(`${read} OFFSET 2 LIMIT 501`);
+    expect(analyzeQuery(`${read} OFFSET 2`, "snowflake")).toMatchObject({
+      hasLimit: false,
+      hasOffset: true,
+      existingOffset: 2,
+    });
+    // forceLimit over a TOP leaves a digit OFFSET where it stood, as it always did.
+    expect(
+      applyQueryLimit("SELECT TOP 5 * FROM t ORDER BY a OFFSET 2", 10, 0, { forceLimit: true }, "snowflake").sql,
+    ).toBe("SELECT TOP 5 * FROM t ORDER BY a OFFSET 2 LIMIT 10");
+  });
+
   test("forceLimit replaces a non-numeric bound instead of appending a second one", () => {
     expect(applyQueryLimit(`${read} LIMIT NULL OFFSET ''`, 10, 0, { forceLimit: true }, "snowflake").sql).toBe(
       `${read} LIMIT 10`,
@@ -1692,7 +1734,7 @@ describe("a dialect's declared non-numeric LIMIT and OFFSET values are bounds (S
       "databend",
       "bigquery",
     ] as const) {
-      for (const tail of ["LIMIT NULL", "LIMIT ''", "LIMIT 2 OFFSET NULL"]) {
+      for (const tail of ["LIMIT NULL", "LIMIT ''", "LIMIT 2 OFFSET NULL", "OFFSET NULL", "OFFSET $$$$"]) {
         const result = applyQueryLimit(`${read} ${tail}`, 501, 0, {}, type);
         expect(result.sql).toBe(`${read} ${tail} LIMIT 501`);
         expect(analyzeQuery(`${read} ${tail}`, type).hasLimit).toBe(false);

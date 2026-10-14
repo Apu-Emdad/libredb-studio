@@ -628,6 +628,13 @@ describe("every other number and sentence the doc states is the code's", () => {
     const forms = resolveSqlGrammar("snowflake").nonNumericRowBounds ?? [];
     expect(forms).toEqual(["NULL", "''", "$$$$"]);
     expect(FLAT_DOC).toContain(
+      `a \`SELECT\` that ends in a lone ${forms
+        .map((form) => `\`OFFSET ${form}\``)
+        .join(", ")
+        .replace(/, (?=[^,]*$)/, " or ")} is sent as written`,
+    );
+    expect(applyQueryLimit("SELECT 1 OFFSET 2", 500, 0, {}, "snowflake").sql).toBe("SELECT 1 OFFSET 2 LIMIT 500");
+    expect(FLAT_DOC).toContain(
       forms
         .map((form) => `\`LIMIT ${form}\``)
         .join(", ")
@@ -641,6 +648,7 @@ describe("every other number and sentence the doc states is the code's", () => {
     );
     for (const form of forms) {
       expect(applyQueryLimit(`SELECT 1 LIMIT ${form}`, 500, 0, {}, "snowflake").sql).toBe(`SELECT 1 LIMIT ${form}`);
+      expect(applyQueryLimit(`SELECT 1 OFFSET ${form}`, 500, 0, {}, "snowflake").sql).toBe(`SELECT 1 OFFSET ${form}`);
     }
   });
 
