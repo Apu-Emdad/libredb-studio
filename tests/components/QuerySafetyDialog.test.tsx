@@ -2343,6 +2343,15 @@ describe("Snowflake's confirmation forms", () => {
     expect(isDangerousQuery("ALTER SESSIONS_T RENAME TO x", "snowflake")).toBe(true);
     expect(isDangerousQuery("ALTER TABLE session SET COMMENT = 'x'", "snowflake")).toBe(true);
     expect(isDangerousQuery("ALTER USER u SET DEFAULT_ROLE = r", "snowflake")).toBe(true);
+    // A session policy is an account object that outlives the statement, so altering one asks.
+    expect(isDangerousQuery("ALTER SESSION POLICY p SET SESSION_IDLE_TIMEOUT_MINS = 600", "snowflake")).toBe(true);
+    expect(isDangerousQuery("ALTER SESSION POLICY IF EXISTS p UNSET SESSION_IDLE_TIMEOUT_MINS", "snowflake")).toBe(
+      true,
+    );
+    expect(isDangerousQuery("ALTER /* x */ SESSION POLICY p RENAME TO q", "snowflake")).toBe(true);
+    expect(isDangerousQuery("BEGIN ALTER SESSION POLICY p SET SESSION_IDLE_TIMEOUT_MINS = 600; END", "snowflake")).toBe(
+      true,
+    );
     expect(
       isDangerousQuery(
         "WITH p AS PROCEDURE () RETURNS INT LANGUAGE SQL AS $$ BEGIN RETURN 1; END $$ CALL p()",

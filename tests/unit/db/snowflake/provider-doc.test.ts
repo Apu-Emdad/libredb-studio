@@ -432,8 +432,11 @@ describe("docs/providers/snowflake.md", () => {
     const whenForms = grammar.confirmFormsWhen ?? [];
     expect(whenForms.length).toBeGreaterThan(0);
     for (const { form, when } of whenForms) expect(gate).toContain(`\`${form.join(" ")} ... ${when}\``);
-    // A form exempt from the shared keywords is named too (SF-030).
-    for (const form of grammar.confirmExemptForms ?? []) expect(gate).toContain(`but \`${form.join(" ")}\``);
+    // The forms exempt from the shared keywords are named too, beside the session policy form that still asks (SF-030).
+    const exempt = (grammar.confirmExemptForms ?? []).map((form) => `\`${form.join(" ")}\``);
+    expect(exempt.length).toBeGreaterThan(0);
+    expect(gate).toContain(`but ${exempt.join(" and ")},`);
+    expect(gate).toContain("`ALTER SESSION POLICY` still asks");
     expect(gate).toContain("a browser confirmation, not a boundary");
     expect(gate).toContain("`IDENTIFIER()`");
   });

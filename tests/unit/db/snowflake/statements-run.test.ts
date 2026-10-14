@@ -654,6 +654,16 @@ describe("session notices, USE and the lone transaction", () => {
     });
   }
 
+  test("ALTER SESSION POLICY alters an account object, so it carries no session notice", async () => {
+    const harness = setup();
+    harness.transports.answer(SUBMIT, one());
+    const result = await harness.statements.runUser(
+      "ALTER SESSION POLICY p SET SESSION_IDLE_TIMEOUT_MINS = 600",
+      undefined,
+    );
+    expect(result.warnings).not.toContainEqual(SETTING_NOTICE);
+  });
+
   // SF-029: a temporary object lives only as long as its session, which is the one statement.
   const TEMPORARY_NOTICE = {
     code: "SNOWFLAKE_TEMPORARY_NOT_CARRIED",

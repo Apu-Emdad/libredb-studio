@@ -339,8 +339,8 @@ export interface SqlGrammar {
   /**
    * Keyword sequences led by a shared dangerous keyword that do NOT ask on this dialect, read where that keyword is
    * read: at the operative keyword and inside a control-flow block. For a form whose effect cannot outlive the
-   * statement on this engine: Snowflake runs each statement in its own session, so `ALTER SESSION` changes nothing a
-   * later statement sees. Absent means none, and every shared keyword asks.
+   * statement on this engine: Snowflake runs each statement in its own session, so `ALTER SESSION SET` changes nothing
+   * a later statement sees. Absent means none, and every shared keyword asks.
    */
   readonly confirmExemptForms?: readonly (readonly string[])[];
   /**
@@ -1062,8 +1062,12 @@ const SNOWFLAKE_GRAMMAR: SqlGrammar = {
     ],
   },
   // Each statement runs in its own session (see `snowflake/statements.ts`), so `ALTER SESSION SET | UNSET` cannot
-  // outlive it, and the result already says the setting does not carry over (SF-030).
-  confirmExemptForms: [["ALTER", "SESSION"]],
+  // outlive it, and the result already says the setting does not carry over (SF-030). `ALTER SESSION POLICY` alters an
+  // account object that does outlive it, so only the SET and UNSET forms are exempt.
+  confirmExemptForms: [
+    ["ALTER", "SESSION", "SET"],
+    ["ALTER", "SESSION", "UNSET"],
+  ],
   // An anonymous procedure (`WITH p AS PROCEDURE … CALL p()`) and any `SYSTEM$` function, wherever they are written.
   confirmCodeForms: [["AS", "PROCEDURE"], { prefix: "SYSTEM$" }],
 };

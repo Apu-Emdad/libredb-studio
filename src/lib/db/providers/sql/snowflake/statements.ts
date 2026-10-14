@@ -353,8 +353,14 @@ function callsLastQueryId(tokens: readonly CodeToken[]): boolean {
 
 /** The notice of a statement whose effect a sessionless request does not keep, or null. */
 function sessionNotice(keyword: string | null, tokens: readonly CodeToken[]): QueryWarning | null {
-  const second = tokens[1];
-  const alterSession = keyword === "ALTER" && second?.kind === "word" && second.text === "SESSION";
+  const [, second, third] = tokens;
+  // `ALTER SESSION POLICY` alters an account object, which does outlive the statement.
+  const alterSession =
+    keyword === "ALTER" &&
+    second?.kind === "word" &&
+    second.text === "SESSION" &&
+    third?.kind === "word" &&
+    (third.text === "SET" || third.text === "UNSET");
   if (keyword === "SET" || keyword === "UNSET" || alterSession) {
     return { code: "SNOWFLAKE_SETTING_NOT_CARRIED", message: SNOWFLAKE_STATEMENT_SENTENCES.settingNotCarried };
   }
