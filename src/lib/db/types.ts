@@ -614,7 +614,8 @@ export type ExplainFormat =
   | "databend-text"
   | "bigquery-dryrun"
   | "snowflake-json"
-  | "firestore-explain";
+  | "firestore-explain"
+  | "spark-text";
 
 /**
  * How deep an engine's container chain is, in the TYPE rather than only in a derivation.
@@ -1086,6 +1087,12 @@ export interface ProviderCapabilities {
    */
   supportsColumnProfiling?: false;
   /**
+   * False where the shared SQL formatter rewrites this engine's valid text: the editor offers no Format for its tabs.
+   * Absent: the tab's language decides, as before.
+   * Only `false` is accepted, so the field can withhold Format and never grant it to a language without a formatter.
+   */
+  supportsSqlFormat?: false;
+  /**
    * Whether THIS PROVIDER implements the interactive transaction session that
    * `POST /api/db/transaction` drives — `beginTransaction()` / `commitTransaction()`
    * / `rollbackTransaction()` over one held connection. It is a statement about the
@@ -1292,6 +1299,36 @@ export interface ProviderCapabilities {
    */
   readonly enforcesReadOnly?: true;
   /**
+   * How this engine takes the agent's own credential. Absent: `agentUser` and `agentPassword`, both required.
+   * `"token"`: `agentPassword` alone, as the bearer token the agent's acquisitions send instead of the connection's
+   * own; an `agentUser` beside it is refused. `acquireExecutionProfileProvider` in `src/lib/db/factory.ts` reads it
+   * from the provider it builds, before that provider connects, so no `connection.type` branch is needed (forbidden
+   * by `CLAUDE.md`), and `tests/unit/db/agent-credential-capability.test.ts` pins which engines declare it.
+   *
+   * Optional for the same published-interface reason as `enforcesReadOnly`.
+   */
+  readonly agentCredential?: "token";
+  /**
+   * The object kinds whose names this provider masks in `queryReadOnly` output, the agent's read path, by kind id.
+   * Absent: it masks none. A kind declared `machineNames: "withheld"` keeps that promise on a provider with
+   * `queryReadOnly` only when it is listed here, and the census in `tests/isolated/object-source-declarations.test.ts`
+   * refuses one that is not; the masking itself is the provider's own, proved by its redaction test. Kubernetes
+   * declares `["secrets"]`.
+   *
+   * Optional for the same published-interface reason as `enforcesReadOnly`.
+   */
+  readonly machineRedaction?: { readonly maskedNameKinds: readonly string[] };
+  /**
+   * The curated cluster readings this provider answers for the agent, each one audited call and one statement charge
+   * instead of composed statements: `"usage"` is `readClusterUsage` (`cluster.usage.read`), `"workloads"` is
+   * `readWorkloadProfile` (`cluster.workloads.read`). Absent: it answers none.
+   * `AGENT_REQUIREMENT_ENGINES` in `src/lib/agent/agent-manifest.ts` mirrors it per engine type, and
+   * `agent-manifest.test.ts` holds the mirror to this declaration.
+   *
+   * Optional for the same published-interface reason as `enforcesReadOnly`.
+   */
+  readonly agentReadings?: readonly ("usage" | "workloads")[];
+  /**
    * True when this engine's provider reads `ProviderExecutionContext.allowExternalFileAccess` and
    * opens its editor handle under that file-access posture: `false` closes every statement-level file
    * and network route outside the handle's private temp directory and its database's own file names
@@ -1469,6 +1506,19 @@ export interface ProviderCapabilities {
    * implementer compiling.
    */
   containerLevels?: ContainerLevels;
+  /**
+   * The schema-level segment of this engine's container and object paths is the engine's own spelling of a possibly
+   * multi-part name, already quoted where it needs quoting; absent: every segment is a raw name.
+   *
+   * `quoteObjectPath` reads that segment as parts joined by dots, each bare or quoted with the character
+   * `identifierQuoting` declares (that character doubled inside), so a declaration needs `identifierQuoting` beside it.
+   * That reading applies only when a segment follows the schema level, so the last segment is always the object's own
+   * name, and a container path passed alone keeps its schema segment as one name. Editor completion writes and matches
+   * a qualified name by the same reading (`containerSpellingOf`).
+   * Apache Spark declares it: a namespace of a catalog such as Iceberg's can hold several parts, and the tree shows it
+   * as Spark spells it.
+   */
+  containerNameSpelling?: "engine";
   /**
    * Which container paths this engine accepts as an ADDRESS, beside `containerLevels` (#1147).
    *
@@ -1762,6 +1812,35 @@ export interface ReadOnlyStatementBudget {
   maxResultBytes: number;
 }
 
+/** One namespace, and optionally a label selector over its pods, for a curated cluster reading. */
+export interface ClusterUsageInput {
+  readonly namespace: string;
+  readonly selector?: string;
+}
+
+/**
+ * What a cluster usage reading answers: the rows, or why there are none. `metrics-unavailable` is the cluster's own
+ * fact (no metrics.k8s.io, or one whose backend does not answer), not a failure of the read; `over-ceiling` refuses a
+ * reading past its row ceiling rather than truncating it.
+ */
+export type ClusterUsageReading =
+  | { readonly kind: "rows"; readonly result: QueryResult }
+  | { readonly kind: "metrics-unavailable" }
+  | { readonly kind: "over-ceiling" };
+
+/** One namespace, for the workload profile: every workload in it, with nothing to narrow it. */
+export interface WorkloadProfileInput {
+  readonly namespace: string;
+}
+
+/**
+ * What a workload profile answers: one row per workload, or `over-ceiling`, which refuses a profile past its row
+ * ceiling, or one whose lists run past a statement's read, rather than truncating it.
+ */
+export type WorkloadProfileReading =
+  | { readonly kind: "rows"; readonly result: QueryResult }
+  | { readonly kind: "over-ceiling" };
+
 /**
  * What the caller wants out of the one statement it is sending: the statement's own
  * result, or the engine's ESTIMATE of how it would be run.
@@ -1850,10 +1929,12 @@ export function newQueryCallScope(): string {
  * A runtime shape check, the same one `POST /api/db/transaction` uses for the interactive
  * session: the method is optional on `DatabaseProvider` because only a provider that can
  * name the session its statements ran on can answer truthfully (`endOpenQueryTransaction`'s
- * declaration argues why). `postgres`, `sqlite`, `duckdb` and `redis` implement it; on the
- * rest a caller leaves the handle exactly as it found it, because inventing a rollback
- * there would be guessing at another engine's state. Shared by the two routes that end
- * what they opened, so they cannot disagree about who can be asked.
+ * declaration argues why). `postgres`, `sqlite`, `duckdb`, `redis` and `spark` implement
+ * it; on the rest a caller leaves the handle exactly as it found it, because inventing a
+ * rollback there would be guessing at another engine's state. On `spark` it releases the
+ * scope's Spark session and answers `"none"`, since Spark has no transaction across
+ * statements. Shared by the two routes that end what they opened, so they cannot disagree
+ * about who can be asked.
  */
 export function endsOpenQueryTransactions(
   provider: DatabaseProvider,
@@ -1951,14 +2032,30 @@ export interface DatabaseProvider {
   query(sql: string, params?: unknown[], queryId?: string, scope?: string): Promise<QueryResult>;
 
   /**
-   * Execute exactly one statement under the DATABASE's own read-only
-   * enforcement (#328): the engine, not a parser, rejects writes through this
-   * path. Optional on purpose — only providers with a verified database-native
-   * boundary implement it, and execution-profile acquisition
-   * (`acquireExecutionProfileProvider` in factory.ts) refuses provider types
-   * that lack it rather than falling back to `query()` (fail closed).
+   * Execute exactly one statement under a declared read-only boundary (#328):
+   * the engine's own read-only mechanism, or on an engine without one a
+   * Studio-enforced allowlist on every final request plus the identity's
+   * authorization. Never a parser of the statement text. Optional on purpose:
+   * only providers with a verified boundary implement it, and execution-profile
+   * acquisition (`acquireExecutionProfileProvider` in factory.ts) refuses provider
+   * types that lack it rather than falling back to `query()` (fail closed).
    */
   queryReadOnly?(sql: string, budget: ReadOnlyStatementBudget, mode?: ReadOnlyStatementMode): Promise<QueryResult>;
+
+  /**
+   * Container usage against requests and limits in one namespace, for the agent's `cluster.usage.read`. Optional:
+   * only a provider declaring `agentReadings` `"usage"` implements it, and it answers only under the agent read-only
+   * profile, bounded by `budget` as `queryReadOnly` is.
+   */
+  readClusterUsage?(input: ClusterUsageInput, budget: ReadOnlyStatementBudget): Promise<ClusterUsageReading>;
+
+  /**
+   * The workload profile of one namespace, for the agent's `cluster.workloads.read`: one row per workload, with its
+   * desired and ready counts, pods not Ready, restarts, missing requests, limits and probes, and Warning events.
+   * Optional: only a provider declaring `agentReadings` `"workloads"` implements it, and it answers only under the
+   * agent read-only profile, bounded by `budget` as `queryReadOnly` is.
+   */
+  readWorkloadProfile?(input: WorkloadProfileInput, budget: ReadOnlyStatementBudget): Promise<WorkloadProfileReading>;
 
   /**
    * End a transaction that a statement run through `query()` left open on the session
@@ -1991,12 +2088,14 @@ export interface DatabaseProvider {
    *
    * OPTIONAL, for the reason `queryReadOnly` is: only a provider that can name the session
    * its own `query()` ran on can answer truthfully, and a provider that cannot must say
-   * nothing rather than guess. `postgres`, `sqlite`, `duckdb` and `redis` implement it: the
-   * first three are the engines D71 was measured on, and `redis` was added by D75, which
-   * walked every remaining type-id and wrote the absence down where it could not. A caller
-   * shape-checks for it; there is no default, because a default that answered `"none"` would
-   * certify an absence nobody read. Every type-id that does NOT implement it says which
-   * absence it is in its own `docs/providers/<type-id>.md`.
+   * nothing rather than guess. `postgres`, `sqlite`, `duckdb`, `redis` and `spark` implement
+   * it: the first three are the engines D71 was measured on, and `redis` was added by D75,
+   * which walked every remaining type-id and wrote the absence down where it could not. On
+   * `spark` it releases the scope's Spark session and answers `"none"`, since Spark has no
+   * transaction across statements. A caller shape-checks for it; there is no default,
+   * because a default that answered `"none"` would certify an absence nobody read. Every
+   * type-id that does NOT implement it says which absence it is in its own
+   * `docs/providers/<type-id>.md`.
    *
    * `scope` IS THE WHOLE CONTRACT, and an earlier form of this surface took no argument.
    * It said the method "does NOT touch the interactive transaction session
@@ -2849,11 +2948,13 @@ export interface ObjectKindSpec {
    * sensitive, such as stored secrets, whose names often say what they hold.
    *
    * Read through `kindNamesWithheld()` in `src/lib/db/object-kinds.ts`. The walk knows such a kind's size only
-   * through its count, so a provider that declares it counts it in `countObjects`. The walk is the only machine
-   * surface the declaration reaches, so it holds only where no other one lists the kind: the kind's role is not
-   * `relation` (MCP's `inspect_schema` and the app's schema read list relations, and `relationKindIds` refuses a
-   * withheld one), the engine is not `MCP_EXPOSABLE`, and the provider has no `queryReadOnly`, the agent's read
-   * path. The fleet declarations guard in `tests/isolated/object-source-declarations.test.ts` holds all three.
+   * through its count, so a provider that declares it counts it in `countObjects`. The declaration holds only where
+   * no other machine surface lists the kind: the kind's role is not `relation` (MCP's `inspect_schema` and the app's
+   * schema read list relations, and `relationKindIds` refuses a withheld one), and the engine is not `MCP_EXPOSABLE`.
+   * The kind's names are withheld from grounding, and masked in `queryReadOnly` output where the provider has one,
+   * which the provider declares in `ProviderCapabilities.machineRedaction.maskedNameKinds`; the census in
+   * `tests/isolated/object-source-declarations.test.ts` holds that declaration static, and the behaviour is the
+   * provider's own redaction test.
    */
   readonly machineNames?: "withheld";
   /**

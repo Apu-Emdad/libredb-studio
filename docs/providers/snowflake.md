@@ -442,7 +442,7 @@ Snowflake parses the bound with the statement, so a syntax error in the user's t
 Export writes the rows the grid shows, in the browser, and sends no statement; over a cut or limited result the export menu reads "Writes the <n> rows shown." with "The result was cut, so the file is not the whole result."
 Which budget ends a large result depends on its width, measured on the trial: all 16 columns of the sample `TPCH_SF1.LINEITEM` with `LIMIT 100000` showed every one of the 100,000 rows, uncut, on 2026-10-13, while `L_ORDERKEY`, `L_LINENUMBER` and `REPEAT(L_COMMENT, 10)` with `LIMIT 200000` were cut at 16 MiB after 58,725 rows on 2026-10-14.
 The first partition arrives uncompressed, because Studio's HTTP transport asks every server for an uncompressed body; later partitions arrive gzip-compressed as Snowflake stores them.
-A large first partition is therefore bounded by the network: measured on 2026-10-14, one 8 MB text cell took 5.5 s to arrive uncompressed against 1.4 s compressed (36 KB), while Studio decoded and returned it in under half a second ([BACKLOG](../BACKLOG.md) D349).
+A large first partition is therefore bounded by the network: measured on 2026-10-14, one 8 MB text cell took 5.5 s to arrive uncompressed against 1.4 s compressed (36 KB), while Studio decoded and returned it in under half a second ([BACKLOG](../BACKLOG.md) D363).
 
 | Wire type | Cell | Column type |
 | --- | --- | --- |

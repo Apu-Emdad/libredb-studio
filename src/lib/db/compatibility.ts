@@ -32,6 +32,7 @@ const SHIPPED: Readonly<Record<DatabaseType, true>> = Object.freeze({
   postgres: true,
   bigquery: true,
   snowflake: true,
+  spark: true,
   mysql: true,
   sqlite: true,
   // libSQL (#424 Phase 5): its own provider, doc and integration test. A separate
@@ -155,6 +156,7 @@ const EXTERNAL: Readonly<Record<DatabaseType, boolean>> = Object.freeze({
   postgres: true,
   bigquery: true,
   snowflake: true,
+  spark: true,
   mysql: true,
   sqlite: true,
   libsql: true,
@@ -247,6 +249,7 @@ export const READ_ONLY_ENFORCED: Record<DatabaseType, boolean> = Object.freeze({
   postgres: false,
   bigquery: false,
   snowflake: false,
+  spark: false,
   mysql: false,
   sqlite: false,
   libsql: false,
@@ -334,6 +337,7 @@ export const READS_FILE_ACCESS_POSTURE: Readonly<Record<DatabaseType, boolean>> 
   postgres: false,
   bigquery: false,
   snowflake: false,
+  spark: false,
   mysql: false,
   sqlite: true,
   libsql: false,
@@ -387,6 +391,7 @@ export const MCP_EXPOSABLE: Readonly<Record<DatabaseType, boolean>> = Object.fre
   postgres: true,
   bigquery: true,
   snowflake: true,
+  spark: true,
   mysql: true,
   sqlite: true,
   libsql: true,
@@ -428,8 +433,8 @@ export const MCP_EXPOSABLE: Readonly<Record<DatabaseType, boolean>> = Object.fre
   // Outside this version, as etcd's and Oxia's: the provider implements no queryReadOnly, and no MCP surface
   // that lists buckets but never an object key is designed yet (BACKLOG B104).
   s3: false,
-  // Outside this version, as etcd's and Oxia's: the provider implements no read-only query path, and plan mode alone
-  // receives Kubernetes object names, Secret and Namespace names withheld (no MCP surface is designed for them yet).
+  // Agent mode reads it under machine redaction; MCP stays closed until an MCP surface for it is designed (BACKLOG
+  // B105).
   kubernetes: false,
   // Outside this version, as for etcd, Oxia and S3: a read whose completeness cannot be proved is not a
   // read an agent should be handed without a reader looking at it.
@@ -464,6 +469,7 @@ export const CONNECTION_FORM_URI_MODE: Readonly<Record<DatabaseType, boolean>> =
   postgres: false,
   bigquery: false,
   snowflake: false,
+  spark: false,
   mysql: false,
   sqlite: false,
   libsql: true,
@@ -516,6 +522,7 @@ export const CONNECTION_STRING_ACCEPTED: Readonly<Record<DatabaseType, boolean>>
   postgres: true,
   bigquery: false,
   snowflake: false,
+  spark: false,
   mysql: true,
   // The provider's supportsConnectionString flag is false, yet it opens this field as the database file path:
   // sqlite.ts getDatabasePath, docs/providers/sqlite.md.

@@ -31,7 +31,7 @@ import {
 } from "@/lib/sql/confirm-forms";
 import { readsSqlText, resolveSqlGrammar, type SqlGrammar } from "@/lib/sql/grammar";
 import { readOperativeKeyword } from "@/lib/sql/operative-keyword";
-import { hasUnterminatedSpan } from "@/lib/sql/spans";
+import { hasUnterminatedSpan, readSqlSpan } from "@/lib/sql/spans";
 import { splitStatements } from "@/lib/sql/statement-splitter";
 import { findCodeWord } from "@/lib/sql/words";
 import type { DatabaseType } from "@/lib/types";
@@ -610,14 +610,13 @@ const CONTROL_FLOW_KEYWORDS = new Set([
   "WHEN",
 ]);
 
-/**
- * Whether ONE statement's own code asks for a confirmation, read under `grammar`.
- *
- * Its own function because the caller below asks the question twice over different
- * text: the whole editor buffer, and then each fragment the multi-statement route
- * will run. Re-deriving the two keyword tests per call site is how the gate and the
- * runner drifted apart in the first place.
- */
+/** Whether a `confirmExemptForms` form led by `keyword` starts at the keyword that ends at `end`. */
+function exemptFormAt(text: string, keyword: string, end: number, grammar: SqlGrammar): boolean {
+  return (grammar.confirmExemptForms ?? []).some(
+    (form) => form[0].toUpperCase() === keyword && wordsFollow(text, end, form.slice(1), grammar),
+  );
+}
+
 /**
  * Whether a procedural block's code writes, as far as its words can say.
  *
@@ -628,13 +627,6 @@ const CONTROL_FLOW_KEYWORDS = new Set([
  * used to refuse the block it sits in when the runner cut it at its first `;` (#1312).
  * A dialect's own `confirmForms` count the same way, anywhere in the block's code.
  */
-/** Whether a `confirmExemptForms` form led by `keyword` starts at the keyword that ends at `end`. */
-function exemptFormAt(text: string, keyword: string, end: number, grammar: SqlGrammar): boolean {
-  return (grammar.confirmExemptForms ?? []).some(
-    (form) => form[0].toUpperCase() === keyword && wordsFollow(text, end, form.slice(1), grammar),
-  );
-}
-
 function blockWrites(text: string, grammar: SqlGrammar): boolean {
   if ((grammar.confirmForms ?? []).some((form) => sequenceInCode(text, form, grammar))) return true;
   if ((grammar.confirmFormsWhen ?? []).some((form) => conditionalFormInCode(text, form, grammar))) return true;
@@ -656,7 +648,84 @@ function blockWrites(text: string, grammar: SqlGrammar): boolean {
   return false;
 }
 
-function writesUnderGrammar(text: string, grammar: SqlGrammar): boolean {
+/**
+ * The first index at or after `from` past white space and comments, the text Spark's lexer hides from its parser.
+ * White space is every character JavaScript's `\s` matches, which holds every one Spark's lexer counts (U+00A0 and
+ * U+3000 among them), and every character at or below U+0020, which Spark's `String.trim` of an unquoted key removes.
+ */
+function pastHiddenText(text: string, from: number, grammar: SqlGrammar): number {
+  let i = from;
+  while (i < text.length) {
+    const span = readSqlSpan(text, i, grammar);
+    if (
+      span !== null &&
+      (span.kind === "whitespace" || span.kind === "line-comment" || span.kind === "block-comment")
+    ) {
+      i = span.end;
+    } else if (text[i] <= " " || /\s/.test(text[i])) {
+      i++;
+    } else {
+      break;
+    }
+  }
+  return i;
+}
+
+/**
+ * The session key a SET or RESET names, read past white space and comments (`pastHiddenText`), and the index after
+ * it; the key is `""` where none follows. A key in backticks, or in double quotes where Spark reads double quotes as
+ * identifier quotes (`spark.sql.ansi.enabled` and `spark.sql.ansi.doubleQuotedIdentifiers` both on), is one token, as
+ * Spark's `configKey` rule reads it: the inner text of the closed run, a doubled quote collapsed to one, and nothing
+ * after the closing quote. Studio reads double quotes that way under every setting, so such a key asks whether or not
+ * the session reads it as a key. Any other key is the code text up to `=`, white space, `;` or the end: Spark reads it
+ * as the raw text up to `=`, trimmed by `String.trim`, which removes every character at or below U+0020, so each of
+ * those ends the key here.
+ */
+function configKeyAfter(text: string, from: number, grammar: SqlGrammar): { key: string; end: number } {
+  const start = pastHiddenText(text, from, grammar);
+  const quote = text[start];
+  const span = readSqlSpan(text, start, grammar);
+  if (span?.kind === "quoted-identifier" && span.terminated && (quote === "`" || quote === '"')) {
+    return { key: text.slice(start + 1, span.end - 1).replaceAll(quote + quote, quote), end: span.end };
+  }
+  let end = start;
+  while (end < text.length && text[end] > " " && !/[=\s;]/.test(text[end])) end++;
+  return { key: text.slice(start, end), end };
+}
+
+/**
+ * Whether a SET or RESET names a key of `grammar.confirmConfigKeys`, or is a RESET of every key. A SET asks only when
+ * `=` follows the key, past white space and comments: without it, the SET only shows the key's value.
+ */
+function configKeyAsks(
+  text: string,
+  reading: NonNullable<ReturnType<typeof readOperativeKeyword>>,
+  grammar: SqlGrammar,
+): boolean {
+  const keys = grammar.confirmConfigKeys;
+  if (keys === undefined || (reading.keyword !== "SET" && reading.keyword !== "RESET")) return false;
+  const { key: named, end } = configKeyAfter(text, reading.end, grammar);
+  if (named === "") return reading.keyword === "RESET";
+  if (reading.keyword === "SET" && text[pastHiddenText(text, end, grammar)] !== "=") return false;
+  const key = named.toLowerCase();
+  return keys.some((entry) => {
+    const wanted = entry.toLowerCase();
+    return wanted.endsWith(".") ? key.startsWith(wanted) : key === wanted;
+  });
+}
+
+/**
+ * Whether ONE statement's own code asks for a confirmation, read under `grammar`.
+ *
+ * Its own function because the caller below asks the question twice over different
+ * text: the whole editor buffer, and then each fragment the multi-statement route
+ * will run. Re-deriving the two keyword tests per call site is how the gate and the
+ * runner drifted apart in the first place.
+ *
+ * Exported for the grammar-level tests in `tests/components/QuerySafetyDialog.test.tsx`, which read a row's forms
+ * before any shipped row declares them; `isDangerousQuery` is the gate.
+ */
+export function writesUnderGrammar(text: string, grammar: SqlGrammar): boolean {
   const reading = readOperativeKeyword(text, grammar);
   const keyword = reading?.keyword;
   if (
@@ -677,6 +746,8 @@ function writesUnderGrammar(text: string, grammar: SqlGrammar): boolean {
   ) {
     return true;
   }
+  // A session key the dialect names: SET or RESET of it changes how every later statement of the session reads.
+  if (reading !== null && configKeyAsks(text, reading, grammar)) return true;
   if (
     reading !== null &&
     (grammar.confirmFormsWhen ?? []).some((form) =>

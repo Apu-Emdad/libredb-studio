@@ -133,6 +133,7 @@ const SeedDatabaseType = z.enum([
   "databend",
   "bigquery",
   "snowflake",
+  "spark",
   "s3",
   "kubernetes",
   "mqtt",

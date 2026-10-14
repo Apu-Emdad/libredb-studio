@@ -171,6 +171,7 @@ const SOURCE_DECLARATIONS: Readonly<Record<DatabaseType, readonly string[]>> = O
     "function/sql",
     "procedure/sql",
   ],
+  spark: ["table/sql", "view/sql"],
   // Both kinds have a source, JSON under the declared language: a bucket's parts and an object's metadata
   // and preview, serialised by the provider.
   s3: ["bucket/json", "object/json"],
@@ -315,9 +316,9 @@ describe("the fleet census of object source declarations", () => {
     // The population every assertion below iterates. If this were empty or short, each of those
     // loops would certify only the engines it happened to reach, so it is asserted first.
     expect([...CENSUS_TYPES].sort()).toEqual([...SHIPPED_DATABASE_TYPES].sort());
-    // EXTERNAL_DATABASE_TYPES.length (35 with db2, neo4j, milvus, qdrant, influxdb, influxdb3, oxia, databend,
-    // bigquery, snowflake, s3, kubernetes, mqtt, firestore, rabbitmq and opcua) plus the embedded store.
-    expect(CENSUS_TYPES).toHaveLength(36);
+    // EXTERNAL_DATABASE_TYPES.length (36 with db2, neo4j, milvus, qdrant, influxdb, influxdb3, oxia, databend,
+    // bigquery, snowflake, spark, s3, kubernetes, mqtt, firestore, rabbitmq and opcua) plus the embedded store.
+    expect(CENSUS_TYPES).toHaveLength(37);
     expect(Object.keys(SOURCE_DECLARATIONS).sort()).toEqual([...SHIPPED_DATABASE_TYPES].sort());
   });
 
@@ -335,16 +336,16 @@ describe("the fleet census of object source declarations", () => {
     // `hasSource` moves between the two halves, so both halves must be pinned or the total alone
     // would still be satisfied. Neither half may be edited to match a build: if this fails, the
     // DECLARATION is wrong or the design's table is, and the repair is one of those two.
-    expect(UNCONNECTED_SOURCE_KINDS).toHaveLength(139);
-    expect(rows.filter((row) => row.kind.hasSource === true)).toHaveLength(139);
+    expect(UNCONNECTED_SOURCE_KINDS).toHaveLength(141);
+    expect(rows.filter((row) => row.kind.hasSource === true)).toHaveLength(141);
     // neo4j added four kinds, none source-bearing, db2 five source-bearing kinds and four others, milvus and
     // qdrant one source-bearing kind each, influxdb and influxdb3 one kind each, neither source-bearing, oxia
     // two source-bearing kinds, databend four source-bearing kinds, bigquery three kinds, snowflake nine source-bearing
     // kinds and its stage, s3 two source-bearing kinds, kubernetes 37 source-bearing kinds and its Custom Resources
-    // kind, firestore one source-bearing kind and one other, rabbitmq three source-bearing kinds, and opcua one
-    // source-bearing kind.
-    expect(rows.filter((row) => row.kind.hasSource !== true)).toHaveLength(39);
-    expect(rows).toHaveLength(178);
+    // kind, firestore one source-bearing kind and one other, rabbitmq three source-bearing kinds, opcua one
+    // source-bearing kind, and spark two source-bearing kinds and its function kind.
+    expect(rows.filter((row) => row.kind.hasSource !== true)).toHaveLength(40);
+    expect(rows).toHaveLength(181);
   });
 
   test("the MariaDB branch declares two more, which an unconnected provider cannot show", async () => {
@@ -373,7 +374,7 @@ describe("the fleet census of object source declarations", () => {
     // 126 on a MariaDB connection against 124 unconnected: the design states both numbers because
     // criterion 2's evidence method reads an unconnected provider and would otherwise
     // structurally exclude the two riskiest declarations in the phase.
-    expect(UNCONNECTED_SOURCE_KINDS.length + MARIADB_EXTRA_SOURCE_KINDS.length).toBe(141);
+    expect(UNCONNECTED_SOURCE_KINDS.length + MARIADB_EXTRA_SOURCE_KINDS.length).toBe(143);
   });
 
   /*
@@ -459,8 +460,8 @@ describe("the fleet census of object source declarations", () => {
         throw new Error(`the half-declaration guard never reached ${extra}, so it does not cover the MariaDB branch`);
       }
     }
-    // 178 unconnected kinds plus the MariaDB branch's eight.
-    expect(rows).toHaveLength(186);
+    // 181 unconnected kinds plus the MariaDB branch's eight.
+    expect(rows).toHaveLength(189);
 
     const halfDeclared = rows
       .filter((row) => row.kind.sourceLanguage !== undefined && row.kind.hasSource !== true)
@@ -773,16 +774,17 @@ describe("the key-browser declaration", () => {
 /**
  * THE WITHHELD-NAMES DECLARATION, held to the preconditions its promise rests on.
  *
- * `machineNames: "withheld"` keeps a kind's names out of the agent's grounding walk, and the walk is the only
- * machine surface the declaration reaches. So it keeps its promise only where no other machine surface lists the
- * kind: the kind is not a relation, which MCP's `inspect_schema` and the app's schema read list whatever the
- * declaration says; the engine is not offered to MCP; and the provider has no `queryReadOnly`, the path the agent's
- * read tool runs a statement through.
+ * `machineNames: "withheld"` keeps a kind's names out of the agent's grounding walk. So it keeps its promise only
+ * where no other machine surface lists the kind: the kind is not a relation, which MCP's `inspect_schema` and the
+ * app's schema read list whatever the declaration says; the engine is not offered to MCP; and where the provider has
+ * `queryReadOnly`, the path the agent's read tool runs a statement through, its `machineRedaction.maskedNameKinds`
+ * names the kind, so the output masks those names. This census holds that declaration static; the masking itself is
+ * the provider's own redaction test.
  *
  * `WITHHELD_KINDS` is the committed expectation, one `<type-id>/<kind id>` per such kind, and the registration of
  * an engine that declares one moves it.
  */
-const WITHHELD_KINDS: readonly string[] = Object.freeze(["kubernetes/secrets", "kubernetes/namespaces"]);
+const WITHHELD_KINDS: readonly string[] = Object.freeze(["kubernetes/secrets"]);
 
 /** The breaches of the three preconditions above in one declaration, one sentence each. */
 function withheldNamesBreaches(
@@ -804,7 +806,13 @@ function withheldNamesBreaches(
     breaches.push(`${type} withholds the names of ${ids} and is offered to MCP`);
   }
   if (provider.queryReadOnly !== undefined) {
-    breaches.push(`${type} withholds the names of ${ids} and has queryReadOnly, through which the agent reads it`);
+    const masked = new Set(capabilities.machineRedaction?.maskedNameKinds ?? []);
+    for (const kind of withheld) {
+      if (!masked.has(kind.id))
+        breaches.push(
+          `${type}/${kind.id} withholds its names and has queryReadOnly, and its machine redaction does not mask them`,
+        );
+    }
   }
   return breaches;
 }
@@ -856,9 +864,17 @@ describe("the withheld-names declaration", () => {
     ]);
   });
 
-  test("a provider with queryReadOnly is refused by name", () => {
+  test("a provider with queryReadOnly whose machine redaction masks the kind has no breach", () => {
+    const capabilities = {
+      ...declaring([SECRET]),
+      machineRedaction: { maskedNameKinds: ["secret"] },
+    } as ProviderCapabilities;
+    expect(withheldNamesBreaches("kv", capabilities, { queryReadOnly: () => undefined }, false)).toEqual([]);
+  });
+
+  test("a provider with queryReadOnly whose machine redaction does not mask the kind is refused by name", () => {
     expect(withheldNamesBreaches("kv", declaring([SECRET]), { queryReadOnly: () => undefined }, false)).toEqual([
-      "kv withholds the names of secret and has queryReadOnly, through which the agent reads it",
+      "kv/secret withholds its names and has queryReadOnly, and its machine redaction does not mask them",
     ]);
   });
 });

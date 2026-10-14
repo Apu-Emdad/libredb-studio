@@ -22,6 +22,7 @@ const PASTE_FORMATS: readonly string[] = [
   "mssql://",
   "db2://",
   "databend://",
+  "sc://",
   "Server=… (ADO.NET)",
   "jdbc:snowflake://",
   "snowflake://",
