@@ -127,9 +127,9 @@ is told which one. `limit` defaults to 1000 and is refused unless it is a positi
 segment may be module qualified (`module:node`) and may carry list keys (`node=key1,key2`,
 percent-decoded), which is the RFC 8040 api-path form.
 
-The parser refuses rather than defaults. An array parses as an object in JavaScript, so it is
-refused explicitly: without that, the message said the request named no datastore when the real
-problem was that it was not a request at all.
+The shape of the request is checked before any of its fields. An array parses as an object in
+JavaScript, so it is refused explicitly: without that, the message said the request named no
+datastore when the real problem was that it was not a request at all.
 
 ### 3.2 NMDA is decided by the YANG library, not by the hello
 
