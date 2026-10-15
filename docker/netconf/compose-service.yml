@@ -6,6 +6,16 @@
 #
 # The port is a spec decision, not a measurement: 1830 is 830 moved above the privileged range,
 # bound to loopback the way the other fixtures are.
+#
+# TO RUN IT FROM HERE, before it is merged, the project directory has to be the repository root:
+#
+#   docker compose -f docker/netconf/compose-service.yml --project-directory . --profile netconf up -d netconf
+#
+# The `build.context` is written as `./docker/netconf` because that is what it will be once this
+# block sits in `database-compose.yml`; with `-f` alone compose resolves it against THIS file's
+# directory and fails on a path that does not exist. That is part of why the healthcheck below had
+# never run: the device it was written for was started by hand with `docker run`, which carries no
+# healthcheck at all.
 services:
   netconf:
     build: { context: ./docker/netconf }
@@ -19,10 +29,22 @@ services:
     ports:
       - "127.0.0.1:1830:830"
     healthcheck:
-      # The setup script writes this marker once the accounts, the NACM rule-list and the
-      # interface list are all in the datastore, so the fixture is not reported healthy while
-      # it is still half configured.
-      test: ["CMD", "test", "-f", "/fixture/.ready"]
+      # TWO FACTS, and the marker alone was only one of them.
+      #
+      # `.ready` says the accounts, the NACM rule-list and the interface list are all in the
+      # datastore, so the fixture is not reported healthy while it is still half configured. But
+      # `setup.sh` writes it BEFORE `exec netopeer2-server`, so on its own it can be true while
+      # nothing is answering yet: MEASURED on a fresh container, the marker and the SSH banner
+      # landed in the same 100 ms here, which is close enough to mislead and not the same fact.
+      #
+      # So the banner is asked for too, from inside the container where 127.0.0.1 is the server
+      # itself. It is deliberately NOT a TCP connect: MEASURED, a published container port is
+      # accepted by Docker 327 ms before the server behind it says anything, so "the port is
+      # open" is not a readiness fact at all. The banner's own text is matched rather than
+      # ssh-keyscan's exit code, because an empty answer and a refused one must not look alike.
+      test:
+        - CMD-SHELL
+        - test -f /fixture/.ready && ssh-keyscan -T 3 -p 830 127.0.0.1 2>/dev/null | grep -q SSH-2.0
       interval: 5s
       timeout: 3s
       retries: 24

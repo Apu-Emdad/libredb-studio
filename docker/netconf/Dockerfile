@@ -15,8 +15,19 @@
 #   3. libpam0g-dev is needed for the keyboard-interactive user of the fixture.
 # The server image stays small by leaving the toolchain behind: measured 38.0 MB against the
 # 552 MB a single-stage build of the same sources produces.
+#
+# BOTH BASES ARE PINNED BY DIGEST, which is what this fixture was missing. The sources are held by
+# `SHA256SUMS`, so the tarballs cannot move; the base could, and `debian:trixie-slim` is a rolling
+# tag that gains a new image on every point release. A fixture whose expected outcomes are read
+# back by tests cannot rest on a tag that is a different image next week - the one measured
+# weakness of pinning sources rather than an image is exactly this.
+#
+# The digest is the multi-platform INDEX digest, not one platform's manifest: checked with
+# `docker manifest inspect`, it is an `image.index.v1+json` carrying amd64 and arm64 among seven
+# architectures, so CI on amd64 and a developer's arm64 Mac both resolve it. Pinning a single
+# manifest would have broken one of the two.
 
-FROM debian:trixie-slim AS build
+FROM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS build
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential cmake pkg-config ca-certificates curl \
       libpcre2-dev libssl-dev libssh-dev libcurl4-openssl-dev zlib1g-dev \
@@ -52,7 +63,7 @@ RUN tar xzf netopeer2-${NETOPEER2}.tar.gz \
  && cmake -S netopeer2-${NETOPEER2} -B build-netopeer2 -DCMAKE_BUILD_TYPE=Release \
  && cmake --build build-netopeer2 -j"$(nproc)" && cmake --install build-netopeer2
 
-FROM debian:trixie-slim AS server
+FROM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS server
 RUN apt-get update && apt-get install -y --no-install-recommends \
       libpcre2-8-0 libssl3 libssh-4 libcurl4 zlib1g openssl libpam0g openssh-client \
  && rm -rf /var/lib/apt/lists/*
