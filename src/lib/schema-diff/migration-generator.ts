@@ -317,7 +317,7 @@ const NO_COLUMN_MODIFICATION: Partial<Record<DatabaseType, { label: string; reas
   netconf: {
     label: "NETCONF",
     reason:
-      "A NETCONF node's shape is declared in the device's YANG module, which the device serves and a client reads, and this provider sends five read operations and nothing else, so there is no column definition here for anything to change.",
+      "A NETCONF node's shape is declared in the device's YANG module, which the device serves and a client reads, and this provider builds four read operations and a close, so there is no column definition here for anything to change.",
   },
 };
 
