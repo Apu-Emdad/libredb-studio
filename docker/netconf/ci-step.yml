@@ -75,16 +75,23 @@
           docker run -d --name libredb-ci-netconf \
             -e LIBREDB_NETCONF_INTERFACES=5000 \
             -p "127.0.0.1:$NETCONF_PROBE_PORT:830" libredb-fixture/netconf:2.8.7
-          # Both questions are asked inside the container, where 127.0.0.1 is the server itself and
-          # neither answer can be Docker's.
+          # The first question is asked inside the container, where 127.0.0.1 is the server itself
+          # and the answer cannot be Docker's. The second is asked from the HOST, over the published
+          # port, and that split is the point: a readiness check that only ever looks inside never
+          # tests the mapping, so a wrong `-p` passes it and every check afterwards fails with
+          # ECONNREFUSED, which reads as a provider defect rather than as an unreachable fixture.
+          # Asking from the host raises the question of whose banner answers. It can only be this
+          # container's: `docker run` above exits 125 when the published port is already taken, and
+          # the step stops there, so a foreign server never reaches this loop. MEASURED: starting a
+          # second fixture on a port another container held exited 125 with "failed to set up
+          # container networking".
           configured=""
           serving=""
           end=$((SECONDS + 180))
           while [ "$SECONDS" -lt "$end" ]; do
             if docker exec libredb-ci-netconf test -f /fixture/.ready 2> /dev/null; then
               configured=yes
-              if docker exec libredb-ci-netconf sh -c \
-                   'ssh-keyscan -T 3 -p 830 127.0.0.1 2> /dev/null' | grep -q 'SSH-2.0'; then
+              if ssh-keyscan -T 3 -p "$NETCONF_PROBE_PORT" 127.0.0.1 2> /dev/null | grep -q 'SSH-2.0'; then
                 serving=yes
                 break
               fi
@@ -95,9 +102,10 @@
             # Both are NOT MEASURED, because in neither case did anything about this repository's
             # code get measured. A reader who has to fix one of them needs to know which one.
             if [ -n "$configured" ]; then
-              echo "NOT MEASURED: the NETCONF fixture finished configuring itself but never wrote an"
-              echo "SSH banner on $NETCONF_PROBE within 180 s. The datastore is loaded and the server"
-              echo "is not answering, so the live check never ran."
+              echo "NOT MEASURED: the NETCONF fixture finished configuring itself but never answered"
+              echo "on $NETCONF_PROBE within 180 s. Either the server is not speaking or the published"
+              echo "port does not reach it; this question is asked from the host for that reason. The"
+              echo "live check never ran."
             else
               echo "NOT MEASURED: the NETCONF fixture never wrote /fixture/.ready within 180 s, so it"
               echo "never finished loading its accounts, its NACM rule-list and its interface list."
