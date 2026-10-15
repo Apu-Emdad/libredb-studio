@@ -190,7 +190,9 @@ describe("the allowInsecureAuth field names every engine that reads it", () => {
       .map(([type]) => type);
     // The control: a tenth type taking the field fails here until both docs name it.
     expect(readers).toEqual(["db2", "influxdb", "influxdb3", "oxia", "databend", "s3", "mqtt", "rabbitmq", "snmp"]);
-    expect(API_DOCS).toContain("`allowInsecureAuth` (Db2, InfluxDB, InfluxDB 3, Oxia, Databend, S3, MQTT, RabbitMQ, SNMP)");
+    expect(API_DOCS).toContain(
+      "`allowInsecureAuth` (Db2, InfluxDB, InfluxDB 3, Oxia, Databend, S3, MQTT, RabbitMQ, SNMP)",
+    );
     expect(DATA_TYPES).toContain(
       "allowInsecureAuth?: boolean; // Db2, both InfluxDB types, Oxia, Databend, S3, MQTT, RabbitMQ and SNMP (#786):",
     );
