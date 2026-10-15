@@ -5,8 +5,8 @@ import type { KindCount } from "@/lib/db/types";
  * WHAT IS LISTED AND WHAT IT COSTS. The tree comes from the MIB modules this build carries, with
  * no traffic to the agent at all. That is a choice with a visible cost: the tree shows what the
  * modules define rather than what this agent answers, so a group may be listed that this agent
- * does not serve. The alternative, one GetNext per table to find out, is decision D-4 and is not
- * taken here. The cost is stated in the provider's own labels rather than hidden.
+ * does not serve. The alternative, one GetNext per table to find out before listing it, is a
+ * round trip per group at connect time and is not taken here. The cost is stated in the provider's own labels rather than hidden.
  *
  * WHY THE ORDER IS NUMERIC AND NOT TEXTUAL. An OID is a list of numbers, and an agent orders
  * instances by the VALUE of each sub-identifier (RFC 3416 section 4.2.2). Sorting the dotted

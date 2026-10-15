@@ -58,7 +58,7 @@ export class StatementError extends QueryError {
 export type ObjectName =
   | { readonly form: "numeric"; readonly oid: readonly number[] }
   | { readonly form: "descriptor"; readonly descriptor: string; readonly instance?: readonly number[] }
-  /** `MODULE::descriptor`. Decision D-5 has not chosen between this and `module.descriptor`. */
+  /** `MODULE::descriptor`. Whether `module.descriptor` is also accepted is still open. */
   | {
       readonly form: "qualified";
       readonly module: string;

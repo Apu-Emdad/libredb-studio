@@ -171,7 +171,7 @@ function auditSeam(sources: readonly SourceInput[], importerPath: string): Findi
         add(node, "computed-member", "a computed member on the library hides its name from this guard");
       }
 
-      // 3. No patch on a socket's own send (K-116).
+      // 3. No patch on a socket's own send: a provider may use the socket, never rewrite it.
       if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
         const left = node.left;
         if (ts.isPropertyAccessExpression(left) && left.name.text === "send") {

@@ -117,9 +117,9 @@ describe("a socket failure is not a reading of the agent", () => {
 
 /**
  * The last branch of the socket mapping, which is the one that decides what an UNKNOWN failure
- * looks like to a caller. 1724 found the opposite shape elsewhere tonight: an unmatched error
- * passed through raw and surfaced as an internal error, so an unreachable address read as our
- * defect. This one returns a typed transport failure and names the code, and the test exists
+ * looks like to a caller. The opposite shape has been found in another provider in this
+ * repository: an unmatched error passed through raw and surfaced as an internal error, so an
+ * unreachable address read as our defect. This one returns a typed transport failure and names the code, and the test exists
  * because "it happens not to today" is not a property.
  */
 describe("an unmapped socket code is still a transport failure", () => {
