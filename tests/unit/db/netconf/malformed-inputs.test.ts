@@ -10,7 +10,11 @@ import { test } from "bun:test";
 import { expectBe, expectEqual, expectThrows } from "./helpers";
 import { QueryError } from "@/lib/db/errors";
 import { decodeSegment } from "@/lib/db/providers/network/netconf/keypath";
-import { assertDeclarationIsSound } from "@/lib/db/providers/network/netconf/objectkinds";
+import {
+  assertDeclarationIsSound,
+  NETCONF_KEY_SCAN,
+  NETCONF_OBJECT_KINDS,
+} from "@/lib/db/providers/network/netconf/objectkinds";
 import type { XmlElement } from "@/lib/db/providers/network/netconf/reader-port";
 import { buildRpc } from "@/lib/db/providers/network/netconf/requests";
 import { buildRows } from "@/lib/db/providers/network/netconf/rows";
@@ -79,4 +83,26 @@ test("children repeating a name become one array, however many there are", () =>
   ]);
   const rows = buildRows(parent, "interface", ["name"]);
   expectEqual(rows.rows, [{ name: "e0", twice: '{"x":["1","2"]}', thrice: '{"y":["1","2","3"]}' }]);
+});
+
+test("a scan with no levels is refused, because the Keys panel has nothing to page through", () => {
+  // The declaration this provider ships always has levels, so the guard can only be shown to fire
+  // against a scan handed in. That is what the parameter is for.
+  expectThrows(() => assertDeclarationIsSound(NETCONF_OBJECT_KINDS, { ...NETCONF_KEY_SCAN, levels: undefined }), {
+    message: "a key-browser kind needs a keyScan declaration with levels",
+  });
+});
+
+test("a scan naming a rootKind is refused, because this engine addresses keys through two containers", () => {
+  // rootKind belongs to an engine whose key space has no container level. Here the module and the
+  // list are both containers, so a rootKind would name one of them as the whole of the root.
+  expectThrows(
+    () => assertDeclarationIsSound(NETCONF_OBJECT_KINDS, { ...NETCONF_KEY_SCAN, levels: { rootKind: "key" } }),
+    { message: "rootKind belongs to an engine with no container level, and this engine has two" },
+  );
+});
+
+test("the declaration this provider ships passes both, with the scan left to its default", () => {
+  assertDeclarationIsSound();
+  assertDeclarationIsSound(NETCONF_OBJECT_KINDS, NETCONF_KEY_SCAN);
 });

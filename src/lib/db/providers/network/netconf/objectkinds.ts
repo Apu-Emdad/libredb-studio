@@ -94,8 +94,17 @@ export function keyBrowserKind(kinds: readonly ObjectKindSpec[] = NETCONF_OBJECT
 /**
  * The three rules the repository's own census enforces, asserted here as well so that a wrong
  * declaration fails in this directory rather than after a connection opens.
+ *
+ * Both of what it reads arrive as parameters defaulting to this module's own constants, so every
+ * caller keeps calling it with none. They did not always: `kinds` was injected while the scan was
+ * read from module scope, so under one name the function checked A declaration in one half and THE
+ * declaration in the other. That is wrong about what it claims to do, whatever is testing it, and
+ * the two scan guards being unreachable from a test was the symptom rather than the fault.
  */
-export function assertDeclarationIsSound(kinds: readonly ObjectKindSpec[] = NETCONF_OBJECT_KINDS): void {
+export function assertDeclarationIsSound(
+  kinds: readonly ObjectKindSpec[] = NETCONF_OBJECT_KINDS,
+  scan: KeyScanCapability = NETCONF_KEY_SCAN,
+): void {
   const browsers = kinds.filter((kind) => kind.enumeratedBy === "key-browser");
   if (browsers.length !== 1) {
     throw new Error(`exactly one kind is enumerated by the Keys panel, found ${browsers.length}`);
@@ -104,10 +113,10 @@ export function assertDeclarationIsSound(kinds: readonly ObjectKindSpec[] = NETC
   if (browser?.hasSource !== true) {
     throw new Error("the Keys panel kind needs hasSource, because its Source tab is what resolves it");
   }
-  if (NETCONF_KEY_SCAN.levels === undefined) {
+  if (scan.levels === undefined) {
     throw new Error("a key-browser kind needs a keyScan declaration with levels");
   }
-  if (NETCONF_KEY_SCAN.levels.rootKind !== undefined) {
+  if (scan.levels.rootKind !== undefined) {
     throw new Error("rootKind belongs to an engine with no container level, and this engine has two");
   }
   if (enumerableKinds(kinds).some((kind) => kind.id === browser?.id)) {

@@ -41,6 +41,10 @@ test("an entity DECLARATION is reported as a doctype, because it cannot appear o
   // Not a translation this port chooses. An internal subset only exists inside a DOCTYPE, so the
   // reader refuses the DOCTYPE before it reaches the declaration, and the `entity-declaration` arm
   // is unreachable through a document.
+  //
+  // It is NOT dead code to delete: it shares its `return` with `case "entity"`, so no line is lost
+  // to it and no gate will ever point at it. If the reader stops refusing the DOCTYPE first, that
+  // arm is what answers, and this test is what says so.
   expectEqual(faultOf('<!DOCTYPE a [<!ENTITY x "y">]><a>&x;</a>'), { kind: "doctype" });
 });
 
