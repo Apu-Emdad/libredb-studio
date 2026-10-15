@@ -17,7 +17,7 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { lookup as dnsLookup } from "node:dns";
-import { createServer, type Server as TcpServer } from "node:net";
+import { createServer, type Server as TcpServer, type Socket } from "node:net";
 import { Server as SshServer, utils } from "ssh2";
 import { nodeSocketPort, nodeSshPort, transportOf } from "@/lib/db/providers/network/netconf/node-ports";
 
@@ -65,7 +65,7 @@ afterAll(() => {
   // never spoke on holds `close` open until its own timeout, so awaiting the callback makes the
   // teardown the slowest thing in the file and measures nothing. Both servers are unreferenced at
   // creation, so the process does not stay alive for them either way.
-  tcp.closeAllConnections?.();
+  (tcp as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
   tcp.close();
   (ssh as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
   ssh.close();
@@ -73,7 +73,7 @@ afterAll(() => {
 
 describe("the socket the provider opens is a real one", () => {
   test("a listening port answers with a connected socket", async () => {
-    const socket = await nodeSocketPort.connect({ host: "127.0.0.1", port: tcpPort, noDelay: true });
+    const socket = (await nodeSocketPort.connect({ host: "127.0.0.1", port: tcpPort, noDelay: true })) as Socket;
     expect(socket.remotePort).toBe(tcpPort);
     // The connect handler replaces its own error listener rather than removing it: a socket with no
     // 'error' listener throws in Node when one arrives, and ssh2 takes this socket from here.
@@ -92,7 +92,7 @@ describe("the socket the provider opens is a real one", () => {
     // to be the address checked. Node's own resolver is wrapped rather than replaced: a hand-written
     // one would measure this test's idea of the callback shape instead of the option being passed.
     let asked = 0;
-    const socket = await nodeSocketPort.connect({
+    const socket = (await nodeSocketPort.connect({
       host: "localhost",
       port: tcpPort,
       noDelay: true,
@@ -100,7 +100,7 @@ describe("the socket the provider opens is a real one", () => {
         asked += 1;
         return (dnsLookup as (...a: unknown[]) => unknown)(...args);
       }) as never,
-    });
+    })) as Socket;
     expect(asked).toBe(1);
     expect(socket.remotePort).toBe(tcpPort);
     socket.destroy();
@@ -109,7 +109,7 @@ describe("the socket the provider opens is a real one", () => {
 
 describe("the SSH session the provider opens is a real handshake", () => {
   const dial = async () => {
-    const sock = await nodeSocketPort.connect({ host: "127.0.0.1", port: sshPort, noDelay: true });
+    const sock = (await nodeSocketPort.connect({ host: "127.0.0.1", port: sshPort, noDelay: true })) as Socket;
     return nodeSshPort.connect({
       sock,
       username: USER,
@@ -138,7 +138,7 @@ describe("the SSH session the provider opens is a real handshake", () => {
   test("a subsystem the device refuses reaches the caller as an error rather than a null channel", async () => {
     const session = await dial();
     await new Promise<void>((resolve) => session.onReady(resolve));
-    const failure = await new Promise<Error | null>((resolve) => {
+    const failure = await new Promise<unknown>((resolve) => {
       session.subsystem("not-netconf", (error) => resolve(error));
     });
     expect(failure).toBeInstanceOf(Error);
@@ -149,7 +149,7 @@ describe("the SSH session the provider opens is a real handshake", () => {
     // `on` rather than `once`, and the reason is measured in the source: a port that listens and
     // never speaks makes ssh2 raise a second error after the dial has already been answered, and a
     // one-shot listener leaves that one with nobody to take it.
-    const sock = await nodeSocketPort.connect({ host: "127.0.0.1", port: tcpPort, noDelay: true });
+    const sock = (await nodeSocketPort.connect({ host: "127.0.0.1", port: tcpPort, noDelay: true })) as Socket;
     const session = nodeSshPort.connect({
       sock,
       username: USER,
@@ -157,7 +157,7 @@ describe("the SSH session the provider opens is a real handshake", () => {
       password: PASSWORD,
       hostVerifier: () => true,
     });
-    const first = await new Promise<Error>((resolve) => session.onError(resolve));
+    const first = await new Promise<unknown>((resolve) => session.onError(resolve));
     expect(first).toBeInstanceOf(Error);
     session.end();
   });
