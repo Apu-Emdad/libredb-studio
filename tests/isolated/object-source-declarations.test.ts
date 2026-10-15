@@ -256,6 +256,9 @@ const CENSUS_ABSTAINERS: readonly DatabaseType[] = Object.freeze([
   "influxdb",
   "influxdb3",
   "libredb",
+  // SNMP (#1721): every kind it declares answers values read from a numbered tree, and there is no
+  // text behind one, so it declares no source-bearing kind at all.
+  "snmp",
 ]);
 
 /** MariaDB's two extra kinds, which arrive only once the flavour has been measured. */
@@ -325,6 +328,7 @@ describe("the fleet census of object source declarations", () => {
     expect([...CENSUS_TYPES].sort()).toEqual([...SHIPPED_DATABASE_TYPES].sort());
     // EXTERNAL_DATABASE_TYPES.length (36 with db2, neo4j, milvus, qdrant, influxdb, influxdb3, oxia, databend,
     // bigquery, snowflake, s3, kubernetes, mqtt, firestore, rabbitmq, opcua and mtconnect) plus the embedded store.
+    // bigquery, snowflake, spark, s3, kubernetes, mqtt, firestore, rabbitmq and opcua) plus the embedded store.
     expect(CENSUS_TYPES).toHaveLength(38);
     expect(Object.keys(SOURCE_DECLARATIONS).sort()).toEqual([...SHIPPED_DATABASE_TYPES].sort());
   });
@@ -353,6 +357,9 @@ describe("the fleet census of object source declarations", () => {
     // source-bearing kind, and mtconnect three kinds of which two are not source-bearing: a data item and a
     expect(rows.filter((row) => row.kind.hasSource !== true)).toHaveLength(42);
     expect(rows).toHaveLength(184);
+    // source-bearing kind, and spark two source-bearing kinds and its function kind.
+    expect(rows.filter((row) => row.kind.hasSource !== true)).toHaveLength(42);
+    expect(rows).toHaveLength(183);
   });
 
   test("the MariaDB branch declares two more, which an unconnected provider cannot show", async () => {
@@ -469,6 +476,8 @@ describe("the fleet census of object source declarations", () => {
     }
     // 181 unconnected kinds plus the MariaDB branch's eight: MTConnect's three joined (#1722), of which
     expect(rows).toHaveLength(192);
+    // 181 unconnected kinds plus the MariaDB branch's eight.
+    expect(rows).toHaveLength(191);
 
     const halfDeclared = rows
       .filter((row) => row.kind.sourceLanguage !== undefined && row.kind.hasSource !== true)
