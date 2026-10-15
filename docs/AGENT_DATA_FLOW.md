@@ -289,9 +289,6 @@ your objects, and composes no statement at all.
 **Thirty-seven counts type-ids the factory can build, not engines a user would name**: `SHIPPED` holds
 thirty-nine, `CATALOG_PLANS` serves two of them, and the remainder is what this second reading covers.
 Every other count said about grounding in these docs counts the same thing. libSQL is one of the
-thirty-six and not one of the two: it speaks SQLite's dialect, but the read-only catalog path
-thirty-nine, `CATALOG_PLANS` serves two of them, and the remainder is what this second reading covers.
-Every other count said about grounding in these docs counts the same thing. libSQL is one of the
 thirty-seven and not one of the two: it speaks SQLite's dialect, but the read-only catalog path
 `CATALOG_PLANS` serves needs a database-native read-only profile, and `PRAGMA query_only` is refused
 by a libSQL server (see [`providers/libsql.md`](./providers/libsql.md)). Two things it does
