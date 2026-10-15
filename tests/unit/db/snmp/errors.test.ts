@@ -81,7 +81,7 @@ describe("silence lists its causes and claims none", () => {
     expect(failure.causes.some((c: string) => c.includes("community"))).toBe(false);
   });
   test("at authNoPriv the privacy passphrase is NOT a cause, because none was sent", () => {
-    // KURAL 48: without this case, making the privacy cause unconditional passed. The v3 test
+    // Without this case, making the privacy cause unconditional passed. The v3 test
     // above only proved the cause is PRESENT at authPriv; it took a second security level to
     // prove the list actually narrows rather than always carrying everything.
     const failure = silence(failureFromSilence({ version: "v3", securityLevel: "authNoPriv", contextNameSet: false }));

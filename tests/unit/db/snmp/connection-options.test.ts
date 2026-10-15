@@ -132,7 +132,7 @@ describe("a refusal never carries the secret that caused it", () => {
 });
 
 /**
- * KURAL 112. Three constants here were held in ONE direction only: moving them one way turned
+ * Three constants here were held in ONE direction only: moving them one way turned
  * something red and moving them the other way turned nothing red at all. A limit tested from one
  * side is a limit that can be loosened for free, which is the direction that matters.
  */
@@ -156,7 +156,8 @@ describe("the two sides of each limit", () => {
   });
 
   /**
-   * KURAL 116, the other way round. This sentence DOES name the RFC and it is right to: the
+   * The same citation question as `localizeKey`, the other way round. This sentence DOES name
+   * the RFC and it is right to: the
    * value is what the operator typed into the pin field, so the citation explains why their own
    * input is refused. The one in `localizeKey` was wrong because the value there comes off the
    * wire through our parser, and the same words would have blamed the device for our defect.

@@ -241,7 +241,7 @@ describe("the fall back from GetBulk to GetNext goes one way", () => {
 });
 
 /**
- * KURAL 73. Every test above hands `stepWalk` one answer and reads the result, so all of them
+ * Every test above hands `stepWalk` one answer and reads the result, so all of them
  * would pass a walk that threw away everything it had learned at each datagram boundary.
  *
  * Measured on 13 October 2026, with the single-answer tests as the only coverage: resetting the

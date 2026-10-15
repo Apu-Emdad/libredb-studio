@@ -16,8 +16,6 @@ import { PDU_GET } from "@/lib/db/providers/network/snmp/valve";
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 
 /**
- * KURAL 54, applied to the protocol's own word rather than to a test value.
- *
  * BER is the one place in this provider where the same bytes mean two different things depending
  * on where they sit. `msgSecurityParameters` IS a BER structure inside an OCTET STRING, and this
  * provider opens it on purpose. An agent's string value is also just bytes inside an OCTET

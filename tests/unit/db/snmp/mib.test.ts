@@ -78,7 +78,7 @@ describe("an unresolvable name is explained by which kind of absence it is", () 
     expect(text).toContain("numeric object identifier");
   });
   test("each withheld module is named as ITSELF, not as whichever one is first", () => {
-    // KURAL 48: without this, hardcoding one module's name in the explanation passed, because
+    // Without this, hardcoding one module's name in the explanation passed, because
     // the only withheld case asserted a word ("IANA") that the hardcoded answer also contains.
     expect(explainUnknown("ENTITY-MIB::entPhysicalDescr")).toContain("ENTITY-MIB");
     expect(explainUnknown("ENTITY-MIB::entPhysicalDescr")).not.toContain("IANAifType-MIB");

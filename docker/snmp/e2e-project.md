@@ -1,9 +1,10 @@
 # The playwright delivery for SNMP: nothing to add, and the measurement that says so
 
-`playwright.config.ts` and `tests/unit/e2e-project-servers.test.ts` are shared surfaces, so every
-engine delivers its change here and the coordinating session applies the five at once
-(`TEST-YUZEYI.md`, ORTAK DOSYA KURALI). **This engine's change is empty.** An empty delivery is
-worth writing down only with the reason, so here it is.
+`playwright.config.ts` and `tests/unit/e2e-project-servers.test.ts` are shared surfaces: five
+engines land in one round, and five branches editing one file is a merge to resolve rather than a
+change to review. So each engine writes what it needs from those two files here and the
+coordinating session applies the five at once. **This engine's change is empty.** An empty
+delivery is worth writing down only with the reason, so here it is.
 
 ## What `e2e/snmp-provider.spec.ts` needs
 

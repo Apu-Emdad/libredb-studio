@@ -412,7 +412,7 @@ function compareOidText(left: string, right: string): number {
 }
 
 /**
- * KURAL 256. The message handler drops a datagram it cannot read, which is right: a stray or
+ * The message handler drops a datagram it cannot read, which is right: a stray or
  * malformed packet must not fail a request that is still waiting. But "cannot read" has two
  * causes that look identical from the catch, and only one of them is a fact about the device.
  *

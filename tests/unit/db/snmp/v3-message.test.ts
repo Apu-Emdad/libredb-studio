@@ -69,7 +69,7 @@ function messageAround(securityParameters: Uint8Array): Uint8Array {
 
 /**
  * Everything the reproduction needs that the capture does not spell out, read back from the
- * datagram itself rather than written down here. KURAL 55: a comparison against a captured
+ * datagram itself rather than written down here: a comparison against a captured
  * datagram counts only when every input is the captured one; a number typed in from memory
  * turns a reproduction into a coincidence.
  */
@@ -91,7 +91,7 @@ describe("message flags", () => {
   /**
    * Each level and each reportable bit is asserted against its own number. A table that
    * computes the expectation the way `flagsFor` computes it would pass whatever `flagsFor`
-   * did, which is the shape of test KURAL 51 was written about.
+   * did: a table built that way restates the implementation instead of checking it.
    */
   test("every level and reportable combination has its own octet", () => {
     expect(flagsFor("noAuthNoPriv", false)).toBe(0x00);
@@ -214,8 +214,8 @@ describe("the USM parameter block", () => {
   });
 
   /**
-   * KURAL 67's fourth scope. These widths can only be wrong because this provider built them
-   * wrong, so the refusal must not arrive wearing the class that means "the wire sent rubbish".
+   * These widths can only be wrong because this provider built them wrong, so the refusal must
+   * not arrive wearing the class that means "the wire sent rubbish".
    */
   test("a width this provider got wrong is not reported as a problem with the bytes that arrived", () => {
     expect(() => encodeUsmParameters({ ...good, authParameters: new Uint8Array(11) })).not.toThrow(BerError);
@@ -243,7 +243,7 @@ describe("the USM parameter block", () => {
   });
 
   /**
-   * KURAL 70. The two widths are read out of a datagram a real net-snmp wrote and compared with
+   * The two widths are read out of a datagram a real net-snmp wrote and compared with
    * the constants the encoder uses, so the numbers are pinned to something outside this
    * repository. Every other test here hands the width in, which proves the check runs and
    * proves nothing at all about whether twelve and eight are the right numbers.
@@ -388,7 +388,7 @@ describe("the authPriv request, rebuilt from the capture", () => {
 });
 
 /**
- * KURAL 54. The placeholder RFC 3414 section 6.3.1 prescribes is twelve zero octets, so a test
+ * The placeholder RFC 3414 section 6.3.1 prescribes is twelve zero octets, so a test
  * that fills the field with zeros and watches the digest cannot tell "the digest covers this
  * field" apart from "the digest skips this field": both produce the same number. The only way
  * to see the difference is to hash a message whose digest field holds something other than
@@ -732,7 +732,7 @@ describe("an authenticated answer is checked before it is read", () => {
   });
 
   /**
-   * KURAL 84. Both of these are refused either way, because a digest field of the wrong width
+   * Both of these are refused either way, because a digest field of the wrong width
    * cannot match a digest. So "it throws" proves nothing here; what the width check buys is the
    * DIAGNOSIS. A malformed field reported as a digest mismatch tells the operator their key is
    * wrong and sends them to rotate a credential that was never the problem. The assertion is

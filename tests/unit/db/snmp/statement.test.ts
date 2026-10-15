@@ -135,13 +135,13 @@ describe("a GetBulk is sized before it is sent, by RFC 3416 section 4.2.3", () =
 });
 
 /**
- * KURAL 70. The boundary tests below say `MAX_VARBINDS_PER_REQUEST + 1`, so they follow the
+ * The boundary tests below say `MAX_VARBINDS_PER_REQUEST + 1`, so they follow the
  * constant wherever it is moved and hold the mechanism without holding the number. These two
  * hold the number, between the measurement it came from and the batch size it has to serve.
  */
 describe("the varbind cap is a number, not just a mechanism", () => {
   /**
-   * KURAL 53. The two measurements are written out as the numbers they are, not compared with
+   * The two measurements are written out as the numbers they are, not compared with
    * themselves. Anchoring the chain on a literal is what stops a later edit from moving the
    * cap and its justification together and leaving the test agreeing with both.
    */
@@ -166,7 +166,7 @@ describe("the varbind cap is a number, not just a mechanism", () => {
    * turned nothing red, because a range cannot hold an exact value. The cap is a choice inside a
    * measured safe range and not a figure derived from anything, so the only thing that can hold
    * it is a written statement of the choice. Its job is to make a change to the cap a decision
-   * somebody took on purpose rather than a drift nobody saw, which is the whole of KURAL 70.
+   * somebody took on purpose rather than a drift nobody saw.
    */
   test("the cap chosen inside that range is four hundred", () => {
     expect(MAX_VARBINDS_PER_REQUEST).toBe(400);

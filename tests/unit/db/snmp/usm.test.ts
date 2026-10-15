@@ -183,7 +183,7 @@ describe("every USM refusal reaches the user", () => {
   });
 
   /**
-   * KURAL 115. Every refusal in this provider arrives as a `QueryError`, which carries ONE code
+   * Every refusal in this provider arrives as a `QueryError`, which carries ONE code
    * for all of them, so before this field the only thing separating "your passphrase is wrong"
    * from "the clock has drifted" was English prose. A sentence serves the person reading it and
    * serves nothing that branches. These three send an operator to three different places: a
@@ -218,7 +218,7 @@ describe("every USM refusal reaches the user", () => {
   });
 
   /**
-   * KURAL 116. This sentence used to read "an engine ID is 5 to 32 octets (RFC 3411 section 5),
+   * This sentence used to read "an engine ID is 5 to 32 octets (RFC 3411 section 5),
    * this one is N", which pronounces on the agent's compliance. The identity comes out of the
    * agent's discovery answer THROUGH OUR PARSER, so the same sentence appears when our own read
    * of the field is wrong, and an operator who believes it writes to their vendor about a defect

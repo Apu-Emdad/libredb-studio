@@ -94,7 +94,7 @@ describe("the valve refuses what it cannot parse", () => {
 });
 
 /**
- * KURAL 84 and KURAL 112 together. A v1 datagram is refused, and so is a datagram carrying any
+ * A v1 datagram is refused, and so is a datagram carrying any
  * version this provider does not speak, so "it throws" cannot tell the two apart. Measured:
  * moving `VERSION_V1` off zero left the captured v1 datagram still refused, just by the
  * catch-all at the end of the dispatch, and nothing turned red.

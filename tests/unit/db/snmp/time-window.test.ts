@@ -48,7 +48,7 @@ describe("what the engine's clock is believed to say", () => {
 
 describe("the window is tested at its own edge", () => {
   /**
-   * KURAL 53. The cases sit at 150 and 151, not at 10 and 1000, so moving the limit by one
+   * The cases sit at 150 and 151, not at 10 and 1000, so moving the limit by one
    * turns one of them red. A test that sampled either side from a distance would let the window
    * be widened to any value at all.
    */
