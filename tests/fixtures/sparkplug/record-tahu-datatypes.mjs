@@ -27,4 +27,6 @@ const metrics = [
   { name: "BoolTrue", alias: 10, timestamp: TS, type: "Boolean", value: true },
   { name: "TextOne", alias: 11, timestamp: TS, type: "String", value: "NIGHT-SHIFT" },
 ];
-console.log(JSON.stringify({ hex: Buffer.from(payload.encodePayload({ timestamp: TS, seq: 0, metrics })).toString("hex") }));
+console.log(
+  JSON.stringify({ hex: Buffer.from(payload.encodePayload({ timestamp: TS, seq: 0, metrics })).toString("hex") }),
+);
