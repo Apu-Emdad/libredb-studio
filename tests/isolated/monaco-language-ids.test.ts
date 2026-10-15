@@ -355,6 +355,9 @@ describe("the installed editor's language ids", () => {
     // 140 before OPC UA, whose node declares `json` too, 141 before Apache Spark, whose table and view kinds
     // each declare `sql`, and 143 before MTConnect, whose asset declares `xml`.
     expect(declared).toHaveLength(144);
+    // 140 before OPC UA, whose node declares `json` too, and 141 before Apache Spark, whose table and view kinds
+    // each declare `sql`.
+    expect(declared).toHaveLength(145);
 
     const unregistered = declared.filter((entry) => !registered.has(entry.language));
     // Named, so a failure says which kind on which engine declared what, rather than false. This

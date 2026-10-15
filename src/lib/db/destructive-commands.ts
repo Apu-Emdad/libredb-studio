@@ -543,6 +543,10 @@ export const NON_SQL_DESTRUCTIVE_VOCABULARY: Readonly<Partial<Record<DatabaseTyp
   // there is no destructive verb to find. The row names no operation ON PURPOSE, in the shape Prometheus and Kafka
   // use: naming one would claim this provider can send it.
   mtconnect: { operations: new Set<string>(), read: () => [], decidesAlone: true, safetyAnalysis: false },
+  // Sparkplug B (#1720): a read request names a group, an edge node and a window, so there is no destructive verb
+  // to read, and nothing is posted for an AI analysis. The absence is structural: the encoder has no function that
+  // writes a PUBLISH, so no console text could change a plant even if one named a verb.
+  sparkplug: { operations: new Set<string>(), read: () => [], decidesAlone: true, safetyAnalysis: false },
   kubernetes: {
     operations: KUBERNETES_DESTRUCTIVE_OPERATIONS,
     read: readKubernetesOperations,

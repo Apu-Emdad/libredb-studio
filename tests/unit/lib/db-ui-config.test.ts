@@ -122,6 +122,7 @@ const ALL_TYPES: DatabaseType[] = [
   "rabbitmq",
   "opcua",
   "mtconnect",
+  "sparkplug",
 ];
 
 describe("db-ui-config", () => {
@@ -1009,7 +1010,7 @@ describe("declared connection-field copy (#1085)", () => {
     }
   });
 
-  test("only libsql, db2, prometheus, kafka, etcd, neo4j, milvus, qdrant, the two InfluxDB types, oxia, databend, bigquery, snowflake, spark, s3, kubernetes, mqtt, firestore, rabbitmq, opcua and mtconnect declare field copy, so every other engine draws every label and hint it drew before", () => {
+  test("only libsql, db2, prometheus, kafka, etcd, neo4j, milvus, qdrant, the two InfluxDB types, oxia, databend, bigquery, snowflake, spark, s3, kubernetes, mqtt, firestore, rabbitmq, opcua, mtconnect and sparkplug declare field copy, so every other engine draws every label and hint it drew before", () => {
     const declared = Object.entries(DB_UI_CONFIG)
       .filter(([, config]) => config.fieldLabels !== undefined || config.fieldHints !== undefined)
       .map(([type]) => type);
@@ -1037,6 +1038,7 @@ describe("declared connection-field copy (#1085)", () => {
       // OPC UA relabels Host as the endpoint URL and adds its own two boxes, each with a hint (#1677).
       "opcua",
       "mtconnect",
+      "sparkplug",
     ]);
     // The control that the walk saw the whole table rather than nothing.
     expect(Object.keys(DB_UI_CONFIG).sort()).toEqual([...ALL_TYPES].sort());
@@ -1567,6 +1569,10 @@ describe("db-showcase", () => {
         // name on a page of databases, so no existing engine moves for it (#1677).
         "opcua",
         "mtconnect",
+        // Last, behind the address space: the name on the box is a specification's rather than a
+        // product's, so a reader scanning the login page is least likely to arrive already knowing
+        // it, and no existing engine moves for it (#1720).
+        "sparkplug",
       ]);
     });
   });

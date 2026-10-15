@@ -124,6 +124,10 @@ export const SHOWCASE_RANK: Record<DatabaseType, number> = {
   // Last (rank 37), behind the address space: a machine tool's agent is a narrower name still, so nothing
   // above it moves for it either (#1722).
   mtconnect: 37,
+  // Last (rank 40), behind the configuration tree: the name on the box is a specification's rather
+  // than a product's, so a reader scanning the login page is least likely to arrive already knowing it
+  // (#1720).
+  sparkplug: 37,
 };
 
 /**

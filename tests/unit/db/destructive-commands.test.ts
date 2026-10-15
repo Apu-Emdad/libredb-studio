@@ -381,6 +381,7 @@ describe("vocabularyDecidesAlone", () => {
       "rabbitmq",
       "opcua",
       "mtconnect",
+      "sparkplug",
     ]);
   });
 
@@ -409,6 +410,7 @@ describe("NON_SQL_DESTRUCTIVE_VOCABULARY", () => {
       "rabbitmq",
       "redis",
       "s3",
+      "sparkplug",
     ]);
   });
 
@@ -528,6 +530,7 @@ describe("vocabularySendsToModel", () => {
       "rabbitmq",
       "opcua",
       "mtconnect",
+      "sparkplug",
     ]);
   });
 

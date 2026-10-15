@@ -1727,6 +1727,7 @@ export function useConnectionForm({ isOpen, onConnect, editConnection, onTestCon
     "rabbitmq",
     "snowflake",
     "opcua",
+    "sparkplug",
     "spark",
     "mtconnect",
   ];

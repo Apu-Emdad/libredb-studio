@@ -658,6 +658,7 @@ describe("MCP_EXPOSABLE (#1089)", () => {
       "mqtt",
       "firestore",
       "opcua",
+      "sparkplug",
     ]);
   });
 });

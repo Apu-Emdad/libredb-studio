@@ -1120,6 +1120,7 @@ describe("generateMigrationSQL: SQLite's grammar declares a foreign key only ins
     rabbitmq: "engine-has-no-foreign-key",
     opcua: "engine-has-no-foreign-key",
     mtconnect: "engine-has-no-foreign-key",
+    sparkplug: "engine-has-no-foreign-key",
   };
 
   for (const [dialectId, entry] of Object.entries(GRAMMAR)) {
@@ -1291,6 +1292,11 @@ const MODIFIED_COLUMN_COVERAGE: Record<
     label: "OPC UA",
     reason:
       "An OPC UA node has attributes defined by its type in the server's own model, not columns, and this provider has no code that can write to a server, so there is no column definition to change.",
+  },
+  sparkplug: {
+    label: "Sparkplug B",
+    reason:
+      "A Sparkplug metric's shape is declared in the birth certificate its edge node publishes, not in columns a client can change, and this provider's encoder has no function that writes a PUBLISH, so there is no column definition to change.",
   },
 };
 
@@ -1620,6 +1626,7 @@ describe("generateMigrationSQL: dialects that cannot modify a column", () => {
           "rabbitmq",
           "opcua",
           "mtconnect",
+          "sparkplug",
         ].includes(dialect)
       ) {
         expect(sql).toContain(`-- ${expected.label}: Cannot generate table DDL.`);
@@ -1698,6 +1705,7 @@ const TRANSACTION_WRAPPER_COVERAGE: Record<DatabaseType, "BEGIN;" | "BEGIN TRANS
   opcua: false,
   // No wrapper: every request this provider sends is a GET, so there is no statement to wrap (#1722).
   mtconnect: false, // one JSON read request, not SQL text (`NON_SQL_DIALECTS`), and no table DDL to wrap (`NO_TABLE_DDL`)
+  sparkplug: false, // one JSON read request, not SQL text (`NON_SQL_DIALECTS`), and no table DDL to wrap (`NO_TABLE_DDL`)
 };
 
 // Both creation and modification paths must use the same wrapper policy.
@@ -1740,6 +1748,7 @@ describe("generateMigrationSQL: transaction wrapper by dialect", () => {
             "rabbitmq",
             "opcua",
             "mtconnect",
+            "sparkplug",
           ].includes(dialect)
         ) {
           expect(sql).toMatch(/^CREATE TABLE /m);

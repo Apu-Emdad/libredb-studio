@@ -49,6 +49,7 @@ describe("DIALECT_EDITORS", () => {
       "rabbitmq",
       "redis",
       "s3",
+      "sparkplug",
       "sql",
     ]);
   });
@@ -63,6 +64,7 @@ describe("DIALECT_EDITORS", () => {
       mqtt: "json",
       opcua: "json",
       mtconnect: "mtconnect",
+      sparkplug: "json",
       libredb: "libredb",
       redis: "redis",
       promql: "promql",
@@ -85,7 +87,17 @@ describe("DIALECT_EDITORS", () => {
       .filter(([, editor]) => editor.format !== undefined)
       .map(([type]) => type)
       .sort();
-    expect(formatted).toEqual(["kafka", "milvus", "mongodb", "mqtt", "opcua", "qdrant", "rabbitmq", "sql"]);
+    expect(formatted).toEqual([
+      "kafka",
+      "milvus",
+      "mongodb",
+      "mqtt",
+      "opcua",
+      "qdrant",
+      "rabbitmq",
+      "sparkplug",
+      "sql",
+    ]);
   });
 
   test("tab types that render in one Monaco language share one formatter, or all have none", () => {

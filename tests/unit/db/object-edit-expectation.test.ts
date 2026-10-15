@@ -22,6 +22,7 @@ describe("the Phase 3 census expectation", () => {
     // databend, bigquery, snowflake, s3, kubernetes, mqtt, firestore, rabbitmq, opcua and mtconnect) plus the
     // store; db2, neo4j, milvus, qdrant, influxdb, influxdb3, oxia, databend, bigquery, snowflake, spark, s3,
     // kubernetes, mqtt, firestore, rabbitmq, opcua and mtconnect abstain.
+    // kubernetes, mqtt, firestore, rabbitmq and opcua abstain.
     expect(EXPECTED_EDIT_ABSTAINERS.length).toBe(34);
     expect(EDIT_CENSUS_TYPES.length).toBe(38);
   });

@@ -135,6 +135,8 @@ const ENGINE_FENCE_TAGS: Readonly<Record<DatabaseType, true>> = Object.freeze({
   opcua: true,
   // An ```mtconnect block holds one request line in the agent's own URL grammar, which the console runs as it is.
   mtconnect: true,
+  // An ```sparkplug block holds one read request in the JSON shape the console runs as it is.
+  sparkplug: true,
 });
 
 /**

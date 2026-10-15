@@ -46,6 +46,7 @@ describe("QUERY_DIALECTS", () => {
       "rabbitmq",
       "redis",
       "s3",
+      "sparkplug",
     ]);
   });
 
@@ -143,6 +144,13 @@ describe("QUERY_DIALECTS", () => {
       },
       mtconnect: {
         tabType: "mtconnect",
+        offersColumnProfiling: false,
+        offersCodeGeneration: false,
+        offersCountQuery: false,
+      },
+
+      sparkplug: {
+        tabType: "sparkplug",
         offersColumnProfiling: false,
         offersCodeGeneration: false,
         offersCountQuery: false,

@@ -311,6 +311,15 @@ const NO_COLUMN_MODIFICATION: Partial<Record<DatabaseType, { label: string; reas
     reason:
       "An MTConnect data item's shape is declared in the agent's own device model, not in columns a client can change, and every request this provider sends is a GET, so there is no column definition to change.",
   },
+
+  // Not a table store either (#1720): a metric's shape is declared by the birth certificate the edge
+  // node publishes, and this provider's encoder has no function that writes a PUBLISH, so there is
+  // nothing a client here could change.
+  sparkplug: {
+    label: "Sparkplug B",
+    reason:
+      "A Sparkplug metric's shape is declared in the birth certificate its edge node publishes, not in columns a client can change, and this provider's encoder has no function that writes a PUBLISH, so there is no column definition to change.",
+  },
 };
 
 /**
@@ -418,6 +427,7 @@ const NO_TRANSACTION_WRAPPER: ReadonlySet<DatabaseType> = new Set<DatabaseType>(
   "opcua",
   // No table DDL to wrap either (#1722): an agent's model is the agent's own.
   "mtconnect",
+  "sparkplug",
 ]);
 
 // These engines cannot apply a relational table diff through SQL. In particular,
@@ -451,6 +461,7 @@ const NO_TABLE_DDL: ReadonlySet<DatabaseType> = new Set<DatabaseType>([
   "opcua",
   // One container level of devices and no schema, so no table DDL to decline (#1722).
   "mtconnect",
+  "sparkplug",
 ]);
 
 // IndexDiff carries column names/uniqueness, not ClickHouse's index expression,

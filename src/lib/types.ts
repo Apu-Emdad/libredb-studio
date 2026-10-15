@@ -206,7 +206,16 @@ export type DatabaseType =
   // Basic answers with an HTML 401 rather than an MTConnect document, which the provider reports as what it is.
   // Read-only is structural rather than a mode: the request table holds nine routes and every one of them is a GET,
   // so there is nothing to send that writes.
-  | "mtconnect";
+  | "mtconnect"
+  // Eclipse Sparkplug B (#1720). One MQTT subscription read only, the third member of the `industrial/` family,
+  // with its own bounded session (`src/lib/db/providers/industrial/sparkplug/`) rather than the shipped MQTT read,
+  // because that read returns a map keyed by topic while a Sparkplug read depends on the ORDER of successive
+  // messages on one topic: a sequence gap is read from two consecutive data messages, a rebirth replaces a
+  // definition mid-read, and the specification warns a death can arrive after the next birth. One connection is
+  // one broker. Read-only is structural rather than a mode: the provider's encoder has no function that writes a
+  // PUBLISH, and its CONNECT takes no will parameter, because 5.4 registers an edge node's death certificate as
+  // its MQTT will and a reader that set one would publish a death when its own socket dropped.
+  | "sparkplug";
 
 export type ConnectionEnvironment = "production" | "staging" | "development" | "local" | "other";
 
@@ -942,7 +951,8 @@ export interface QueryTab {
     | "firestore"
     | "rabbitmq"
     | "opcua"
-    | "mtconnect";
+    | "mtconnect"
+    | "sparkplug";
   viewMode?: "results" | "explain" | "history" | "saved";
   explainPlan?: unknown;
   // Pagination state

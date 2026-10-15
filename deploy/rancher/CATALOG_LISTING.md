@@ -181,7 +181,7 @@ versions are documented and validated for every release.
 
 - Thirty-seven database engines in one browser-based IDE: PostgreSQL, MySQL, Oracle,
   Db2 LUW, SQL Server, SQLite, libSQL, DuckDB, MongoDB, Redis, Couchbase, Firestore, ClickHouse, Apache Druid,
-  Elasticsearch, OpenSearch, Trino, Databend, BigQuery, Snowflake, Apache Spark, Apache Cassandra, Prometheus, InfluxDB (InfluxQL), InfluxDB 3 (SQL), Apache Kafka, etcd, Neo4j, Milvus, Qdrant, Oxia, S3-compatible object storage, Kubernetes, MQTT, RabbitMQ, OPC UA and MTConnect
+  Elasticsearch, OpenSearch, Trino, Databend, BigQuery, Snowflake, Apache Spark, Apache Cassandra, Prometheus, InfluxDB (InfluxQL), InfluxDB 3 (SQL), Apache Kafka, etcd, Neo4j, Milvus, Qdrant, Oxia, S3-compatible object storage, Kubernetes, MQTT, RabbitMQ, OPC UA, MTConnect and Sparkplug B
 - One-click install from the Rancher Apps catalog — deployable with default values,
   zero configuration required
 - Optional AI assistance (Gemini, OpenAI, or a self-hosted model; off by default):
