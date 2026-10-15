@@ -16,6 +16,21 @@ wrong fingerprint gets, say, which is a real thing to want for an engine whose `
 and whose pin is checked during the handshake - it takes a second server at that moment, and the
 entry belongs here then.
 
+**And one measurement that qualifies the reasoning above.** Not clicking Test Connection is what
+keeps this spec off a second server, but it is not the whole of what spends the bucket. MEASURED
+2026-10-15, running this spec and `modbus-provider.spec.ts` in one `chromium` run with Playwright's
+default worker count: four of the cases in this file's second group failed, and the dialog said why
+- **"Too many requests. Try again in 46 seconds."** Run one at a time, each is green: 8 of 8 here
+and 9 of 9 there. The arithmetic is the config's own: every case signs in afresh in its
+`beforeEach`, each fresh login auto-hydrates about 7 slots, 17 cases is ~119 against a budget of
+120 a minute, and locally they land inside one window.
+
+So establishing a connection and signing in per case is enough on its own, without Test Connection.
+**CI runs `workers: 1`, which spreads the same load over time - I am not claiming this breaks in
+CI, I did not measure CI.** What it does mean is that a second connecting spec added to this
+project, or a local run of several at once, is the thing to watch - and that a red in those four
+cases is worth reading before it is believed, because the sentence on the page names the cause.
+
 ## The two variables, and what happens without them
 
 The spec has two groups and only the first runs unconditionally.
