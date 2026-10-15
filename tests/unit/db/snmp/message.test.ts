@@ -139,3 +139,14 @@ describe("a response is read, and an unreadable one is refused rather than halve
     expect(VERSION_V2C).toBe(1);
   });
 });
+
+describe("a message whose second field is not a community", () => {
+  test("is refused rather than read as one", () => {
+    // `communityOf` is what the valve uses to say which connection a datagram belongs to, so a
+    // message whose second field is an integer must not be read as a community: it would be
+    // reported as belonging to a connection named by whatever those bytes decode to.
+    const notACommunity = Uint8Array.of(0x30, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x00);
+    expect(() => communityOf(notACommunity)).toThrow(BerError);
+    expect(() => communityOf(notACommunity)).toThrow(/carries no community/);
+  });
+});

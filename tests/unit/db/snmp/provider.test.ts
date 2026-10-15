@@ -111,6 +111,30 @@ describe("maintenance is refused as a write, not as unimplemented", () => {
   });
 });
 
+describe("the three ends that answer with the same sentence as listObjects", () => {
+  // `listObjects` already had a case and these three did not, so the sentence a reader meets was
+  // only ever measured on one of the four ends that give it. They are separate methods with
+  // separate strings, and a wrong word in one of them would have cost nothing to keep.
+  test("describing one object says what is missing", async () => {
+    await expect(provider().describeObject()).rejects.toThrow(SnmpNotWired);
+    await expect(provider().describeObject()).rejects.toThrow(/Describing an object needs the SNMP client/);
+  });
+
+  test("describing many objects says the same", async () => {
+    await expect(provider().describeObjects()).rejects.toThrow(/Describing objects needs the SNMP client/);
+  });
+
+  test("reading health says the same", async () => {
+    await expect(provider().getHealth()).rejects.toThrow(/Reading health needs the SNMP client/);
+  });
+
+  test("and every one of them names the socket as the missing piece", async () => {
+    // The second half of that sentence is the half that tells a reader this is wiring rather
+    // than a refusal: the parsing, the bounds and the refusals are in place, the socket is not.
+    await expect(provider().getHealth()).rejects.toThrow(/what is missing is the socket/);
+  });
+});
+
 describe("an unknown object kind is named, not guessed at", () => {
   test("it lists the kinds this provider has", async () => {
     await expect(provider().listObjects([], "collection")).rejects.toThrow(/table and scalars/);

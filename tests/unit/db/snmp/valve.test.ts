@@ -137,3 +137,79 @@ describe("version zero is refused as v1 and not as an unknown version", () => {
     expect(() => inspectOutbound(bytes(CAPTURED.v2cGet))).not.toThrow();
   });
 });
+
+/**
+ * THE REFUSAL SENTENCES THAT HAD NO CASE.
+ *
+ * The valve names what it refused, and the name is what a reader sees. Until these cases existed
+ * only the SetRequest arm had ever been read; the other three were written and never run, which
+ * is the state where a wrong name costs nothing to keep.
+ *
+ * The datagrams are the captured SetRequest with one byte changed, the PDU tag itself, because
+ * that is the only byte the valve reads to decide. Building a whole Inform by hand would be
+ * writing a message no agent sent to test a branch that only looks at one octet.
+ */
+describe("the PDU types the valve names when it refuses them", () => {
+  const withPduTag = (tag: number): Uint8Array => {
+    const octets = [...CAPTURED.v2cSet];
+    const at = octets.lastIndexOf(0xa3);
+    expect(at, "the captured SetRequest should carry a 0xa3 PDU tag").toBeGreaterThan(0);
+    octets[at] = tag;
+    return new Uint8Array(octets);
+  };
+
+  test("an InformRequest is refused by its own name", () => {
+    expect(() => inspectOutbound(withPduTag(0xa6))).toThrow(/an InformRequest/);
+  });
+
+  test("a Trap is refused by its own name", () => {
+    expect(() => inspectOutbound(withPduTag(0xa7))).toThrow(/a Trap/);
+  });
+
+  test("a Response is refused by its own name", () => {
+    // A Response is what an agent sends, so one leaving this socket means something built an
+    // answer rather than a question. It is refused with the same sentence shape as the rest.
+    expect(() => inspectOutbound(withPduTag(0xa2))).toThrow(/a Response/);
+  });
+
+  test("a PDU type with no name of its own is refused by its number", () => {
+    expect(() => inspectOutbound(withPduTag(0xa9))).toThrow(/PDU type 0xa9/);
+  });
+});
+
+describe("the datagrams the valve cannot read at all", () => {
+  test("bytes that are not a BER message are refused as unparseable", () => {
+    // Not "refused a Set" and not "allowed": a message this process cannot read is one it cannot
+    // vouch for, and the sentence says which of the two it is.
+    expect(() => inspectOutbound(bytes([0xff, 0xff, 0xff]))).toThrow(ValveRefusal);
+    expect(() => inspectOutbound(bytes([0xff, 0xff, 0xff]))).toThrow(/cannot parse/);
+  });
+
+  test("a SEQUENCE whose children run past its own length is refused the same way", () => {
+    // The outer tag reads, the children do not. Both arms of that pair end in the same refusal,
+    // and until now only the first had a case.
+    expect(() => inspectOutbound(bytes([0x30, 0x04, 0x02, 0x7f, 0x02, 0x01]))).toThrow(/cannot parse/);
+  });
+});
+
+describe("a v3 message whose scoped PDU cannot be read", () => {
+  test("is refused as an unparseable scoped PDU, not as a refused PDU type", () => {
+    /*
+     * The outer message reads, the msgData tag is a SEQUENCE, and the children inside it do not
+     * parse. That is a different sentence from "refused a SetRequest": the valve has not seen a
+     * PDU type at all, and saying which of the two happened is what tells a reader whether the
+     * message was refused or merely unreadable.
+     *
+     * The datagram is the captured authNoPriv request with ONE byte changed - the length of the
+     * first field inside msgData, set to a value that runs past the message. Measured here
+     * rather than hand-built, because a scoped PDU written from scratch would not be one this
+     * client ever produces.
+     */
+    const octets = Uint8Array.from(CAPTURED.v3AuthNoPrivRequest);
+    const msgData = readChildren(octets, readField(octets, 0))[3];
+    const corrupted = Uint8Array.from(octets);
+    corrupted[msgData.start + 1] = 0x7f;
+    expect(() => inspectOutbound(corrupted)).toThrow(ValveRefusal);
+    expect(() => inspectOutbound(corrupted)).toThrow(/scoped PDU this process cannot parse/);
+  });
+});

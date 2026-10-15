@@ -198,8 +198,12 @@ function tableRows(subtree: readonly number[], varbinds: readonly ResponseVarbin
 
 const notWired = (what: string): never => {
   throw new SnmpNotWired(
-    `${what} needs the SNMP client, which is not a dependency of this build yet. The provider's own parsing, ` +
-      `bounds, value rendering and refusals are in place and tested; what is missing is the socket.`,
+    // ONE LINE ON PURPOSE. Split over two with `+`, the second line is a record the coverage tool
+    // never marks: the expression runs, the continuation is not counted, and no case can make it
+    // green. Measured on this branch - it was one of thirteen such lines when the gate was first
+    // run. The sentence is what matters and it is unchanged.
+    // oxlint-disable-next-line max-len -- see above: splitting this string hides a line from the coverage gate
+    `${what} needs the SNMP client, which is not a dependency of this build yet. The provider's own parsing, bounds, value rendering and refusals are in place and tested; what is missing is the socket.`,
   );
 };
 
@@ -505,8 +509,9 @@ export class SnmpProvider extends BaseDatabaseProvider {
   public async runMaintenance(): Promise<never> {
     // Not "not implemented": maintenance is a write, and this provider has no code that writes.
     throw new DatabaseConfigError(
-      "This provider performs no maintenance. Maintenance would be a write, and this provider has no code that " +
-        "writes: its client sits behind a seam reaching GetRequest, GetNextRequest and GetBulkRequest and nothing else.",
+      // One line, for the reason `notWired` above carries.
+      // oxlint-disable-next-line max-len -- see notWired: a split string hides a line from the coverage gate
+      "This provider performs no maintenance. Maintenance would be a write, and this provider has no code that writes: its client sits behind a seam reaching GetRequest, GetNextRequest and GetBulkRequest and nothing else.",
     );
   }
 

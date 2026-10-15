@@ -344,6 +344,65 @@ describe("a v3 connection discovers the engine and then talks to it", () => {
     expect(second.authParameters.length).toBe(12);
   });
 
+  test("a stray datagram during discovery is dropped, not adopted as the engine", async () => {
+    /*
+     * The half of discovery that decides WHAT this connection's keys are localised to. A
+     * datagram from the agent's address that is not a Report must not end discovery: if it did,
+     * anything able to send one byte from that address would choose the engine identity.
+     *
+     * So this agent answers the discovery with rubbish first and the real Report second. The
+     * exchange opens, which is the assertion: the rubbish was dropped and the Report decided.
+     */
+    let answered = false;
+    agent = createSocket("udp4");
+    agent.on("message", (_datagram, from) => {
+      if (!answered) {
+        answered = true;
+        agent?.send(Uint8Array.of(0x30, 0x02, 0x99, 0x99), from.port, from.address);
+        agent?.send(report(11), from.port, from.address);
+        return;
+      }
+    });
+    await new Promise<void>((resolve) => agent?.bind(0, "127.0.0.1", () => resolve()));
+    const port = (agent.address() as { port: number }).port;
+    const exchange = await openExchange({
+      target: await resolveTarget("127.0.0.1", port),
+      community: "",
+      deadlineMs: 1000,
+      v3: { userName: "u1", authPassphrase: PASS, level: "authNoPriv", hash: "sha1" },
+    });
+    opened = exchange;
+    expect(answered).toBe(true);
+  });
+
+  test("an authPriv request leaves encrypted, carrying the salt its privacy needs", async () => {
+    /*
+     * The encrypted encoder had no case at all. The agent here answers the discovery and then
+     * stays silent, because it cannot decrypt what comes next - which is enough: what is being
+     * measured is the REQUEST this client builds once the level asks for privacy.
+     *
+     * The assertion is the salt. An authNoPriv message carries no privacy parameters (the case
+     * above reads them as empty); an authPriv one must carry eight bytes of salt, because the
+     * agent needs them to build the same initialisation vector. A message that encrypted its
+     * scoped PDU and sent no salt would be undecryptable at the other end, and the deadline
+     * would report it as silence.
+     */
+    const seen: Uint8Array[] = [];
+    const port = await v3Agent(seen);
+    const exchange = await openExchange({
+      target: await resolveTarget("127.0.0.1", port),
+      community: "",
+      deadlineMs: 200,
+      v3: { userName: "u1", authPassphrase: PASS, privacyPassphrase: PASS, level: "authPriv", hash: "sha1" },
+    });
+    opened = exchange;
+    await exchange.send(PDU_GET, 4243, [SYS_DESCR]);
+    expect(seen.length).toBeGreaterThanOrEqual(2);
+    const encrypted = readUsmParameters(seen[1]);
+    expect(encrypted.privParameters.length).toBe(8);
+    expect(encrypted.authParameters.length).toBe(12);
+  });
+
   test("the answer comes back matched to its own request id", async () => {
     const port = await v3Agent([]);
     const exchange = await openExchange({
@@ -718,5 +777,143 @@ describe("a v3 connection discovers the engine and then talks to it", () => {
     // asking again cannot fix: only notInTimeWindow earns a second attempt, and a client that
     // retried on any Report at all would be answering a configuration problem with traffic.
     expect(seen.length).toBe(2);
+  });
+});
+
+/**
+ * THE THREE ENDS THAT ONLY SILENCE, A CLOSED PORT OR A CIPHER REACHES.
+ *
+ * Each of these lines was uncovered when the gate was first run against this branch, and none of
+ * them needs a device: a port with nothing behind it, a v3 handshake nobody answers, and the
+ * encrypted request this client builds when the level asks for privacy.
+ */
+describe("a v3 connection whose discovery is never answered", () => {
+  test("ends at its own deadline, naming discovery rather than the read", async () => {
+    // The sentence matters more than the failure: an unanswered DISCOVERY is not a read that
+    // failed, it is a connection that never learned the engine's identity, and the two send an
+    // operator to different places.
+    const silent = createSocket("udp4");
+    await new Promise<void>((resolve) => silent.bind(0, "127.0.0.1", () => resolve()));
+    const port = (silent.address() as { port: number }).port;
+    try {
+      await expect(
+        openExchange({
+          target: await resolveTarget("127.0.0.1", port),
+          community: "",
+          deadlineMs: 150,
+          v3: { userName: "u1", authPassphrase: "authpass12345", level: "authNoPriv", hash: "sha1" },
+        }),
+      ).rejects.toThrow(/did not answer the discovery request/);
+    } finally {
+      silent.close();
+    }
+  });
+});
+
+describe("a socket error rather than silence", () => {
+  test("a port with nothing behind it answers the read with the socket's own code", async () => {
+    // On loopback a closed UDP port is refused by the kernel rather than ignored, so this is the
+    // one path where the client is told something instead of waiting. The failure carries the
+    // code, which is what tells a reader this is not the agent being slow.
+    const dead = createSocket("udp4");
+    await new Promise<void>((resolve) => dead.bind(0, "127.0.0.1", () => resolve()));
+    const port = (dead.address() as { port: number }).port;
+    await new Promise<void>((resolve) => dead.close(() => resolve()));
+
+    const exchange = await openExchange({
+      target: await resolveTarget("127.0.0.1", port),
+      community: "public",
+      deadlineMs: 400,
+    });
+    opened = exchange;
+    const answer = await exchange.send(PDU_GET, 7, [SYS_DESCR]);
+    expect("varbinds" in answer).toBe(false);
+    expect((answer as { kind: string }).kind).toBeDefined();
+  });
+});
+
+/**
+ * THE TWO FAILURES A REAL SOCKET WILL NOT PRODUCE ON DEMAND.
+ *
+ * Both are driven through `createRawSocket`, the seam this client already exposes so a test can
+ * give it a socket. A loopback socket cannot be told to fail a send with a chosen code, and it
+ * certainly cannot be told to hand this process a datagram that breaks its own decoder - which
+ * is the point of the second one: that branch exists for OUR defects, so producing it means
+ * injecting one.
+ */
+describe("a send the socket itself refuses", () => {
+  const fakeSocket = (onSend: (cb: (error?: Error) => void) => void) => {
+    let listener: ((datagram: Uint8Array) => void) | undefined;
+    const socket = {
+      on: (event: string, handler: (datagram: Uint8Array) => void) => {
+        if (event === "message") listener = handler;
+        return socket;
+      },
+      bind: () => socket,
+      address: () => ({ address: "127.0.0.1", family: "IPv4", port: 1 }),
+      unref: () => socket,
+      ref: () => socket,
+      close: (cb?: () => void) => cb?.(),
+      connect: (_port: number, _address: string, cb: () => void) => cb(),
+      send: (_bytes: Uint8Array, cb: (error?: Error) => void) => onSend(cb),
+    };
+    return { socket: socket as unknown as Socket, deliver: (datagram: unknown) => listener?.(datagram as Uint8Array) };
+  };
+
+  test("answers with the code the socket reported", async () => {
+    const refused = Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
+    const { socket } = fakeSocket((cb) => cb(refused));
+    const exchange = await openExchange({
+      target: await resolveTarget("127.0.0.1", 161),
+      community: "public",
+      deadlineMs: 2000,
+      createRawSocket: () => socket,
+    });
+    opened = exchange;
+    const answer = await exchange.send(PDU_GET, 11, [SYS_DESCR]);
+    expect("varbinds" in answer).toBe(false);
+    // The sentence, not the code: ECONNREFUSED on a connected UDP socket means the far host
+    // answered that nothing is listening, and saying "the socket refused the send" would send
+    // a reader to look at this machine instead.
+    expect(JSON.stringify(answer)).toContain("nothing is listening");
+  });
+
+  test("and with a named unknown when the error carries no code", async () => {
+    // An error with no `code` is still an error. Reporting it as silence would send a reader to
+    // look at an agent that never heard anything.
+    const { socket } = fakeSocket((cb) => cb(new Error("something went wrong")));
+    const exchange = await openExchange({
+      target: await resolveTarget("127.0.0.1", 161),
+      community: "public",
+      deadlineMs: 2000,
+      createRawSocket: () => socket,
+    });
+    opened = exchange;
+    const answer = await exchange.send(PDU_GET, 12, [SYS_DESCR]);
+    expect("varbinds" in answer).toBe(false);
+    expect(JSON.stringify(answer)).toContain("UNKNOWN");
+  });
+
+  test("a datagram that breaks this process's own reader is reported as ours, not as silence", async () => {
+    /*
+     * The branch under test keeps OUR defects out of sentences about the device: a declared
+     * refusal is dropped and the request ends at its deadline, but anything else is kept and
+     * reported as a fault here. A real agent cannot be asked to produce one, so the fault is
+     * injected through the same seam the socket comes from - `null` where a datagram belongs,
+     * which is what a decoder bug looks like from the outside.
+     */
+    const { socket, deliver } = fakeSocket(() => undefined);
+    const exchange = await openExchange({
+      target: await resolveTarget("127.0.0.1", 161),
+      community: "public",
+      deadlineMs: 120,
+      createRawSocket: () => socket,
+    });
+    opened = exchange;
+    const pending = exchange.send(PDU_GET, 13, [SYS_DESCR]);
+    deliver(null);
+    const answer = await pending;
+    expect("varbinds" in answer).toBe(false);
+    expect(JSON.stringify(answer)).toContain("defect here");
   });
 });

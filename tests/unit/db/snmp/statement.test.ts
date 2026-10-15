@@ -172,3 +172,13 @@ describe("the varbind cap is a number, not just a mechanism", () => {
     expect(MAX_VARBINDS_PER_REQUEST).toBe(400);
   });
 });
+
+describe("a walk whose tail is neither empty nor a limit", () => {
+  test("is refused with the shape the command takes", () => {
+    // `walk <subtree>` and `walk <subtree> limit <n>` are the two forms. Anything between them
+    // is a typo rather than a third form, and the refusal names the two rather than guessing
+    // which one was meant.
+    expect(() => parseStatement(["walk", "1.3.6.1.2.1.1", "10"])).toThrow(/takes one subtree/);
+    expect(() => parseStatement(["walk", "1.3.6.1.2.1.1", "rows", "10"])).toThrow(/optional `limit/);
+  });
+});

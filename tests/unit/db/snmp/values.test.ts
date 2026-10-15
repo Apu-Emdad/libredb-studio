@@ -103,3 +103,13 @@ describe("the raw bytes are kept whatever the rendering", () => {
     expect(renderValue({ kind: "ipAddress" }, bytes("c0000201")).display).toBe("192.0.2.1");
   });
 });
+
+describe("bytes that are not text at all", () => {
+  test("a sequence no UTF-8 decoder accepts is not showable", () => {
+    // The first half of the rule: the decoder is strict, so a lone continuation byte ends the
+    // question before the round trip or the control scan is reached. Without a case here the
+    // only measured path was the one where decoding succeeds.
+    expect(isShowableText(Uint8Array.of(0x80))).toBe(false);
+    expect(isShowableText(Uint8Array.of(0xc3, 0x28))).toBe(false);
+  });
+});

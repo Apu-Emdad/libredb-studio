@@ -197,31 +197,26 @@ export function stepWalk(
   if (spent !== undefined) {
     return { kind: "stop", end: { reason: "budget", complete: false, budget: spent }, state: next };
   }
-  if (next.last === undefined) {
-    /*
-     * A TYPE GUARD THAT CANNOT RUN, kept because the request below needs a defined `last`.
-     *
-     * MEASURED on 15 October 2026: a `throw` planted here fired in none of the 469 tests of this
-     * provider and in none of the twelve live items against a real agent, and a direct probe of
-     * every answer shape returned before reaching it. Each varbind either ends the walk
-     * (endOfMibView, past the subtree, backwards) or is counted, which sets `last`; an answer
-     * with no varbinds is already held above. So "nothing was read" arrives here only if that
-     * loop is rewritten.
-     *
-     * The earlier comment here described a path that does not exist - "every varbind was
-     * skipped" - and the ending it returns is the conservative one for the day the loop does
-     * change: an incomplete walk, never a finished subtree. The fact a real answer carries,
-     * every varbind past the end of the subtree, is a COMPLETE walk and is returned inside the
-     * loop; `tests/unit/db/snmp/read.test.ts` holds both halves apart.
-     */
-    return { kind: "stop", end: { reason: "empty", complete: false, lastSeen: state.last }, state: next };
-  }
+  /*
+   * WHERE THE NEXT REQUEST STARTS, written as a fallback rather than as a branch.
+   *
+   * It used to be a guard - `if (next.last === undefined) return ...` - and that guard was a line
+   * no test could ever reach. MEASURED on 15 October 2026: a `throw` planted in it fired in none
+   * of the 469 tests of this provider, in none of the twelve live items against a real agent, and
+   * a direct probe of every answer shape returned before reaching it. Each varbind either ends
+   * the walk (endOfMibView, past the subtree, backwards) or is counted, which sets `last`, and an
+   * answer with no varbinds is already held above.
+   *
+   * A line that cannot run is a line the coverage gate can never see green, and writing a case
+   * for it is impossible rather than merely undone. So the unreachable branch is gone and the
+   * type is satisfied by a value: if `last` is ever missing the walk asks from the subtree root,
+   * which is where it would have started, instead of reporting an ending that never happens.
+   */
+  const from = next.last ?? subtree;
   const maxRepetitions = next.usingGetNext ? undefined : MAX_REPETITIONS_CAP;
   return {
     kind: "ask",
-    request: next.usingGetNext
-      ? { pdu: "getNext", oids: [next.last] }
-      : { pdu: "getBulk", oids: [next.last], maxRepetitions },
+    request: next.usingGetNext ? { pdu: "getNext", oids: [from] } : { pdu: "getBulk", oids: [from], maxRepetitions },
     state: next,
   };
 }

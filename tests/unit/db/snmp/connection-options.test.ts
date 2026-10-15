@@ -178,3 +178,16 @@ describe("the two sides of each limit", () => {
     expect(cautionsFor("12345678901").length).toBeGreaterThan(0);
   });
 });
+
+describe("the caution each v3 security level carries", () => {
+  test("noAuthNoPriv says what it neither does", () => {
+    // The level is accepted, because an agent may be configured that way and a reader may have
+    // no choice. What is not acceptable is accepting it silently: the connection is allowed and
+    // the caution travels with it, which is the same shape the other two levels use.
+    const checked = checkConnection(
+      v3({ securityLevel: "noAuthNoPriv", authPassphrase: undefined, privacyPassphrase: undefined }),
+    );
+    const caution = checked.cautions.find((one) => one.field === "securityLevel");
+    expect(caution?.text).toContain("neither authenticates nor encrypts");
+  });
+});

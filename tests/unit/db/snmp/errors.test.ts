@@ -145,3 +145,15 @@ describe("an unmapped socket code is still a transport failure", () => {
     }
   });
 });
+
+describe("an error-status a read should never draw", () => {
+  test("noSuchName is refused with the sentence that says why it cannot be ours", () => {
+    // v1's way of saying an object is missing. This provider speaks v2c and v3, where the same
+    // fact arrives inside the varbind as noSuchObject, so a noSuchName in an answer is about the
+    // agent or about something that built a v1 message, and the sentence says so rather than
+    // passing a bare status number to the reader.
+    const failure = failureFromStatus(ERROR_STATUS.noSuchName);
+    expect(failure).toMatchObject({ kind: "refused", retryable: false });
+    expect(failure?.reason).toContain("noSuchName");
+  });
+});

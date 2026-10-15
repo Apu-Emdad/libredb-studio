@@ -9,7 +9,7 @@
  * message, so a deleted check shows up as a failure here rather than as silence.
  */
 import { describe, expect, test } from "bun:test";
-import { BerError, readChildren, readField } from "@/lib/db/providers/network/snmp/ber";
+import { BerError, readChildren, readField, writeOid } from "@/lib/db/providers/network/snmp/ber";
 
 const bytes = (...b: number[]) => new Uint8Array(b);
 
@@ -65,5 +65,16 @@ describe("each bound refuses on its own", () => {
     const run = () => readChildren(buffer, readField(buffer, 0));
     expect(run).toThrow(BerError);
     expect(run).toThrow("more than 8 fields");
+  });
+});
+
+describe("an object identifier this encoder will not write", () => {
+  test("a sub-identifier outside the range RFC 2578 allows is refused by name", () => {
+    // 2^32 - 1 is the largest an arc may be (section 3.5). The refusal exists so a value that
+    // cannot be a sub-identifier is named here rather than encoded into bytes an agent would
+    // read as some other arc entirely.
+    expect(() => writeOid([1, 3, 6, 1, 4294967296])).toThrow(BerError);
+    expect(() => writeOid([1, 3, 6, 1, -1])).toThrow(/sub-identifier/);
+    expect(() => writeOid([1, 3, 6, 1, 1.5])).toThrow(/sub-identifier/);
   });
 });

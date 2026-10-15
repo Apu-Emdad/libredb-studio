@@ -73,3 +73,80 @@ describe("a read to the right target goes out", () => {
     expect(await send((cb) => socket.send(GET, 0, GET.length, PORT, "127.0.0.1", cb))).toBe("sent");
   });
 });
+
+/**
+ * THE REFUSALS THAT HAD NO CASE, and why each of them is worth one.
+ *
+ * Every line below was uncovered when the coverage gate was first run against this branch. None
+ * of them needed a socket or a fixture: each is a refusal the facade makes before anything
+ * reaches the wire, which is the half of the egress guard that only shows when it is asked to
+ * refuse. A guard with no case for its refusals is a guard that has only ever been seen saying
+ * yes.
+ */
+describe("the payload shapes the facade refuses to read", () => {
+  test("a payload list holding something that is not bytes", async () => {
+    // The joined form is what the valve reads, so a list this wrapper cannot join is a list it
+    // must not pass on: the bytes it would send are not the bytes it inspected.
+    expect(await send((cb) => socket.send([GET, "not bytes"] as never, PORT, "127.0.0.1", cb))).toBe(
+      `threw ${EgressRefusal.name}`,
+    );
+  });
+
+  test("a payload that is neither bytes nor a list of bytes", async () => {
+    expect(await send((cb) => socket.send(42 as never, PORT, "127.0.0.1", cb))).toBe(`threw ${EgressRefusal.name}`);
+  });
+
+  test("an offset and length that fall outside the payload", async () => {
+    expect(await send((cb) => socket.send(GET, 0, GET.length + 5, PORT, "127.0.0.1", cb))).toBe(
+      `threw ${EgressRefusal.name}`,
+    );
+  });
+
+  test("a target that is not a port and an address", async () => {
+    expect(await send((cb) => socket.send(GET, 0, 4, "not-a-port" as never, "127.0.0.1", cb))).toBe(
+      `threw ${EgressRefusal.name}`,
+    );
+  });
+
+  test("a wrong target with no callback throws rather than reporting", async () => {
+    // The callback form answers the caller; without one there is nowhere to answer, and the only
+    // honest move left is to throw. Both arms are held, because a refusal that silently returns
+    // would be a datagram the caller believes it sent.
+    expect(await send(() => socket.send(GET, 0, GET.length, 9999, "203.0.113.254"))).toBe(
+      `threw ${EgressRefusal.name}`,
+    );
+  });
+});
+
+describe("a send before the socket is connected", () => {
+  const unstarted = () => {
+    const factory = createGuardedSocketFactory({
+      target: { address: "127.0.0.1", port: PORT },
+      createRawSocket: () => dgram.createSocket("udp4"),
+    });
+    return { factory, socket: factory.dgramModule.createSocket("udp4") };
+  };
+
+  test("is refused through the callback", async () => {
+    // `start` has not run, so there is no connected socket to send on. The guard refuses here
+    // rather than letting node throw its own error about a missing address, which is a sentence
+    // about this wrapper's own mistake and not about the caller's.
+    const { socket: fresh } = unstarted();
+    expect(await send((cb) => fresh.send(GET, 0, GET.length, PORT, "127.0.0.1", cb))).toBe(EgressRefusal.name);
+    fresh.close();
+  });
+
+  test("and thrown when there is no callback", async () => {
+    const { socket: fresh } = unstarted();
+    expect(await send(() => fresh.send(GET, 0, GET.length, PORT, "127.0.0.1"))).toBe(`threw ${EgressRefusal.name}`);
+    fresh.close();
+  });
+
+  test("and starting before asking for a socket is refused by name", async () => {
+    const factory = createGuardedSocketFactory({
+      target: { address: "127.0.0.1", port: PORT },
+      createRawSocket: () => dgram.createSocket("udp4"),
+    });
+    expect(factory.start()).rejects.toThrow(/has not asked for a socket/);
+  });
+});
