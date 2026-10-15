@@ -98,7 +98,7 @@ const SENTENCES = Object.freeze({
   noTables: "A NETCONF device has no tables and no indexes. Its data is a YANG tree, which the object browser walks.",
   noStorage: "A NETCONF device reports no storage figures through NETCONF.",
   noMaintenance:
-    "This provider performs no maintenance on a device. It sends five read operations and nothing else, so there is no operation here to run.",
+    "This provider performs no maintenance on a device. It sends four read operations and a close, and nothing else, so there is no operation here to run.",
   keysPanel:
     "Keys are listed by the Keys panel, one level at a time, and not by this listing. Open the node and use Browse Keys.",
   readsOnly:

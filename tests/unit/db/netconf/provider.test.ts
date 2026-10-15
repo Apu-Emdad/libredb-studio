@@ -14,6 +14,7 @@ import type { DatabaseConnection } from "@/lib/db/types";
 import { QueryError, TimeoutError } from "@/lib/db/errors";
 import { NETCONF_KEY_SCAN, NETCONF_OBJECT_KINDS } from "@/lib/db/providers/network/netconf/objectkinds";
 import { NETCONF_LABELS } from "@/lib/db/providers/network/netconf/labels";
+import { ALLOWED_OPERATIONS } from "@/lib/db/providers/network/netconf/requests";
 import { encodeSegment } from "@/lib/db/providers/network/netconf/keypath";
 import { buildRpc } from "@/lib/db/providers/network/netconf/requests";
 
@@ -190,7 +191,27 @@ test("the surfaces this engine cannot answer refuse with a sentence rather than 
   await expectRejects(provider.getTableStats(), /no tables and no indexes/);
   await expectRejects(provider.getIndexStats(), /no tables and no indexes/);
   await expectRejects(provider.getStorageStats(), /no storage figures/);
-  await expectRejects(provider.runMaintenance(), /five read operations/);
+  /*
+   * THE NUMBER IS A FACT, NOT A PHRASE, and this line used to pin the phrase.
+   *
+   * It read `/five read operations/`, so when the sentence said five the test PROTECTED the
+   * error: the number was wrong in three user-visible sentences and every run stayed green.
+   * MEASURED in `requests.ts:5-12`, with the fixture's read-only account: `get`, `get-config`,
+   * `get-data` and `get-schema` returned data and `close-session` answered `<ok/>`. So it is
+   * four reads AND a close, and calling the close a read also made the sentence's "and nothing
+   * else" untrue of the operation it had miscounted.
+   *
+   * Derived from `ALLOWED_OPERATIONS` rather than written again here: add a read to that set and
+   * this expectation asks for "five", the sentence still says "four", and the test goes red at
+   * the sentence that has to change.
+   */
+  const reads = ALLOWED_OPERATIONS.filter((operation) => operation !== "close-session");
+  expectBe(reads.length, 4);
+  const counted = ["zero", "one", "two", "three", "four", "five", "six"][reads.length];
+  await expectRejects(provider.runMaintenance(), new RegExp(`${counted} read operations and a close`));
+  // The same number reaches the user from two more places, which carry no test of their own.
+  expectMatch(NETCONF_LABELS.analyzeGlobalDesc, new RegExp(`${counted} read operations and a close`));
+  expectMatch(NETCONF_LABELS.vacuumGlobalDesc, new RegExp(`${counted} read operations and a close`));
 });
 
 test("the overview says what the engine is, and counts no tables because it has none", async () => {

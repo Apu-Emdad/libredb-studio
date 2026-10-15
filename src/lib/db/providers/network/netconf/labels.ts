@@ -20,9 +20,9 @@ export const NETCONF_LABELS: ProviderLabels = Object.freeze({
   analyzeGlobalLabel: "Not available",
   analyzeGlobalTitle: "Not available",
   analyzeGlobalDesc:
-    "This provider sends five read operations and nothing else, so there is no analyse to run on a device.",
+    "This provider sends four read operations and a close, and nothing else, so there is no analyse to run on a device.",
   vacuumGlobalLabel: "Not available",
   vacuumGlobalTitle: "Not available",
   vacuumGlobalDesc:
-    "This provider performs no maintenance on a device: it sends five read operations and nothing else.",
+    "This provider performs no maintenance on a device: it sends four read operations and a close, and nothing else.",
 });
