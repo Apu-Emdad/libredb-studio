@@ -70,15 +70,6 @@ Three properties frame everything below, and each of them is load-bearing rather
   editor replay is ever handed the editor's writable pool.
   **Plan mode grounds itself the same way**: the server reads the schema, and on PostgreSQL and SQLite the engine's estimated statistics beside it, before the model's first turn, so a plan run is now ordinarily grounded on every engine, including the thirty-three where an agent run cannot read anything at all.
   What is left of the old engine
-  provider to describe its own schema sends nothing an engine has to plan. That is what lets grounding
-  reach the thirty-four the read-only profile refuses, and it still cannot narrow any workflow's
-  reach: the profile whose acquisition would be refused is never the profile that capture asks for. Everything else about
-  the three acquisitions is identical: the same `readOnly: true` open, the same optional
-  least-privilege `agentUser`, and the same profiled cache, so neither an operations run nor an
-  editor replay is ever handed the editor's writable pool. **Plan mode grounds itself the same way**
-  — the server reads the schema, and on PostgreSQL and SQLite the engine's estimated statistics
-  beside it, before the model's first turn — so a plan run is now ordinarily grounded on every engine,
-  including the thirty-four where an agent run cannot read anything at all. What is left of the old engine
   rule is narrower and still worth stating: the engine no longer decides WHETHER a plan run is
   grounded, only whether it is grounded through a composed statement or through its provider, and
   whether it gets statistics. A run whose reading fails — a provider that cannot describe itself, a
