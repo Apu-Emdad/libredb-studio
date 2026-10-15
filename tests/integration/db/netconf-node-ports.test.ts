@@ -167,7 +167,8 @@ describe("the transport over a channel", () => {
   test("a character split across two chunks arrives whole", () => {
     // The decoder is the point of `transportOf`: `chunk.toString("utf8")` per segment would turn one
     // character into two replacement characters, and the reply would still parse.
-    const bytes = Buffer.from("ü", "utf8");
+    // U+00B5, the micro sign: two bytes, so a one-byte first chunk splits it.
+    const bytes = Buffer.from("\u{00B5}", "utf8");
     let handler: ((chunk: Buffer) => void) | undefined;
     const channel = {
       write: () => true,
@@ -180,6 +181,6 @@ describe("the transport over a channel", () => {
     transportOf(channel, client).onData((text) => seen.push(text));
     handler?.(bytes.subarray(0, 1));
     handler?.(bytes.subarray(1));
-    expect(seen.join("")).toBe("ü");
+    expect(seen.join("")).toBe("\u{00B5}");
   });
 });

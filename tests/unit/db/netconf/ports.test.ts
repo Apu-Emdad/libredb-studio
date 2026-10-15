@@ -55,9 +55,13 @@ test("a character whose bytes arrive in two reads is delivered once, whole", () 
   const transport = transportOf(f.channel, f.client);
   const seen: string[] = [];
   transport.onData((text) => seen.push(text));
-  const bytes = Buffer.from("ge-0/0/0 \u{1F600} açık", "utf8");
+  // One character of each UTF-8 length, because a decoder can be wrong about any of them: the
+  // micro sign is two bytes, the euro sign three and the emoji four. Fed one byte at a time, so
+  // every one of them is split.
+  const text = "ge-0/0/0 \u{00B5}\u{20AC}\u{1F600}";
+  const bytes = Buffer.from(text, "utf8");
   for (let at = 0; at < bytes.length; at += 1) f.data(bytes.subarray(at, at + 1));
-  expectBe(seen.join(""), "ge-0/0/0 \u{1F600} açık");
+  expectBe(seen.join(""), text);
   expectTruthy(!seen.join("").includes("�"));
 });
 

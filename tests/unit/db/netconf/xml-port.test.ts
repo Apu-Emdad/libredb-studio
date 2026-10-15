@@ -64,10 +64,10 @@ test("text past the bound is refused by the scanner, with no byte count claimed"
 
 test("text inside the scanner's bound but over the byte bound is refused by the port, WITH its bytes", () => {
   // The unit changes between the two: the scanner counts UTF-16 code units and the port counts
-  // UTF-8 bytes. Ten of this character are ten units and thirty bytes, so the scanner passes it
+  // UTF-8 bytes. Ten of U+4E2D are ten units and thirty bytes, so the scanner passes it
   // under a bound of twenty and the port's own check is the only thing that can see it. The byte
   // count is real here, which is what separates this refusal from the one above.
-  const fault = faultOf(`<a>${"中".repeat(10)}</a>`, { maxDepth: 64, maxElements: 100, maxTextBytes: 20 });
+  const fault = faultOf(`<a>${"\u{4E2D}".repeat(10)}</a>`, { maxDepth: 64, maxElements: 100, maxTextBytes: 20 });
   expectEqual(fault, { kind: "text-too-large", bytes: 30 });
 });
 
