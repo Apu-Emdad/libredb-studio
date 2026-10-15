@@ -37,6 +37,17 @@
  * `docker/netconf/README.md` where a reader can copy it into their shell:
  *
  *   NETCONF_LIVE_PASSWORD=... bun tests/live/netconf-evidence.ts --fingerprint SHA256:...
+ *
+ * THE FIXTURE'S INTERFACE COUNT IS PART OF THE RECORDING and this file does not set it, so it has
+ * to be named when the container is started or the capture will not match the committed one:
+ *
+ *   docker run -d --name libredb-ci-netconf -e LIBREDB_NETCONF_INTERFACES=60 -p 127.0.0.1:1830:830 ...
+ *
+ * MEASURED while re-recording on 15 Oct 2026: the committed capture holds 300 `<interface>`
+ * elements, which is SIXTY interfaces read back over five exchanges, not three hundred. Started at
+ * the image's own default of 5,000 the capture came out 5.4 MB against 224 KB, and at 300 it came
+ * out 469 KB; neither is wrong as a capture and both replay, but neither is the one the
+ * integration test is pinned to.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";

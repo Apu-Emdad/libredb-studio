@@ -91,7 +91,7 @@ XML
       # with ASCII data, and a reader that decodes each chunk on its own corrupts it silently, so
       # the fixture has to be able to produce it. The emoji is also a four byte character, the
       # widest case, rather than a two byte accented letter.
-      printf '<interface><name>ge-0/0/%s</name><type>ianaift:ethernetCsmacd</type><enabled>true</enabled><description>port %s \360\237\230\200 baglanti</description></interface>' "$i" "$i"
+      printf '<interface><name>ge-0/0/%s</name><type>ianaift:ethernetCsmacd</type><enabled>true</enabled><description>port %s \360\237\230\200 uplink</description></interface>' "$i" "$i"
       i=$((i + 1))
     done
     printf '</interfaces>'
