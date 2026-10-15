@@ -311,6 +311,7 @@ monitoring, limitations, …) see the prime docs in **[`docs/providers/`](./prov
 | MQTT | `mqtt` | Key-Value (broker topics over MQTT, read-only) | [providers/mqtt.md](./providers/mqtt.md) |
 | OPC UA | `opcua` | Industrial (an address space over `opc.tcp`, read-only) | [providers/opcua.md](./providers/opcua.md) |
 | MTConnect | `mtconnect` | Industrial (an agent over HTTP, read-only) | [providers/mtconnect.md](./providers/mtconnect.md) |
+| NETCONF | `netconf` | Network (a device's YANG datastores over NETCONF on SSH, read-only) | [providers/netconf.md](./providers/netconf.md) |
 | LibreDB | `libredb` | Embedded (key-value) | [providers/libredb.md](./providers/libredb.md) |
 
 ## Core Interface

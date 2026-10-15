@@ -1688,7 +1688,8 @@ describe("docs/providers/README.md", () => {
     expect(lines[influxdb3 + 4].startsWith("| RabbitMQ | `rabbitmq` |")).toBe(true);
     expect(lines[influxdb3 + 5].startsWith("| OPC UA | `opcua` |")).toBe(true);
     expect(lines[influxdb3 + 6].startsWith("| MTConnect | `mtconnect` |")).toBe(true);
-    expect(lines[influxdb3 + 7].startsWith("| LibreDB | `libredb` |")).toBe(true);
+    expect(lines[influxdb3 + 7].startsWith("| NETCONF | `netconf` |")).toBe(true);
+    expect(lines[influxdb3 + 8].startsWith("| LibreDB | `libredb` |")).toBe(true);
     expect(index).toContain(
       "Qdrant, InfluxDB, Oxia, Databend, S3, Kubernetes, MQTT, Firestore, RabbitMQ and OPC UA are)",
     );
@@ -1999,19 +2000,19 @@ describe("the complete engine lists outside the agent docs", () => {
       "InfluxDB 3 (SQL), Oxia, S3-compatible object storage, Kubernetes or MTConnect with SSL/TLS and SSH Tunnel support",
     );
     expect(readme).toContain(
-      "InfluxDB 3 (SQL), Oxia, S3-compatible object storage, Kubernetes, OPC UA, MTConnect | Web, Mobile |",
+      "InfluxDB 3 (SQL), Oxia, S3-compatible object storage, Kubernetes, OPC UA, MTConnect, NETCONF | Web, Mobile |",
     );
-    expect(readme).toContain("InfluxDB 3 (SQL), Oxia, S3-compatible object storage, Kubernetes, OPC UA, or MTConnect)");
+    expect(readme).toContain("InfluxDB 3 (SQL), Oxia, S3-compatible object storage, Kubernetes, OPC UA, MTConnect, or NETCONF)");
     const zh = read("README_zh.md");
     expect(zh).toContain(
       "InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、MTConnect，支持 SSL/TLS 与 SSH 隧道",
     );
     expect(zh).toContain(
-      "InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、OPC UA、MTConnect | Web、移动端 |",
+      "InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、OPC UA、MTConnect、NETCONF | Web、移动端 |",
     );
-    expect(zh).toContain("InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、OPC UA 或 MTConnect）");
+    expect(zh).toContain("InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、OPC UA、MTConnect 或 NETCONF）");
     expect(read("README_ko.md")).toContain(
-      "InfluxDB 3 (SQL), Oxia, S3-compatible object storage, Kubernetes, MTConnect에 연결할 수 있으며",
+      "InfluxDB 3 (SQL), Oxia, S3-compatible object storage, Kubernetes, MTConnect, NETCONF에 연결할 수 있으며",
     );
     // The newest-engine history names Apache Spark as the newest in README.md, OPC UA one step back, Snowflake before
     // OPC UA, Firestore before RabbitMQ, MQTT before Firestore, Kubernetes before MQTT, S3 before Kubernetes and
@@ -2071,7 +2072,7 @@ describe("the complete engine lists outside the agent docs", () => {
       // The tail stays in registry order, with the two industrial engines between the platform and the store
       // (#1677, then #1722: an agent reads the machines an address space stands in front of).
       expect(row, file).toContain(
-        `\`oxia\`${separator}\`s3\`${separator}\`kubernetes\`${separator}\`opcua\`${separator}\`mtconnect\`${separator}\`libredb\``,
+        `\`oxia\`${separator}\`s3\`${separator}\`kubernetes\`${separator}\`opcua\`${separator}\`mtconnect\`${separator}\`netconf\`${separator}\`libredb\``,
       );
     }
     expect(read("docs/BRAND_MESSAGING.md")).toContain(

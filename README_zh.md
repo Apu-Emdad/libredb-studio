@@ -165,14 +165,14 @@ Oxia、InfluxDB (InfluxQL)、Milvus、Qdrant、Neo4j、etcd、Apache Kafka、MQT
 ### 为什么选择 LibreDB Studio？
 
 - **部署在数据旁边**：容器、Helm chart、Rancher、OpenShift operator、PaaS 一键模板，或用 npm 嵌入。
-- **三十八种引擎，一个界面**：PostgreSQL、MySQL、Oracle、Db2 LUW、SQL Server、SQLite、libSQL、DuckDB、MongoDB、Redis、Couchbase、Firestore、ClickHouse、Druid、Elasticsearch、OpenSearch、Trino、BigQuery、Databend、Snowflake、Apache Spark、Cassandra、Prometheus、Apache Kafka、etcd、Neo4j、Milvus、Qdrant、InfluxDB (InfluxQL)、InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、MQTT、RabbitMQ、OPC UA、MTConnect, NETCONF。
+- **三十八种引擎，一个界面**：PostgreSQL、MySQL、Oracle、Db2 LUW、SQL Server、SQLite、libSQL、DuckDB、MongoDB、Redis、Couchbase、Firestore、ClickHouse、Druid、Elasticsearch、OpenSearch、Trino、BigQuery、Databend、Snowflake、Apache Spark、Cassandra、Prometheus、Apache Kafka、etcd、Neo4j、Milvus、Qdrant、InfluxDB (InfluxQL)、InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、MQTT、RabbitMQ、OPC UA、MTConnect、NETCONF。
 - **你人在哪它就在哪跑**：浏览器、手机、Windows、MacOS、Linux 桌面。
 - **一个只读的 Agent，配你自己的模型**：说一个问题，这次运行就会起草 SQL、读取结果，并写出一份每条结论都引用来源的报告。Gemini、OpenAI，或者跑开源模型的本地 Ollama。
 - **没有东西被锁在墙后**：RBAC、OIDC 单点登录、查询审计日志和 ER 图，全部以 MIT 发布。
 
 <p align="center">
   <img src="public/screenshots/connection-modal.png" alt="多数据库连接管理器" width="100%" />
-  <br/><em>连接 PostgreSQL、MySQL、Oracle、Db2 LUW、SQL Server、MongoDB、Couchbase、Firestore、ClickHouse、Druid、Elasticsearch、OpenSearch、Trino、BigQuery、Databend、Snowflake、Apache Spark、Cassandra、Redis、SQLite、DuckDB、libSQL、Prometheus、Apache Kafka、MQTT、RabbitMQ、etcd、Neo4j、Milvus、Qdrant、InfluxDB (InfluxQL)、InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、MTConnect, NETCONF，支持 SSL/TLS 与 SSH 隧道（Kafka 支持 TLS，不支持隧道；OPC UA 自带传输层安全，不走共用面板）。</em>
+  <br/><em>连接 PostgreSQL、MySQL、Oracle、Db2 LUW、SQL Server、MongoDB、Couchbase、Firestore、ClickHouse、Druid、Elasticsearch、OpenSearch、Trino、BigQuery、Databend、Snowflake、Apache Spark、Cassandra、Redis、SQLite、DuckDB、libSQL、Prometheus、Apache Kafka、MQTT、RabbitMQ、etcd、Neo4j、Milvus、Qdrant、InfluxDB (InfluxQL)、InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、MTConnect，支持 SSL/TLS 与 SSH 隧道（Kafka 支持 TLS，不支持隧道；OPC UA 自带传输层安全，不走共用面板；NETCONF 通过 SSH 连接，固定设备自身的主机密钥，两者都不走）。</em>
 </p>
 
 [![Ask DeepWiki](.github/assets/deepwiki-badge.svg)](https://deepwiki.com/libredb/libredb-studio)
@@ -339,7 +339,7 @@ Studio 最主要的 AI 界面是编辑器旁边的 **Agent 侧栏**，下面列�
 | **编辑器** | Monaco Editor（VS Code 内核） | Web |
 | **AI** | 多模型（Gemini、OpenAI、Ollama、自定义） | Web、移动端 |
 | **认证** | JWT（`jose`）+ OIDC（`openid-client`）、PKCE、角色映射 | Web、移动端 |
-| **数据库** | PostgreSQL、MySQL、Oracle、Db2 LUW、SQL Server、SQLite、libSQL、DuckDB、MongoDB、Couchbase、Firestore、ClickHouse、Apache Druid、Elasticsearch、OpenSearch、Trino、BigQuery、Databend、Snowflake、Apache Spark、Apache Cassandra、Redis、Prometheus、Apache Kafka、MQTT、RabbitMQ、etcd、Neo4j、Milvus、Qdrant、InfluxDB (InfluxQL)、InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、OPC UA、MTConnect, NETCONF | Web、移动端 |
+| **数据库** | PostgreSQL、MySQL、Oracle、Db2 LUW、SQL Server、SQLite、libSQL、DuckDB、MongoDB、Couchbase、Firestore、ClickHouse、Apache Druid、Elasticsearch、OpenSearch、Trino、BigQuery、Databend、Snowflake、Apache Spark、Apache Cassandra、Redis、Prometheus、Apache Kafka、MQTT、RabbitMQ、etcd、Neo4j、Milvus、Qdrant、InfluxDB (InfluxQL)、InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、OPC UA、MTConnect、NETCONF | Web、移动端 |
 | **图表** | Recharts（柱状图、折线图、饼图、面积图、散点图、直方图、堆叠图） | Web、移动端 |
 | **ERD** | React Flow、ELK.js（自动布局） | Web |
 | **状态与表格** | TanStack Table 与 Virtual | Web、移动端 |
@@ -426,7 +426,7 @@ journalctl -u libredb-studio
 
 ### 前置条件
 - [Bun](https://bun.sh/)（推荐）或 Node.js 24+
-- 一个可查询的目标数据库（PostgreSQL、MySQL、Oracle、Db2 LUW、SQL Server、SQLite、libSQL、DuckDB、MongoDB、Couchbase、Firestore、ClickHouse、Apache Druid、Elasticsearch、OpenSearch、Trino、BigQuery、Databend、Snowflake、Apache Spark、Apache Cassandra、Redis、Prometheus、Apache Kafka、MQTT、RabbitMQ、etcd、Neo4j、Milvus、Qdrant、InfluxDB (InfluxQL)、InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、OPC UA 或 MTConnect, NETCONF）
+- 一个可查询的目标数据库（PostgreSQL、MySQL、Oracle、Db2 LUW、SQL Server、SQLite、libSQL、DuckDB、MongoDB、Couchbase、Firestore、ClickHouse、Apache Druid、Elasticsearch、OpenSearch、Trino、BigQuery、Databend、Snowflake、Apache Spark、Apache Cassandra、Redis、Prometheus、Apache Kafka、MQTT、RabbitMQ、etcd、Neo4j、Milvus、Qdrant、InfluxDB (InfluxQL)、InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、OPC UA、MTConnect 或 NETCONF）
 
 ### 快速开始（本地）
 1. **克隆并安装**
@@ -929,7 +929,7 @@ extraEnvFrom:
 | `defaults` | 否 | 合并进所有连接的默认值 |
 | `connections[].id` | 是 | 唯一 slug（`[a-z0-9-]+`，最多 64 字符） |
 | `connections[].name` | 是 | UI 中显示的名称 |
-| `connections[].type` | 是 | `postgres`、`mysql`、`sqlite`、`libsql`、`duckdb`、`oracle`、`db2`、`mssql`、`clickhouse`、`druid`、`trino`、`bigquery`、`databend`、`snowflake`、`spark`、`cassandra`、`elasticsearch`、`opensearch`、`mongodb`、`couchbase`、`firestore`、`redis`、`prometheus`、`kafka`、`mqtt`、`rabbitmq`、`etcd`、`neo4j`、`milvus`、`qdrant`、`influxdb`、`influxdb3`、`oxia`、`s3`、`kubernetes`、`opcua`、`mtconnect`、`libredb` |
+| `connections[].type` | 是 | `postgres`、`mysql`、`sqlite`、`libsql`、`duckdb`、`oracle`、`db2`、`mssql`、`clickhouse`、`druid`、`trino`、`bigquery`、`databend`、`snowflake`、`spark`、`cassandra`、`elasticsearch`、`opensearch`、`mongodb`、`couchbase`、`firestore`、`redis`、`prometheus`、`kafka`、`mqtt`、`rabbitmq`、`etcd`、`neo4j`、`milvus`、`qdrant`、`influxdb`、`influxdb3`、`oxia`、`s3`、`kubernetes`、`opcua`、`mtconnect`、`netconf`、`libredb` |
 | `connections[].roles` | 是 | `["*"]`（所有人）、`["admin"]`、`["user"]` 或 `["admin", "user"]` |
 | `connections[].managed` | 否 | `true` = 由管理员控制，界面中不可编辑（默认），`false` = 给用户一份可编辑的副本 |
 | `connections[].readOnly` | 否 | `true` 时拒绝该连接上的所有写入（仅在执行该模式的引擎上，即 etcd）；在非托管连接上会被拒绝 |

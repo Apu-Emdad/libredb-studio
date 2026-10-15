@@ -63,12 +63,12 @@ Three properties frame everything below, and each of them is load-bearing rather
   on which of its two readings it takes**: `agent-read-only` on the dialects `CATALOG_PLANS` serves,
   because it composes catalog statements, and `agent-operations` everywhere else, because asking a
   provider to describe its own schema sends nothing an engine has to plan.
-  That is what lets grounding reach the thirty-two the read-only profile refuses, and it still cannot narrow any workflow's reach: the profile whose acquisition would be refused is never the profile that capture asks for.
+  That is what lets grounding reach the thirty-three the read-only profile refuses, and it still cannot narrow any workflow's reach: the profile whose acquisition would be refused is never the profile that capture asks for.
   Everything else about
   the three acquisitions is identical: the same `readOnly: true` open, the same optional
   least-privilege `agentUser`, and the same profiled cache, so neither an operations run nor an
   editor replay is ever handed the editor's writable pool.
-  **Plan mode grounds itself the same way**: the server reads the schema, and on PostgreSQL and SQLite the engine's estimated statistics beside it, before the model's first turn, so a plan run is now ordinarily grounded on every engine, including the thirty-two where an agent run cannot read anything at all.
+  **Plan mode grounds itself the same way**: the server reads the schema, and on PostgreSQL and SQLite the engine's estimated statistics beside it, before the model's first turn, so a plan run is now ordinarily grounded on every engine, including the thirty-three where an agent run cannot read anything at all.
   What is left of the old engine
   provider to describe its own schema sends nothing an engine has to plan. That is what lets grounding
   reach the thirty-four the read-only profile refuses, and it still cannot narrow any workflow's
@@ -787,7 +787,6 @@ block tagged with the connection's canonical type-id, rationale after the block,
 not in the inventory.
 Since #414 the WORDING varies with the engine's `queryLanguage` and the TAG does not: on an engine whose language is not SQL (a `json` engine, since #1085 a `promql` one, a `cypher` one since Neo4j, and an `influxql` one) the run is asked for one statement or command in that engine's own language, a MongoDB aggregation or a PromQL expression rather than a SELECT, and told that this engine speaks no SQL, while the tag stays the canonical type-id in both arms.
 That is deliberate rather than an oversight: `isQueryFenceTag`
-is a total record over `DatabaseType`, so all thirty-eight ids pass it, whereas a draft the model fenced as
 is a total record over `DatabaseType`, so all thirty-nine ids pass it, whereas a draft the model fenced as
 ```` ```javascript ```` passes nothing and records no `plan-statement-drafted` event at all — the run
 would score as having drafted nothing while the user is looking at a statement. A run that cannot answer from the
@@ -2691,7 +2690,6 @@ src/lib/agent/
 ├── runtime.ts            # composition root: the only place that assembles a tool context
 ├── tools.ts              # the four tools + server-side selection; the only database reach,
                           #   the model's tools and the server's own grounding reads alike
-├── composed-sql.ts       # the SQL the SERVER writes, per dialect: four of the thirty-eight
 ├── composed-sql.ts       # the SQL the SERVER writes, per dialect: four of the thirty-nine
 ├── sqlite-ddl.ts         # reading SQLite's stored DDL back into an inventory
 ├── execution-policy.ts   # the frozen policy and the run-level ceilings
