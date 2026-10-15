@@ -40,6 +40,7 @@ describe("QUERY_DIALECTS", () => {
       "milvus",
       "mqtt",
       "mtconnect",
+      "netconf",
       "opcua",
       "oxia",
       "qdrant",
