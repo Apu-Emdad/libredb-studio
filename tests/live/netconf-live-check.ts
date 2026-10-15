@@ -16,15 +16,20 @@
  *   3. THE SECOND SESSION. A device's session table is a shared resource, and nothing below this
  *      layer can say that the one this provider opened was given back.
  *
- * AND ONE CLAIM IT TURNS OUT NOT TO REACH, MEASURED rather than assumed. The transport decodes
- * UTF-8 with a `StringDecoder` so that a character split across two reads is held back instead of
+ * AND ONE CLAIM THIS RUN DID NOT REACH, MEASURED rather than assumed. The transport decodes UTF-8
+ * with a `StringDecoder` so that a character split across two reads is held back instead of
  * becoming two replacement characters. Every one of the fixture's 5,000 interface descriptions
  * carries a four-byte character for that case. MEASURED 2026-10-15 by counting ssh2's own buffers
  * on the channel: the big read arrived in 228 chunks, 1,119,615 bytes, the largest 10,240, and
- * NOT ONE of the 228 boundaries fell inside a character. So the live socket does not reach the
- * decoder's held-back path either, and `tests/unit/db/netconf/netconf.test.ts` remains the only
- * place that does. What this file claims instead is the thing it can: all 5,000 four-byte
- * characters arrive intact.
+ * NOT ONE of the 228 boundaries fell inside a character.
+ *
+ * WHAT THAT MEASUREMENT COVERS, exactly: this fixture, this read size, this runtime, one run. It
+ * is NOT a claim that a live socket never splits a character - where the boundaries fall is the
+ * server's write pattern and the SSH packet size, and neither is controlled here. It is also not
+ * measured on another device, at another read size, or under load. So the held-back path is
+ * UNMEASURED by this file rather than proven unreachable, and
+ * `tests/unit/db/netconf/netconf.test.ts` remains the only place that reaches it. What this file
+ * claims instead is the thing it can: all 5,000 four-byte characters arrive intact.
  *
  * It is NOT in `bun run test`: the runner excludes `tests/live/` by name (`EXCLUDED` in
  * `tests/runner/discover.ts`).
@@ -460,23 +465,25 @@ await check("the overview and health panels are built from what the device said"
   });
 });
 
-await check("the documented key walk reaches one entry of the list", async () => {
+await check("the key walk folds the list into one entry, and the bare key value is refused", async () => {
   /*
-   * THE PROVIDER'S OWN PROMISE, held here because no other layer holds it. `index.ts`
-   * `scanKeysPage` states that a key reads `running/ietf-interfaces:interfaces/ge-0%2F0%2F1`: the
-   * datastore, then the module-qualified node, then one name per level.
+   * THE GAP, recorded by name rather than left to be rediscovered.
    *
-   * MEASURED 2026-10-15 against this fixture, and it does not. The level below `interfaces` holds
-   * ONE entry, named `interface`, because `levelPage` folds 5,000 entries that share an element
-   * name into one; the level below THAT is the first entry's leaf names. No level lists the
-   * entries, so `interface=ge-0%2F0%2F1` - which the check above proves the device answers - is
-   * reachable only by typing it. The documented spelling, with the key value as its own segment,
-   * is refused with the XML parser's words.
+   * MEASURED 2026-10-15 against this fixture. The level below `interfaces` holds ONE entry, named
+   * `interface`: `levelPage` folds entries that share an element name by `kind:name`, so 5,000
+   * interfaces arrive as one. The level below THAT is the FIRST entry's leaf names. No level lists
+   * the entries, so the keyed form - which the check above proves the device answers - is reachable
+   * only by typing it, and the spelling with the key value as its own segment is refused.
    *
-   * So this check is RED on purpose, and it is red against the documentation rather than against
-   * the device: either the walk enumerates entries or that paragraph says what the walk does.
-   * Reported to the session that owns the provider; left failing rather than dropped, because a
-   * live check that quietly asserted the folded level would make the gap permanent.
+   * It asserts what IS rather than what should be, and that is a deliberate choice between two
+   * wrong alternatives. Left asserting the documented walk, this check would be permanently red,
+   * and a live check CI cannot run measures nothing - including the three claims this file exists
+   * for. Dropped, the gap would be invisible again. Asserted, it is written down, and the day
+   * somebody makes the walk enumerate entries THIS CHECK TURNS RED and says that this paragraph
+   * and `scanKeysPage` have to be updated with it. That is the canary, and it is the point.
+   *
+   * `koordinasyon/SONRAKI-PRLAR.md` carries the fix as its own change, in the not-deferred list:
+   * paging 5,000 entries is a design question and not a line to slip into this one.
    */
   await withProvider(connectionWith(), async (provider) => {
     const level = await provider.scanKeysPage({
@@ -484,11 +491,51 @@ await check("the documented key walk reaches one entry of the list", async () =>
       cursor: "0",
       count: 100,
     } as never);
-    const entries = level.keys.filter((key) => key !== `running/${MODULE}:interfaces/interface`);
     assert(
-      entries.length > 0,
-      `the level below interfaces holds ${level.keys.length} entries, ${stringify(level.keys)}, so none of the ` +
-        `${INTERFACES} list entries can be reached by walking`,
+      stringify(level.keys) === stringify([`running/${MODULE}:interfaces/interface`]),
+      `the level below interfaces now holds ${stringify(level.keys)}; if it lists entries, the walk was fixed ` +
+        "and this check, its docblock and scanKeysPage's all have to be rewritten",
+    );
+
+    // And the documented spelling, measured: the bare key value becomes an XML element name, so
+    // the read is built as `<ge-0%2F0%2F1>` and the device's answer cannot be parsed. The user is
+    // shown the parser's own sentence rather than a stated refusal, which is the second half of
+    // the entry in SONRAKI-PRLAR.md.
+    let refused: Error | null = null;
+    try {
+      await provider.readObjectSource([`running/${MODULE}:interfaces/ge-0%2F0%2F1`], "key");
+    } catch (error) {
+      refused = error instanceof Error ? error : new Error(String(error));
+    }
+    assert(refused !== null, "the bare key value was accepted, so the documented walk now works");
+    assert(refused instanceof QueryError, `it failed as a ${refused.constructor.name}, which reaches no user`);
+    assert(
+      /Invalid character sequence|expected element tag end/.test(refused.message),
+      `the refusal is no longer the parser's sentence but: ${refused.message}`,
+    );
+  });
+});
+
+await check("the entry the panel does offer costs a megabyte to open", async () => {
+  /*
+   * The same gap's other half, MEASURED so that the number is a fact and not an impression: the
+   * one entry the walk offers is the UNKEYED list node, and its Source read is the whole list.
+   * 1,047,857 characters against the 281 the keyed read answers - one click, one megabyte.
+   *
+   * Asserted as a range rather than as that exact number, because the figure moves with
+   * `LIBREDB_NETCONF_INTERFACES`: what is being held is the SHAPE, a read three orders of
+   * magnitude larger than the entry beside it. Red here means the Source read changed, which is
+   * the other thing SONRAKI-PRLAR.md's entry would change.
+   */
+  await withProvider(connectionWith(), async (provider) => {
+    const whole = firstPartText(await provider.readObjectSource([`running/${MODULE}:interfaces/interface`], "key"));
+    const one = firstPartText(
+      await provider.readObjectSource([`running/${MODULE}:interfaces/interface=ge-0%2F0%2F1`], "key"),
+    );
+    assert(
+      whole.length > one.length * 100,
+      `the unkeyed read is ${whole.length} characters against the keyed read's ${one.length}, which is no longer ` +
+        "the gap this check records",
     );
   });
 });

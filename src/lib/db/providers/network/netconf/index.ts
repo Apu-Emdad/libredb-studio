@@ -300,7 +300,6 @@ export class NetconfProvider extends BaseDatabaseProvider {
         };
   }
 
-  /** One level of the Keys panel, built from what the server already answers. */
   /**
    * One level of the Keys panel, against the shared contract.
    *
@@ -310,9 +309,30 @@ export class NetconfProvider extends BaseDatabaseProvider {
    * engine that names a numbered database, and a datastore is a name. So there is nowhere else for
    * the datastore to travel: it has to be the first segment of the key path itself, and it is.
    *
-   * A key here therefore reads `running/ietf-interfaces:interfaces/ge-0%2F0%2F1`: the datastore,
-   * then the module-qualified node, then one segment per level. That makes a key self-addressing,
-   * which is what the Source tab needs too.
+   * A key reads `running/ietf-interfaces:interfaces/interface=ge-0%2F0%2F1`: the datastore, then
+   * the module-qualified node, then one segment per level, with a list entry addressed by its keys
+   * after `=`. That makes a key self-addressing, which is what the Source tab needs too.
+   *
+   * WHAT THE WALK ACTUALLY LISTS, AND WHAT IT DOES NOT. This paragraph used to describe a key as
+   * `running/ietf-interfaces:interfaces/ge-0%2F0%2F1`, with the key value as a segment of its own.
+   * MEASURED 2026-10-15 against the Netopeer2 fixture, that is not what the walk produces and not
+   * a form this provider can read:
+   *
+   *   - The level below `interfaces` holds ONE entry, named `interface`. `levelPage` folds entries
+   *     by `kind:name` and 5,000 list entries share one element name, so they arrive as one.
+   *   - The level below THAT is the FIRST entry's leaf names, `description`, `enabled`, `name`,
+   *     `type`, because the read resolves to the first matching element.
+   *   - So no level enumerates the entries, and the keyed form above is reachable only by TYPING
+   *     it. It does work when typed: it answers that one entry, 281 characters, where the unkeyed
+   *     `.../interface` the walk does offer answers the whole list, 1,047,857 characters.
+   *   - The old spelling is refused rather than merely absent: a bare key value becomes an XML
+   *     element name, the read is built as `<ge-0%2F0%2F1>`, and the user is shown the XML
+   *     parser's own sentence.
+   *
+   * Key-aware level paging is its own change, in `koordinasyon/SONRAKI-PRLAR.md`: deciding how
+   * 5,000 entries page is a design question. `tests/live/netconf-live-check.ts` asserts the folded
+   * level and the refusal as they are, so the day the walk enumerates entries that check turns red
+   * and names this docblock.
    *
    * `cursor` is a string in both directions and `"0"` is its own value at each end: it means start
    * here on the way in and no more pages on the way out. The level walk's own cursor is the last
