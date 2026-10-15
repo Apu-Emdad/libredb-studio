@@ -227,6 +227,9 @@ const SOURCE_DECLARATIONS: Readonly<Record<DatabaseType, readonly string[]>> = O
   // Source tab renders it in `xml` rather than re-encoding it as JSON. A data item and a condition
   // carry no document, so neither declares a source (#1722).
   mtconnect: ["asset/xml"],
+  // No kind declares `hasSource`. SNMP's objects are values read from a numbered tree, and
+  // there is no text behind one for a Source tab to show.
+  snmp: [],
   libredb: [],
 });
 

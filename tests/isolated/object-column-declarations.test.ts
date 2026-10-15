@@ -146,6 +146,10 @@ const EXPECTED_COLUMN_KINDS: Readonly<Record<DatabaseType, readonly string[]>> =
   // All three kinds: a data item and a condition each answer value, timestamp and sequence, and an
   // asset answers the fixed shape of an asset read (#1722).
   mtconnect: ["dataitem", "condition", "asset"],
+  // Measured, not assumed: the provider's kinds carry no column list of their own, so the census
+  // reads an empty set for both. The entry was briefly written as the two kind ids and the census
+  // contradicted it, which is the direction this file is for.
+  snmp: [],
   libredb: ["table", "collection", "keyspace"],
 });
 

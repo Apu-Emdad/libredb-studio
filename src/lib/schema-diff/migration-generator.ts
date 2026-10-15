@@ -310,6 +310,10 @@ const NO_COLUMN_MODIFICATION: Partial<Record<DatabaseType, { label: string; reas
     label: "MTConnect",
     reason:
       "An MTConnect data item's shape is declared in the agent's own device model, not in columns a client can change, and every request this provider sends is a GET, so there is no column definition to change.",
+  snmp: {
+    label: "SNMP",
+    reason:
+      "An SNMP object's type is declared in the MIB module the device was built with, not in columns a client can change, and this provider's valve refuses any PDU that is not a Get, GetNext or GetBulk, so there is no column definition to change.",
   },
 };
 
@@ -401,6 +405,7 @@ const NO_TRANSACTION_WRAPPER: ReadonlySet<DatabaseType> = new Set<DatabaseType>(
   "influxdb3",
   "oxia",
   "databend",
+  "snmp",
   // BigQuery runs a statement as its own job; BEGIN TRANSACTION exists only inside a multi-statement script.
   "bigquery",
   // On Databend's reason: a DDL statement commits the open transaction, and each SQL API statement runs in its own
@@ -451,6 +456,7 @@ const NO_TABLE_DDL: ReadonlySet<DatabaseType> = new Set<DatabaseType>([
   "opcua",
   // One container level of devices and no schema, so no table DDL to decline (#1722).
   "mtconnect",
+  "snmp",
 ]);
 
 // IndexDiff carries column names/uniqueness, not ClickHouse's index expression,

@@ -992,6 +992,7 @@ export interface ProviderCapabilities {
     | "kubectl"
     | "opcua"
     | "mtconnect";
+    | "snmp";
   supportsExplain: boolean;
   /**
    * Present iff supportsExplain is true (enforced by provider tests).

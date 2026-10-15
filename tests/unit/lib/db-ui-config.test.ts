@@ -122,6 +122,7 @@ const ALL_TYPES: DatabaseType[] = [
   "rabbitmq",
   "opcua",
   "mtconnect",
+  "snmp",
 ];
 
 describe("db-ui-config", () => {
@@ -366,6 +367,7 @@ describe("db-ui-config", () => {
         "bigquery",
         "firestore",
         "opcua",
+        "snmp",
         "snowflake",
       ]);
     });
@@ -1037,6 +1039,7 @@ describe("declared connection-field copy (#1085)", () => {
       // OPC UA relabels Host as the endpoint URL and adds its own two boxes, each with a hint (#1677).
       "opcua",
       "mtconnect",
+      "snmp",
     ]);
     // The control that the walk saw the whole table rather than nothing.
     expect(Object.keys(DB_UI_CONFIG).sort()).toEqual([...ALL_TYPES].sort());
@@ -1567,6 +1570,7 @@ describe("db-showcase", () => {
         // name on a page of databases, so no existing engine moves for it (#1677).
         "opcua",
         "mtconnect",
+        "snmp",
       ]);
     });
   });

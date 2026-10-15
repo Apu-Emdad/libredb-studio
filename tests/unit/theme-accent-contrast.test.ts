@@ -238,6 +238,13 @@ const HUES: ReadonlyArray<{ hue: string; light: string; lightAlt: string }> = [
   // taupe-400 7.41:1 on the worst dark one, its nearest shipped hue is mist (0.0331 light, 0.0296 dark), and both
   // closest identity pairs stay where they were (0.0205 light, 0.0160 dark).
   { hue: "taupe", light: "taupe-700", lightAlt: "taupe-900" },
+  // SNMP's identity (#1721). Five greys were spoken for by the time it registered, and among the
+  // families left, clearing AA no longer separates them: zinc, gray and taupe all clear it and
+  // all sit closer to a neighbour. MEASURED against the declared identity set: `mauve-700` reads
+  // 9.51 on the worst light ground and leaves the closest pair in BOTH palettes exactly where it
+  // was, light 0.0166 and dark 0.0100, which none of the other three do. Putting `gray-800` in
+  // this slot instead fails "the light set is no tighter than the dark set it is modelled on".
+  { hue: "mauve", light: "mauve-700", lightAlt: "mauve-900" },
 ];
 
 /**

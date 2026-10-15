@@ -207,6 +207,7 @@ export type DatabaseType =
   // Read-only is structural rather than a mode: the request table holds nine routes and every one of them is a GET,
   // so there is nothing to send that writes.
   | "mtconnect";
+  | "snmp";
 
 export type ConnectionEnvironment = "production" | "staging" | "development" | "local" | "other";
 
@@ -943,6 +944,7 @@ export interface QueryTab {
     | "rabbitmq"
     | "opcua"
     | "mtconnect";
+    | "snmp";
   viewMode?: "results" | "explain" | "history" | "saved";
   explainPlan?: unknown;
   // Pagination state

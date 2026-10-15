@@ -851,7 +851,7 @@ describe("createDatabaseProvider", () => {
   test("the factory error lists milvus among the supported types, before qdrant and the embedded store", async () => {
     const conn = makeConnection("not-an-engine");
     await expect(createDatabaseProvider(conn)).rejects.toThrow(
-      /Supported types: .*\bneo4j, milvus, qdrant, s3, mqtt, opcua, mtconnect, rabbitmq, kubernetes, libredb$/,
+      /Supported types: .*\bneo4j, milvus, qdrant, s3, mqtt, opcua, mtconnect, snmp, rabbitmq, kubernetes, libredb$/,
     );
   });
 
@@ -917,7 +917,7 @@ describe("createDatabaseProvider", () => {
   test("the factory error lists s3 between qdrant and kubernetes, kubernetes before the embedded store", async () => {
     const conn = makeConnection("not-an-engine");
     await expect(createDatabaseProvider(conn)).rejects.toThrow(
-      /Supported types: .*\bqdrant, s3, mqtt, opcua, mtconnect, rabbitmq, kubernetes, libredb$/,
+      /Supported types: .*\bqdrant, s3, mqtt, opcua, mtconnect, snmp, rabbitmq, kubernetes, libredb$/,
     );
   });
 
@@ -1039,6 +1039,7 @@ describe("createDatabaseProvider", () => {
       // No cancel either: a read is bounded instead, at most 200 nodes or 500 values a request, and
       // the protocol has no service that stops one in flight (#1677).
       "opcua",
+      "snmp",
       "opensearch",
       "redis",
     ]);

@@ -917,6 +917,16 @@ export const SparkIcon: React.FC<IconProps> = ({ className, ...props }) => (
  * protocol badge.
  */
 export const MtconnectIcon: React.FC<IconProps> = ({ className, ...props }) => (
+ * A mark drawn for Studio, never a vendor's asset and never a network-gear silhouette: a router
+ * or a switch would say WHAT is being read, and every other engine's mark says what the reading
+ * IS.
+ *
+ * What makes SNMP different from the other device protocols here is that an agent answers from a
+ * NAMED TREE and is read by walking it: each object hangs at a numbered place, and a reader
+ * descends from the root one branch at a time. So the mark is a trunk with three numbered stops
+ * descending from it, the last one filled, because a walk ends at a leaf and not at the device.
+ */
+export const SnmpIcon: React.FC<IconProps> = ({ className, ...props }) => (
   <svg
     viewBox="0 0 24 24"
     fill="none"
@@ -934,5 +944,15 @@ export const MtconnectIcon: React.FC<IconProps> = ({ className, ...props }) => (
     <circle cx="7" cy="11" r="1.4" />
     <circle cx="12" cy="4" r="1.4" />
     <circle cx="17" cy="8" r="1.4" />
+    <circle cx="5" cy="5" r="2" />
+    <path d="M5 7 V17" />
+    <path d="M5 9.5 H11" />
+    <path d="M5 13.5 H11" />
+    <path d="M5 17 H11" />
+    <circle cx="13.5" cy="9.5" r="1.6" />
+    <circle cx="13.5" cy="13.5" r="1.6" />
+    <circle cx="13.5" cy="17" r="1.6" fill="currentColor" />
+    <rect x="17.5" y="3" width="4" height="5.5" rx="1" />
+    <path d="M19.5 8.5 V11 H13.5" />
   </svg>
 );

@@ -46,6 +46,7 @@ describe("QUERY_DIALECTS", () => {
       "rabbitmq",
       "redis",
       "s3",
+      "snmp",
     ]);
   });
 
@@ -143,6 +144,8 @@ describe("QUERY_DIALECTS", () => {
       },
       mtconnect: {
         tabType: "mtconnect",
+      snmp: {
+        tabType: "snmp",
         offersColumnProfiling: false,
         offersCodeGeneration: false,
         offersCountQuery: false,
