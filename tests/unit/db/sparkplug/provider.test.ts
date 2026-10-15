@@ -505,13 +505,13 @@ describe("the console read", () => {
 
   test("the scope line names the scope ASKED FOR, and the three scopes differ", async () => {
     const provider = await openProvider();
-    const hepsi = await provider.query("{}");
-    const grup = await provider.query('{"group":"G1"}');
-    const dugum = await provider.query('{"group":"G1","edgeNode":"E1"}');
-    expect(hepsi.warnings?.[0]?.message).toContain("every group");
-    expect(grup.warnings?.[0]?.message).toContain("group G1");
-    expect(grup.warnings?.[0]?.message).not.toContain("every group");
-    expect(dugum.warnings?.[0]?.message).toContain("edge node G1/E1");
+    const everyGroup = await provider.query("{}");
+    const oneGroup = await provider.query('{"group":"G1"}');
+    const oneNode = await provider.query('{"group":"G1","edgeNode":"E1"}');
+    expect(everyGroup.warnings?.[0]?.message).toContain("every group");
+    expect(oneGroup.warnings?.[0]?.message).toContain("group G1");
+    expect(oneGroup.warnings?.[0]?.message).not.toContain("every group");
+    expect(oneNode.warnings?.[0]?.message).toContain("edge node G1/E1");
   });
 
   test("a limit is honoured, and two different limits give two different counts", async () => {
