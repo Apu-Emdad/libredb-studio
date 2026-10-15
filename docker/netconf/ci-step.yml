@@ -8,7 +8,8 @@
 # THE FIXTURE IS BUILT, NOT PULLED, and that is this engine's difference from the other four. The
 # server is Netopeer2 2.8.7, NETCONF's own reference implementation, assembled from four tarballs
 # verified against `SHA256SUMS`, on a base image pinned by digest. So the step has a `docker build`
-# where the Modbus step has an `image=`, and the version it runs is the one `SHA256SUMS` fixes
+# where a fixture pinned by digest would carry an `image=`, and the version it runs is the one
+# `SHA256SUMS` fixes
 # rather than whatever a tag points at today.
 #
 # WHAT THE TWO READINESS CHECKS ARE FOR. They ask two different facts, and neither of them is
@@ -30,7 +31,8 @@
 #
 # NOT `/dev/tcp`, AND THE REASON IS MEASURED, NOT PREFERRED. A published container port is accepted
 # by Docker itself before anything inside the container has spoken: 5 ms for the accept against
-# 332 ms for the server behind it on the Modbus fixture, and 327 ms on this one. So "the port is
+# 332 ms for the server behind it, MEASURED on this repository's Modbus fixture, and 327 ms
+# MEASURED on this one. So "the port is
 # open" measures Docker rather than the fixture, and it is the one question this step never asks.
 # `ssh-keyscan` is used rather than a raw socket for the same reason it is used in the compose
 # health check: it reads the banner the server writes, which only the server can write.
@@ -61,7 +63,8 @@
       # afterwards whether it can still answer somebody else.
       - name: NETCONF live check
         run: |
-          # The port the probes use AND the sentences name, from one place. The Modbus step was
+          # The port the probes use AND the sentences name, from one place. MEASURED elsewhere in
+          # this repository, on the Modbus fixture's step: that step was
           # measured saying "on 1502" while its probe read another variable, so a run against a
           # different port was refused with a sentence naming a port it had never asked.
           export NETCONF_PROBE_PORT="${NETCONF_PROBE_PORT:-1830}"
