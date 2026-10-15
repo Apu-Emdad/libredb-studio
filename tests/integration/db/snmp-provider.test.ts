@@ -86,7 +86,7 @@ function connectionTo(port: number): DatabaseConnection {
     type: "snmp",
     host: "127.0.0.1",
     port,
-    password: "libredb-canli",
+    password: "libredb-live",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   } as unknown as DatabaseConnection;
@@ -135,7 +135,7 @@ describe("the provider reads what a real agent answered", () => {
     const provider = await open(missed);
     const result = await provider.query("get 1.3.6.1.2.1.1.5.0");
     expect(missed).toEqual([]);
-    expect(result.rows).toEqual([{ object: "1.3.6.1.2.1.1.5.0", value: "canli-test-ajani", type: "text" }]);
+    expect(result.rows).toEqual([{ object: "1.3.6.1.2.1.1.5.0", value: "live-test-agent", type: "text" }]);
   });
 
   test("a written name reads the same object as its identifier", async () => {
@@ -143,7 +143,7 @@ describe("the provider reads what a real agent answered", () => {
     const provider = await open(missed);
     const result = await provider.query("get sysName.0");
     expect(missed).toEqual([]);
-    expect(result.rows[0]?.value).toBe("canli-test-ajani");
+    expect(result.rows[0]?.value).toBe("live-test-agent");
   });
 
   test("a walk returns every object of its subtree and no more", async () => {
@@ -171,7 +171,7 @@ describe("the provider reads what a real agent answered", () => {
     const result = await provider.query("table 1.3.6.1.4.1.8072.9999.9999.10.1");
     expect(missed).toEqual([]);
     expect(result.rowCount).toBe(3);
-    expect(result.rows.map((row) => row.column2)).toEqual(["sensor-bir", "sensor-iki", "sensor-uc"]);
+    expect(result.rows.map((row) => row.column2)).toEqual(["sensor-one", "sensor-two", "sensor-three"]);
   });
 
   test("an object the agent does not have is no row, and is not an error", async () => {

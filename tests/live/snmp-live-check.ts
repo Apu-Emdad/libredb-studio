@@ -29,7 +29,7 @@
  * against a different engine, and written down in oxia-live-check.ts before that.
  *
  * The address and the community can be given: `LIBREDB_SNMP_LIVE=127.0.0.1:1161` and
- * `LIBREDB_SNMP_COMMUNITY=libredb-canli`.
+ * `LIBREDB_SNMP_COMMUNITY=libredb-live`.
  *
  * It exits non-zero when any check fails, prints each check with its verbatim error, and prints
  * what it measured so a reader can compare two runs without reading the code.
@@ -44,7 +44,7 @@ const RUNTIME = IS_BUN
   ? `bun ${(globalThis as { Bun: { version: string } }).Bun.version}`
   : `node ${process.versions.node}`;
 const [HOST, PORT] = (process.env.LIBREDB_SNMP_LIVE ?? "127.0.0.1:1161").split(":");
-const COMMUNITY = process.env.LIBREDB_SNMP_COMMUNITY ?? "libredb-canli";
+const COMMUNITY = process.env.LIBREDB_SNMP_COMMUNITY ?? "libredb-live";
 const PLAYPEN = "1.3.6.1.4.1.8072.9999.9999";
 
 /*
@@ -136,7 +136,7 @@ measure("fixture base digest, as the Dockerfile declares it", declaredBaseDigest
 // have come from anywhere else. docker/snmp/README.md lists them.
 await check("the agent answers its own name", async () => {
   const rows = await withProvider({}, async (p) => (await p.query("get 1.3.6.1.2.1.1.5.0")).rows);
-  expect(rows[0]?.value === "canli-test-ajani", `sysName read as ${JSON.stringify(rows[0]?.value)}`);
+  expect(rows[0]?.value === "live-test-agent", `sysName read as ${JSON.stringify(rows[0]?.value)}`);
 });
 
 await check("a written name reads the same object as its identifier", async () => {
@@ -169,7 +169,7 @@ await check("a table shapes its rows by index", async () => {
   measure("table rows", result.rowCount);
   expect(result.rowCount === 3, `table returned ${result.rowCount} rows, expected 3`);
   const names = result.rows.map((row) => row.column2).join(",");
-  expect(names === "sensor-bir,sensor-iki,sensor-uc", `column 2 read as ${names}`);
+  expect(names === "sensor-one,sensor-two,sensor-three", `column 2 read as ${names}`);
 });
 
 await check("an object the agent does not have is no row, not an error", async () => {

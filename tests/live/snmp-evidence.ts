@@ -72,7 +72,7 @@ const connection = {
   type: "snmp",
   host: "127.0.0.1",
   port: relayPort,
-  password: "libredb-canli",
+  password: "libredb-live",
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 } as unknown as DatabaseConnection;
@@ -94,7 +94,7 @@ const out = {
   recordedAt: new Date().toISOString().slice(0, 10),
   agent:
     "libredb-fixture/snmp:5.9.4, built from docker/snmp (debian:trixie-slim digest a29215f6, snmpd 5.9.4+dfsg-2+deb13u1)",
-  community: "libredb-canli",
+  community: "libredb-live",
   regenerate:
     "docker compose -f database-compose.yml --profile snmp up -d snmp && bun tests/live/snmp-evidence.ts 127.0.0.1:1161",
   statements: notes,

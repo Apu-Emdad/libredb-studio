@@ -62,7 +62,11 @@ describe("the standard's bounds are refusals where it says must", () => {
     expect(() => checkConnection(v3({ userName: "u".repeat(32) }))).not.toThrow();
   });
   test("octets are counted, not characters", () => {
-    // Eleven characters, thirty-three octets: the bound is on the wire, not on the keyboard.
+    // Seventeen characters, thirty-four octets: the bound is on the wire, not on the keyboard.
+    // This comment used to say eleven and thirty-three, which was true of an earlier version
+    // that repeated a three-octet character. The code changed and the arithmetic beside it did
+    // not; both forms refuse, so nothing went red. A stale number in a comment is a thing only
+    // a reader catches.
     expect(() => checkConnection(v3({ userName: "ç".repeat(17) }))).toThrow(ConnectionRefused);
   });
   test("a context name over thirty-two octets, RFC 3415 section 4", () => {
