@@ -40,7 +40,7 @@ def varint_dec(b,i):
         x=b[i]; i+=1; r|=(x&0x7F)<<s; s+=7
         if not x&0x80: return r,i
 
-DTAD={1:"Int8",2:"Int16",3:"Int32",4:"Int64",5:"UInt8",6:"UInt16",7:"UInt32",8:"UInt64",
+DATATYPES={1:"Int8",2:"Int16",3:"Int32",4:"Int64",5:"UInt8",6:"UInt16",7:"UInt32",8:"UInt64",
       9:"Float",10:"Double",11:"Boolean",12:"String",13:"DateTime",14:"Text"}
 
 def alanlar(b):
@@ -56,17 +56,17 @@ def alanlar(b):
     return out
 
 def metrik_yaz(raw):
-    ad=alias=dt=None; deger="(yok)"
+    name=alias=dt=None; value="(none)"
     for f,w,v in alanlar(raw):
-        if f==1 and w==2: ad=v.decode()
+        if f==1 and w==2: name=v.decode()
         elif f==2 and w==0: alias=v
         elif f==4 and w==0: dt=v
-        elif f==11 and w==0: deger=f"long_value={v}"
-        elif f==13 and w==1: deger=f"double_value={struct.unpack('<d', v)[0]}"
-        elif f==12 and w==5: deger=f"float_value={struct.unpack('<f', v)[0]}"
-        elif f==14 and w==0: deger=f"boolean_value={bool(v)}"
-        elif f==15 and w==2: deger=f'string_value="{v.decode()}"'
-    print(f"   metric: name={ad!r} alias={alias} datatype={dt} ({DTAD.get(dt, '?')}) · {deger}")
+        elif f==11 and w==0: value=f"long_value={v}"
+        elif f==13 and w==1: value=f"double_value={struct.unpack('<d', v)[0]}"
+        elif f==12 and w==5: value=f"float_value={struct.unpack('<f', v)[0]}"
+        elif f==14 and w==0: value=f"boolean_value={bool(v)}"
+        elif f==15 and w==2: value=f'string_value="{v.decode()}"'
+    print(f"   metric: name={name!r} alias={alias} datatype={dt} ({DATATYPES.get(dt, '?')}) · {value}")
 
 s=socket.create_connection((HOST,PORT),timeout=5)
 cid=b"telde-ne-var"

@@ -135,7 +135,7 @@ console.log(`  SUBSCRIBE icinde filtre: ${bytes.includes(Buffer.from("spBv1.0/Li
 console.log(`  PUBLISH gonderdi mi: ${kinds.some((k) => k === "PUBLISH") ? "EVET (OLMAMALI)" : "HAYIR"}`);
 
 console.log("=== CAGIRANIN ALDIGI ===");
-console.log(`  satir: ${result.rows.length}`);
+console.log(`  rows: ${result.rows.length}`);
 console.log(`  alanlar: ${Object.keys((result.rows[0] ?? {}) as Record<string, unknown>).join(", ")}`);
 for (const row of result.rows.slice(0, 3)) console.log(`  ${JSON.stringify(row)}`);
 console.log(`  sure: ${elapsed} ms`);

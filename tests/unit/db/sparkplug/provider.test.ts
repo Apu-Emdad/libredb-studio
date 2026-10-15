@@ -539,11 +539,11 @@ describe("the console read", () => {
 
   test("a row's liveness is its node's, and two nodes differ", async () => {
     const state = new ReadState();
-    const canli = parseTopic("spBv1.0/GA/NBIRTH/EA") as NodeTopic;
-    const olu = parseTopic("spBv1.0/GB/NBIRTH/EB") as NodeTopic;
+    const live = parseTopic("spBv1.0/GA/NBIRTH/EA") as NodeTopic;
+    const gone = parseTopic("spBv1.0/GB/NBIRTH/EB") as NodeTopic;
     for (const [t, bd] of [
-      [canli, "1"],
-      [olu, "2"],
+      [live, "1"],
+      [gone, "2"],
     ] as const) {
       state.takeBirth(t, {
         origin: "live",
