@@ -2002,7 +2002,9 @@ describe("the complete engine lists outside the agent docs", () => {
     expect(readme).toContain(
       "InfluxDB 3 (SQL), Oxia, S3-compatible object storage, Kubernetes, OPC UA, MTConnect, NETCONF | Web, Mobile |",
     );
-    expect(readme).toContain("InfluxDB 3 (SQL), Oxia, S3-compatible object storage, Kubernetes, OPC UA, MTConnect, or NETCONF)");
+    expect(readme).toContain(
+      "InfluxDB 3 (SQL), Oxia, S3-compatible object storage, Kubernetes, OPC UA, MTConnect, or NETCONF)",
+    );
     const zh = read("README_zh.md");
     expect(zh).toContain(
       "InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、MTConnect，支持 SSL/TLS 与 SSH 隧道",
@@ -2010,7 +2012,9 @@ describe("the complete engine lists outside the agent docs", () => {
     expect(zh).toContain(
       "InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、OPC UA、MTConnect、NETCONF | Web、移动端 |",
     );
-    expect(zh).toContain("InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、OPC UA、MTConnect 或 NETCONF）");
+    expect(zh).toContain(
+      "InfluxDB 3 (SQL)、Oxia、S3-compatible object storage、Kubernetes、OPC UA、MTConnect 或 NETCONF）",
+    );
     expect(read("README_ko.md")).toContain(
       "InfluxDB 3 (SQL), Oxia, S3-compatible object storage, Kubernetes, MTConnect, NETCONF에 연결할 수 있으며",
     );
