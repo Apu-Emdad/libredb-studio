@@ -126,19 +126,21 @@ const names: Record<number, string> = {
 };
 const kinds = received.flatMap((c) => packetsIn(c)).map((k) => names[k] ?? `0x${k.toString(16)}`);
 
-console.log("=== BROKER'IN GORDUGU ===");
-console.log(`  paket: ${kinds.join(", ")}`);
-console.log(`  toplam bayt: ${bytes.length}`);
-console.log(`  CONNECT icinde protokol adi: ${bytes.includes(Buffer.from("MQTT")) ? "MQTT" : "YOK"}`);
-console.log(`  CONNECT icinde istemci kimligi onegi: ${bytes.includes(Buffer.from("libredb-")) ? "libredb-" : "YOK"}`);
-console.log(`  SUBSCRIBE icinde filtre: ${bytes.includes(Buffer.from("spBv1.0/Line1/#")) ? "spBv1.0/Line1/#" : "YOK"}`);
-console.log(`  PUBLISH gonderdi mi: ${kinds.some((k) => k === "PUBLISH") ? "EVET (OLMAMALI)" : "HAYIR"}`);
+console.log("=== WHAT THE BROKER SAW ===");
+console.log(`  packets: ${kinds.join(", ")}`);
+console.log(`  bytes in total: ${bytes.length}`);
+console.log(`  protocol name inside CONNECT: ${bytes.includes(Buffer.from("MQTT")) ? "MQTT" : "absent"}`);
+console.log(`  client id prefix inside CONNECT: ${bytes.includes(Buffer.from("libredb-")) ? "libredb-" : "absent"}`);
+console.log(
+  `  filter inside SUBSCRIBE: ${bytes.includes(Buffer.from("spBv1.0/Line1/#")) ? "spBv1.0/Line1/#" : "absent"}`,
+);
+console.log(`  did it PUBLISH: ${kinds.some((k) => k === "PUBLISH") ? "yes (it must not)" : "no"}`);
 
-console.log("=== CAGIRANIN ALDIGI ===");
+console.log("=== WHAT THE CALLER GOT ===");
 console.log(`  rows: ${result.rows.length}`);
-console.log(`  alanlar: ${Object.keys((result.rows[0] ?? {}) as Record<string, unknown>).join(", ")}`);
+console.log(`  fields: ${Object.keys((result.rows[0] ?? {}) as Record<string, unknown>).join(", ")}`);
 for (const row of result.rows.slice(0, 3)) console.log(`  ${JSON.stringify(row)}`);
-console.log(`  sure: ${elapsed} ms`);
+console.log(`  took: ${elapsed} ms`);
 
 await provider.disconnect();
 server.close();
