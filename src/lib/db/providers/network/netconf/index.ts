@@ -48,8 +48,8 @@ import type {
   TableStats,
 } from "@/lib/db/types";
 import { NETCONF_PORT } from "./dial";
-import { buildKeyPath, levelPage, parseKeyPath, type LevelEntry, type PathNode } from "./keypath";
-import { NETCONF_KEY_SCAN, NETCONF_OBJECT_KINDS, assertDeclarationIsSound } from "./objectkinds";
+import { buildKeyPath, encodeSegment, levelPage, parseKeyPath, type LevelEntry, type PathNode } from "./keypath";
+import { NETCONF_KEY_SCAN, NETCONF_KEY_SEPARATOR, NETCONF_OBJECT_KINDS, assertDeclarationIsSound } from "./objectkinds";
 import { NETCONF_LABELS } from "./labels";
 import type { TopLevelNode } from "./reader";
 
@@ -104,8 +104,16 @@ const SENTENCES = Object.freeze({
   readsOnly:
     "This provider reads a device and does not write to it: it sends get, get-config, get-data, get-schema and close-session, and nothing else. A read request names a datastore and a path.",
   notJson: "A NETCONF read request is JSON: it names a datastore, a path and a limit.",
+  /*
+   * THE SEPARATOR AT THE END IS THE WHOLE POINT and the old sentence left it out. It read
+   * "datastore/module:node and then one name per level", which is the spelling that cannot work:
+   * the route holds a level page to keys sitting DIRECTLY under the pattern, so a pattern with no
+   * trailing separator names the datastore's own top level, which this provider cannot read. The
+   * panel's placeholder has always taught the other spelling (`Prefix, e.g. app/config/`), so a
+   * reader following the provider's words and a reader following the panel were told two things.
+   */
   keyPrefix:
-    "A key walk starts from a datastore and a node, so its prefix reads datastore/module:node and then one name per level.",
+    "A key level is named by a prefix that ends with the separator: running/ietf-interfaces:interfaces/ lists that node's children, and one more name per level below it. A prefix holding only a datastore and a node names no level, because this provider sends no unfiltered read of a datastore.",
   sourceNodePath: "A node's source is addressed by its datastore, its module and the node, so the path is three names.",
   sourceKeyPath:
     "A key's source is addressed by its key path, which begins with the datastore, so the path is one name.",
@@ -340,19 +348,58 @@ export class NetconfProvider extends BaseDatabaseProvider {
    */
   public async scanKeysPage(options: KeyScanOptions): Promise<KeyScanPage> {
     const reader = this.open();
-    const prefix = options.pattern ?? "";
-    const [datastore, ...rest] = prefix.split("/");
+    const pattern = options.pattern ?? "";
+    /*
+     * THE PATTERN IS SPLIT AT ITS LAST SEPARATOR, which is the rule the OPC UA port reached first
+     * and for the same measured reason (`industrial/opcua/key-scan.ts:241`). Everything up to and
+     * including that separator is the level to browse, and the WHOLE pattern is what an entry of
+     * that level must begin with.
+     *
+     * Two patterns arrive and only one of them ends with the separator: the panel sends a folder's
+     * own prefix when a reader opens it, and it sends the FILTER BOX verbatim when a reader types
+     * in it. MEASURED on this provider before this was handled, both spellings showed nothing:
+     *
+     *   `running/ietf-interfaces:interfaces`   the level below was listed, so every key held a
+     *                                          separator after the pattern and the route answered
+     *                                          500 blaming this provider for leaving its level
+     *   `running/ietf-interfaces:interfaces/`  `parseKeyPath` kept the trailing empty piece as a
+     *                                          node named "", `children` was asked for the
+     *                                          children of a node with no name, and the panel drew
+     *                                          an empty folder for a folder that is not
+     */
+    const cut = pattern.lastIndexOf(NETCONF_KEY_SEPARATOR);
+    if (cut === -1) throw new QueryError(SENTENCES.keyPrefix);
+    const head = pattern.slice(0, cut + 1);
+    const [datastore, ...rest] = pattern.slice(0, cut).split(NETCONF_KEY_SEPARATOR);
     if (datastore === undefined || datastore === "") throw new QueryError(SENTENCES.keyPrefix);
-    const nodes = parseKeyPath(rest.join("/"));
+    const nodes = parseKeyPath(rest.join(NETCONF_KEY_SEPARATOR));
+    // A datastore's own top level is not a level this engine can browse: `children` names a node
+    // (`reader.ts:178`), because an unfiltered read of a datastore is the one read this provider
+    // does not send. So `running/ietf-interfaces:interfaces` is refused BY NAME rather than
+    // answered with nothing, and the sentence names the separator the panel's own placeholder
+    // teaches.
     if (nodes.length === 0) throw new QueryError(SENTENCES.keyPrefix);
     const page = levelPage(
       await reader.children(datastore, nodes),
       options.cursor === "0" ? null : options.cursor,
       options.count,
     );
-    const head = `${datastore}/${buildKeyPath(nodes)}`;
+    /*
+     * The name is ESCAPED into the key, which is what the path grammar requires of every segment:
+     * a list entry named `ge-0/0/1` is `ge-0%2F0%2F1`, and writing it raw put a second separator
+     * inside one segment, so the route refused the key for leaving a level it had not left.
+     *
+     * A folder goes to `prefixes` and a leaf to `keys`, which `LevelEntry.kind` already says. Both
+     * were answered as keys before, so the panel offered no folder to open on an engine whose key
+     * space is a tree, and the one page it drew was the wrong shape.
+     */
+    const entries = page.entries.map((entry) => ({ kind: entry.kind, key: `${head}${encodeSegment(entry.name)}` }));
+    const inLevel = entries.filter((entry) => entry.key.startsWith(pattern));
     return {
-      keys: page.entries.map((entry) => `${head}/${entry.name}`),
+      keys: inLevel.filter((entry) => entry.kind === "key").map((entry) => entry.key),
+      prefixes: inLevel
+        .filter((entry) => entry.kind === "folder")
+        .map((entry) => `${entry.key}${NETCONF_KEY_SEPARATOR}`),
       // `"0"` and not an empty string: the contract gives that value one meaning at each end, and a
       // walk that answered `""` would read as a cursor nobody can use rather than as the end.
       cursor: page.cursor ?? "0",

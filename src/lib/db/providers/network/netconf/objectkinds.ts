@@ -69,12 +69,18 @@ export const NETCONF_OBJECT_KINDS: readonly ObjectKindSpec[] = Object.freeze([
  * The key scan declaration. The separator is one UTF-16 code unit, which the level contract
  * requires, and the cursor is opaque because it carries a key path rather than a number.
  */
+/**
+ * The one separator this engine's key space uses, named so that the declaration below and the
+ * level walk that has to split on it read the same constant rather than two copies of "/".
+ */
+export const NETCONF_KEY_SEPARATOR = "/";
+
 export const NETCONF_KEY_SCAN: KeyScanCapability = Object.freeze<KeyScanCapability>({
   // A level page holds at most this many entries; the server answers a level unpaged and Studio
   // pages it, so the cap is Studio's and not the device's.
   defaultCount: 500,
   maxCount: 1_000,
-  separator: "/",
+  separator: NETCONF_KEY_SEPARATOR,
   cursor: "opaque",
   pattern: "prefix",
   totalScope: "none",

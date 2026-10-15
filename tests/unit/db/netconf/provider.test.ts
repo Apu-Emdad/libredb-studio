@@ -10,7 +10,7 @@
 import { test } from "bun:test";
 import { expectBe, expectEqual, expectMatch, expectRejects, expectTruthy } from "./helpers";
 import { NetconfProvider, parseReadRequest, type DeviceReader } from "@/lib/db/providers/network/netconf/index";
-import type { DatabaseConnection } from "@/lib/db/types";
+import type { DatabaseConnection, KeyScanPage } from "@/lib/db/types";
 import { QueryError, TimeoutError } from "@/lib/db/errors";
 import { NETCONF_KEY_SCAN, NETCONF_OBJECT_KINDS } from "@/lib/db/providers/network/netconf/objectkinds";
 import { NETCONF_LABELS } from "@/lib/db/providers/network/netconf/labels";
@@ -37,10 +37,16 @@ function reader(over: Partial<DeviceReader> = {}): DeviceReader {
   return {
     facts,
     topLevelNodes: async () => [{ module: "ietf-interfaces", name: "interfaces" }],
+    /*
+     * DECODED, which is what `LevelEntry.name` declares ("the decoded name of a child"). This fake
+     * used to answer `ge-0%2F0%2F2`, already escaped, and the provider concatenated it raw: the two
+     * wrongs cancelled and the keys came out looking right. A fake that pre-escapes hides whether
+     * the provider escapes at all, so it answers the contract's own spelling here.
+     */
     children: async () => [
-      { name: "ge-0%2F0%2F2", kind: "key" as const },
-      { name: "ge-0%2F0%2F1", kind: "key" as const },
-      { name: "ge-0%2F0%2F1", kind: "key" as const },
+      { name: "ge-0/0/2", kind: "key" as const },
+      { name: "ge-0/0/1", kind: "key" as const },
+      { name: "ge-0/0/1", kind: "key" as const },
     ],
     rows: async () => ({ columns: ["name"], rows: [{ name: "ge-0/0/0" }], rowCount: 1 }) as never,
     moduleText: async () => "module ietf-interfaces { }",
@@ -236,7 +242,9 @@ test("a key page removes repeats, sorts, and carries a start-after cursor", asyn
   // The shared contract: one options object, the prefix carrying the datastore, `"0"` meaning start.
   const page = await provider.scanKeysPage({
     cursor: "0",
-    pattern: "running/ietf-interfaces:interfaces",
+    // ENDING IN THE SEPARATOR, which is the spelling that names a level. Written without it, this
+    // call listed the level BELOW and the route answered 500; the walk is held to that below.
+    pattern: "running/ietf-interfaces:interfaces/",
     count: 10,
     level: true,
   });
@@ -244,7 +252,9 @@ test("a key page removes repeats, sorts, and carries a start-after cursor", asyn
     "running/ietf-interfaces:interfaces/ge-0%2F0%2F1",
     "running/ietf-interfaces:interfaces/ge-0%2F0%2F2",
   ]);
-  expectBe(page.cursor, "ge-0%2F0%2F2");
+  // The cursor is in the same space as the names it is compared against (`keypath.ts:166`), which
+  // is the decoded one, and it is opaque to everything outside this provider.
+  expectBe(page.cursor, "ge-0/0/2");
   // `total` is not read under `totalScope: "none"`, and an unread field still has to be honest.
   expectBe(page.total, 0);
   expectEqual(page.types, {});
@@ -442,4 +452,129 @@ test("the provider publishes the declared labels, and they name what this engine
   for (const unavailable of [labels.generateAction, labels.analyzeAction, labels.vacuumAction]) {
     expectBe(unavailable, "Not available", "an action this provider cannot perform says so");
   }
+});
+
+/**
+ * The keys route's own check on a level page, which the route keeps private
+ * (`src/app/api/db/keys/scan/route.ts:215-219`): keys and prefixes together fit in count, every
+ * prefix ends at the first separator after the pattern, every key sits directly under the pattern
+ * and is not empty, and nothing is listed twice.
+ *
+ * Mirrored here rather than imported because the route does not export it; `tests/live/s3-live-support.ts`
+ * keeps its own copy for the same reason. Both spellings below are run through it, because the
+ * defect it catches was reachable from one of them while the other answered nothing at all, and a
+ * test that exercised either one alone stayed green.
+ */
+function levelPageDefect(pattern: string, count: number, page: KeyScanPage): string | undefined {
+  const prefixes = page.prefixes ?? [];
+  const entries = prefixes.length + page.keys.length;
+  if (entries > count) return `${entries} entries, more than the count of ${count}`;
+  const seen = new Set<string>();
+  for (const prefix of prefixes) {
+    const first = prefix.indexOf("/", pattern.length);
+    if (!prefix.startsWith(pattern) || first === -1 || first !== prefix.length - 1) {
+      return `the folder ${JSON.stringify(prefix)} is outside the level of ${JSON.stringify(pattern)}`;
+    }
+    if (seen.has(prefix)) return `${JSON.stringify(prefix)} twice`;
+    seen.add(prefix);
+  }
+  for (const key of page.keys) {
+    if (key === "" || !key.startsWith(pattern) || key.slice(pattern.length).includes("/")) {
+      return `the key ${JSON.stringify(key)} is outside the level of ${JSON.stringify(pattern)}`;
+    }
+    if (seen.has(key)) return `${JSON.stringify(key)} twice`;
+    seen.add(key);
+  }
+  return undefined;
+}
+
+/** A device whose tree has a folder under a container, and a leaf and a folder under that. */
+function treeReader(): DeviceReader {
+  return reader({
+    children: async (_datastore: string, path: readonly { readonly name: string }[]) => {
+      const at = path.map((node) => node.name).join("/");
+      if (at === "interfaces") return [{ name: "interface", kind: "folder" as const }];
+      if (at === "interfaces/interface") {
+        return [
+          { name: "ge-0/0/1", kind: "folder" as const },
+          { name: "name", kind: "key" as const },
+        ];
+      }
+      return [];
+    },
+  } as never);
+}
+
+test("a folder's own prefix lists its level, and every row sits inside it", async () => {
+  // The spelling the panel sends when a reader OPENS a folder, and the one its placeholder teaches
+  // (`Prefix, e.g. app/config/`, KeyBrowser.tsx:676).
+  const provider = new NetconfProvider(connection, {}, async () => treeReader());
+  await provider.connect();
+  const pattern = "running/ietf-interfaces:interfaces/";
+  const page = await provider.scanKeysPage({ cursor: "0", pattern, count: 10, level: true });
+
+  expectEqual(page.prefixes, ["running/ietf-interfaces:interfaces/interface/"]);
+  expectEqual(page.keys, []);
+  expectBe(levelPageDefect(pattern, 10, page), undefined);
+});
+
+test("a folder is answered as a folder and a leaf as a key, and a name holding the separator is escaped", async () => {
+  // Both were answered as keys, so the panel offered nothing to open on an engine whose key space
+  // is a tree. `LevelEntry.kind` had said which all along.
+  const provider = new NetconfProvider(connection, {}, async () => treeReader());
+  await provider.connect();
+  const pattern = "running/ietf-interfaces:interfaces/interface/";
+  const page = await provider.scanKeysPage({ cursor: "0", pattern, count: 10, level: true });
+
+  expectEqual(page.keys, ["running/ietf-interfaces:interfaces/interface/name"]);
+  expectEqual(page.prefixes, ["running/ietf-interfaces:interfaces/interface/ge-0%2F0%2F1/"]);
+  expectBe(levelPageDefect(pattern, 10, page), undefined);
+});
+
+test("the filter box's text is kept as a filter on the level above it", async () => {
+  // The panel sends the FILTER BOX verbatim, so a half-typed name arrives with no trailing
+  // separator. It names the level above and filters that level, which is why `inter` keeps
+  // `interface` and `xyz` keeps nothing.
+  const provider = new NetconfProvider(connection, {}, async () => treeReader());
+  await provider.connect();
+  const kept = await provider.scanKeysPage({
+    cursor: "0",
+    pattern: "running/ietf-interfaces:interfaces/inter",
+    count: 10,
+    level: true,
+  });
+  expectEqual(kept.prefixes, ["running/ietf-interfaces:interfaces/interface/"]);
+  expectBe(levelPageDefect("running/ietf-interfaces:interfaces/inter", 10, kept), undefined);
+
+  const none = await provider.scanKeysPage({
+    cursor: "0",
+    pattern: "running/ietf-interfaces:interfaces/xyz",
+    count: 10,
+    level: true,
+  });
+  expectEqual(none.keys, []);
+  expectEqual(none.prefixes, []);
+});
+
+test("a prefix naming only a datastore and a node is refused by name, not answered with nothing", async () => {
+  // This is the spelling the provider's own sentence used to teach. It names the datastore's top
+  // level, which `reader.children` refuses because an unfiltered read of a datastore is the one
+  // read this provider does not send. MEASURED before this was handled: the level BELOW was listed
+  // and the route answered 500 blaming the provider. The refusal names the separator instead.
+  const provider = new NetconfProvider(connection, {}, async () => treeReader());
+  await provider.connect();
+  await expectRejects(
+    provider.scanKeysPage({
+      cursor: "0",
+      pattern: "running/ietf-interfaces:interfaces",
+      count: 10,
+      level: true,
+    }),
+    /ends with the separator/,
+  );
+  // And the sentence shows the spelling that works, so a reader is not left to guess it.
+  await expectRejects(
+    provider.scanKeysPage({ cursor: "0", pattern: "running/ietf-interfaces:interfaces", count: 10, level: true }),
+    /running\/ietf-interfaces:interfaces\//,
+  );
 });
