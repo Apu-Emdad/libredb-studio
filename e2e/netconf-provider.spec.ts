@@ -219,3 +219,84 @@ test.describe("a read of the fixture, as a reader sees it", () => {
     await expect(page.getByTestId("bottom-panel-tab-explain")).toHaveCount(0);
   });
 });
+
+/**
+ * The Keys panel, through the route, in both spellings a reader can arrive with.
+ *
+ * WHY THIS IS AN E2E CASE AND NOT A UNIT ONE. The defect these two steps hold was in the SEAM
+ * between the keys route and the provider: the route holds a level page to rows sitting directly
+ * under the pattern (`api/db/keys/scan/route.ts:215-219`), the provider answered the level BELOW,
+ * and no test saw it because every unit and integration test calls `scanKeysPage` DIRECTLY. The
+ * panel is this engine's only tree surface, and both documented spellings showed a reader nothing:
+ *
+ *   running/ietf-interfaces:interfaces    every key held a separator after the pattern, so the
+ *                                         route answered 500 and blamed the provider
+ *   running/ietf-interfaces:interfaces/   `parseKeyPath` kept the trailing empty piece as a node
+ *                                         named "", and the panel drew an empty folder
+ *
+ * A screen check found it and a screen check does not run again. These two steps are what runs.
+ */
+test.describe("the Keys panel, as a reader reaches it", () => {
+  test.skip(
+    FINGERPRINT === "" || PASSWORD === "",
+    "NETCONF_E2E_FINGERPRINT and NETCONF_E2E_PASSWORD are not set, so no device was dialled",
+  );
+
+  /** The node whose children the fixture serves, and the spelling that names its level. */
+  const LEVEL = "running/ietf-interfaces:interfaces/";
+  /** The same node with no trailing separator: a prefix, not a level. */
+  const NOT_A_LEVEL = "running/ietf-interfaces:interfaces";
+
+  test.beforeEach(async ({ page }) => {
+    await signIn(page);
+    await page.getByRole("button", { name: "New connection", exact: true }).click();
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await dialog.getByRole("button", { name: "NETCONF", exact: true }).click();
+    await dialog.locator("#host").fill(FIXTURE.host);
+    await dialog.locator("#port").fill(FIXTURE.port);
+    await dialog.locator("#user").fill(FIXTURE.user);
+    await dialog.locator("#password").fill(PASSWORD);
+    await dialog.locator("#hostKeyFingerprint").fill(FINGERPRINT);
+    await dialog.getByRole("button", { name: "Establish Connection" }).click();
+    await expect(dialog).toBeHidden({ timeout: 30000 });
+    await page.getByRole("tab", { name: "Keys", exact: true }).click();
+    await expect(page.getByTestId("key-browser-panel")).toBeVisible({ timeout: 15000 });
+  });
+
+  test("a prefix ending in the separator lists the level, and the route accepts every row", async ({ page }) => {
+    const box = page.getByLabel("Key prefix");
+    await box.fill(LEVEL);
+    await box.press("Enter");
+
+    const panel = page.getByTestId("key-browser-panel");
+    // One entry, and it is a FOLDER: `LevelEntry.kind` says which, and both kinds used to be sent
+    // as keys, so the panel offered nothing to open on an engine whose key space is a tree.
+    await expect(panel).toContainText("interface/", { timeout: 30000 });
+    await expect(panel).toContainText("1 entry listed");
+    // No error at all, which is the half the route decides: a row outside the level is a 500 and
+    // the panel would be showing that sentence instead of a folder.
+    await expect(page.getByTestId("key-browser-error")).toHaveCount(0);
+  });
+
+  test("a prefix with no separator is refused by name, and the refusal shows the one that works", async ({ page }) => {
+    const box = page.getByLabel("Key prefix");
+    await box.fill(NOT_A_LEVEL);
+    await box.press("Enter");
+
+    const error = page.getByTestId("key-browser-error");
+    // Refused BY NAME. This is the spelling the provider's own sentence used to teach, and it names
+    // the datastore's top level, which this engine cannot read because an unfiltered read of a
+    // datastore is the one read it does not send.
+    await expect(error).toContainText("ends with the separator", { timeout: 30000 });
+    // And the sentence shows the prefix that works, so a reader is not left to guess the one
+    // character that was missing.
+    await expect(error).toContainText(LEVEL);
+    /*
+     * NOT the route's 500. That sentence blames the provider for leaving the level it was asked
+     * for, and it is what a reader met here before the walk split the pattern at its last
+     * separator. If it ever comes back, this is the line that says so.
+     */
+    await expect(error).not.toContainText("outside the level it was asked for");
+  });
+});
