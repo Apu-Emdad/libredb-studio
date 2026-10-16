@@ -382,6 +382,7 @@ describe("vocabularyDecidesAlone", () => {
       "opcua",
       "mtconnect",
       "modbus",
+      "netconf",
       "sparkplug",
     ]);
   });
@@ -405,6 +406,7 @@ describe("NON_SQL_DESTRUCTIVE_VOCABULARY", () => {
       "mqtt",
       "mtconnect",
       "neo4j",
+      "netconf",
       "opcua",
       "oxia",
       "prometheus",
@@ -533,6 +535,7 @@ describe("vocabularySendsToModel", () => {
       "opcua",
       "mtconnect",
       "modbus",
+      "netconf",
       "sparkplug",
     ]);
   });

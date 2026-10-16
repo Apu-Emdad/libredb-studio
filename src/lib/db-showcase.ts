@@ -127,13 +127,18 @@ export const SHOWCASE_RANK: Record<DatabaseType, number> = {
   // Last (rank 38): a device's registers are narrower still, and a map the user writes is the only
   // thing that names them, so nothing above it moves for this one either (#1723).
   modbus: 38,
-  // Last (rank 39), behind the register map: the name on the box is a specification's rather than a
-  // product's, so a reader scanning the login page is least likely to arrive already knowing it
-  // (#1720). THE RANK MOVES WITH THE BASE AND THE SENTENCE WITH IT: this entry was written against a
-  // tree where NETCONF sat above it, then against one whose last engine was MTConnect, and on main
-  // the engine above it is Modbus. A rank carried from another base collides silently - 37 and then
-  // 38 were already taken - and the census that covers 0..N-1 is what said so, twice.
-  sparkplug: 39,
+  // Last (rank 38): a device's configuration tree is the narrowest name of the four, and the people
+  // who know it are network engineers rather than the readers a page of databases is written for, so
+  // nothing above it moves for this one either (#1724).
+  netconf: 39,
+  // Last (rank 40), behind the configuration tree: the name on the box is a specification's rather
+  // than a product's, so a reader scanning the login page is least likely to arrive already knowing
+  // it (#1720). THE RANK MOVES WITH THE BASE AND THE SENTENCE WITH IT: this entry has been written
+  // against four trees now, whose last engine was in turn NETCONF, MTConnect, Modbus and NETCONF
+  // again. A rank carried from another base collides silently - 37, then 38, then 39 were each
+  // already taken - and the census that covers 0..N-1 is what said so, all three times. Nothing but
+  // that census would: a duplicate rank only reorders two engines on the page.
+  sparkplug: 40,
 };
 
 /**

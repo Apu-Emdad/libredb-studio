@@ -142,6 +142,7 @@ const SeedDatabaseType = z.enum([
   "opcua",
   "mtconnect",
   "modbus",
+  "netconf",
   "sparkplug",
 ]);
 

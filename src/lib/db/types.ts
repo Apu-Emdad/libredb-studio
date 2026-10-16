@@ -993,6 +993,7 @@ export interface ProviderCapabilities {
     | "opcua"
     | "mtconnect"
     | "modbus"
+    | "netconf"
     | "sparkplug";
   supportsExplain: boolean;
   /**

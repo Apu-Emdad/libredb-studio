@@ -118,6 +118,7 @@ const EXPECTED: Readonly<Record<DatabaseType, boolean>> = Object.freeze({
   // A read carries the protocol's own limits, 125 registers or 2000 bits, and the answer is the whole of
   // what was asked for: there is no page two to ask for (#1723).
   modbus: false,
+  netconf: false,
   // A read is bounded by time, by message count and by bytes, and the next messages are whatever the broker
   // publishes next, not a page a panel can ask the broker for (#1720).
   sparkplug: false,

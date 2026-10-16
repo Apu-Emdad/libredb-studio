@@ -114,6 +114,7 @@ const EXPECTED_COUNT: Readonly<Record<DatabaseType, string | null>> = Object.fre
   // No count statement: Modbus has no request that counts anything, and the tree's counts are the
   // register map's own, which the provider already holds (#1723).
   modbus: null,
+  netconf: null,
   // No count statement: a broker publishes no count, and a metric is not a table. What the tree shows is what
   // the certificates in hand define, which the provider already holds (#1720).
   sparkplug: null,

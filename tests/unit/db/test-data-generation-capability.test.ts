@@ -63,6 +63,7 @@ const OFFERED: Readonly<Record<DatabaseType, boolean>> = Object.freeze({
   mtconnect: false,
   // The same, and structurally: there is no code here that can build a write (#1723).
   modbus: false,
+  netconf: false,
   // The same, and more plainly: there is no packet this provider can send that writes (#1720).
   sparkplug: false,
 });

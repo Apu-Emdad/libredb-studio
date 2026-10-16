@@ -53,12 +53,10 @@ describe("docs/MCP.md", () => {
     const refused = SHIPPED_DATABASE_TYPES.filter((type) => !MCP_EXPOSABLE[type]).map(
       (type) => DB_UI_CONFIG[type].label,
     );
-    // The control that the record answers: etcd, Oxia, S3, Kubernetes, MQTT, Firestore, OPC UA and Modbus are the engines it
-    // refuses today.
     // The control that the record answers: etcd, Oxia, S3, Kubernetes, MQTT, Firestore, OPC UA,
-    // Modbus and Sparkplug B are the engines it refuses today.
+    // Modbus, NETCONF and Sparkplug B are the engines it refuses today.
     expect(refused).toEqual(
-      ["etcd", "oxia", "s3", "kubernetes", "mqtt", "firestore", "opcua", "modbus", "sparkplug"].map(
+      ["etcd", "oxia", "s3", "kubernetes", "mqtt", "firestore", "opcua", "modbus", "netconf", "sparkplug"].map(
         (type) => DB_UI_CONFIG[type as DatabaseType].label,
       ),
     );
