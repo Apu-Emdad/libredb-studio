@@ -5,9 +5,11 @@
  * that reads the panel reads it through `nodeTlsMaterial` (`mtconnect`, `rabbitmq`, `s3`,
  * `kubernetes` and the rest), so the refusals a malformed panel earns are one set of sentences, and
  * `nodeTlsConnectOptions` turns the result into what `tls.connect` takes. Spreading that by hand is
- * what drops `servername` and `checkServerIdentity`, which is a verification hole rather than a
- * missing nicety: without them a certificate is checked against the address dialled instead of the
- * server the user named.
+ * what drops `checkServerIdentity`, which is a verification hole rather than a missing nicety:
+ * without it a certificate is checked against the address dialled instead of the server the user
+ * named. The two are not alike and the helper says so: `checkServerIdentity` is set ALWAYS, and
+ * `servername` only where the identity is a name rather than an IP literal (`isIP(identity) === 0`),
+ * because SNI carries a host name and an IP identity is checked against the certificate's IP SAN.
  *
  * WHAT WAS MEASURED BEFORE THIS EXISTED. The dialog offered the panel (`offersSslPanel` is opt-out
  * and this engine's entry does not opt out), the session already carried a real `tlsConnect`

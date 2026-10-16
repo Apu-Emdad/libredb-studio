@@ -106,13 +106,14 @@ const NUMERAL_WORDS: Record<string, number> = {
   // words has to fail loudly on the next two providers rather than pass unread.
   "thirty-six": 36,
   "thirty-seven": 37,
-  // Two past the registry, which the test at the foot of this file holds: 37 external engines once
-  // Sparkplug B (#1720) joined, so the map reaches 39 and the next two providers get a failing test
-  // rather than a numeral nothing reads. The headroom is what makes the gate work: the pattern the
-  // scan builds comes from THIS MAP's keys, so a word the map does not know never matches and is
-  // passed over in silence.
+  // Two past the registry, which the test at the foot of this file holds: 38 external engines once
+  // Sparkplug B (#1720) joined MTConnect (#1722), so the map reaches 40 and the next two providers
+  // get a failing test rather than a numeral nothing reads. The headroom is what makes the gate
+  // work: the pattern the scan builds comes from THIS MAP's keys, so a word the map does not know
+  // never matches and is passed over in silence.
   "thirty-eight": 38,
   "thirty-nine": 39,
+  forty: 40,
 };
 
 /**

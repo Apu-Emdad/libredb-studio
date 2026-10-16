@@ -353,11 +353,9 @@ describe("the installed editor's language ids", () => {
     // `yaml`, 127 before Firestore, whose document kind declares `json`, 128 before RabbitMQ, whose stream, queue
     // and exchange each declare `json`, 131 before Snowflake, whose nine kinds with a source each declare `sql`,
     // 140 before OPC UA, whose node declares `json` too, 141 before Apache Spark, whose table and view kinds
-    // each declare `sql`, and 143 before MTConnect, whose asset declares `xml`.
-    expect(declared).toHaveLength(144);
-    // 140 before OPC UA, whose node declares `json` too, and 141 before Apache Spark, whose table and view kinds
-    // each declare `sql`.
-    expect(declared).toHaveLength(145);
+    // each declare `sql`, 143 before MTConnect, whose asset declares `xml`, and 144 before Sparkplug B, whose
+    // node and device kinds each declare `json` (#1720).
+    expect(declared).toHaveLength(146);
 
     const unregistered = declared.filter((entry) => !registered.has(entry.language));
     // Named, so a failure says which kind on which engine declared what, rather than false. This
