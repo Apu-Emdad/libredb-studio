@@ -1688,7 +1688,8 @@ describe("docs/providers/README.md", () => {
     expect(lines[influxdb3 + 4].startsWith("| RabbitMQ | `rabbitmq` |")).toBe(true);
     expect(lines[influxdb3 + 5].startsWith("| OPC UA | `opcua` |")).toBe(true);
     expect(lines[influxdb3 + 6].startsWith("| MTConnect | `mtconnect` |")).toBe(true);
-    expect(lines[influxdb3 + 7].startsWith("| LibreDB | `libredb` |")).toBe(true);
+    expect(lines[influxdb3 + 7].startsWith("| Sparkplug B | `sparkplug` |")).toBe(true);
+    expect(lines[influxdb3 + 8].startsWith("| LibreDB | `libredb` |")).toBe(true);
     expect(index).toContain(
       "Qdrant, InfluxDB, Oxia, Databend, S3, Kubernetes, MQTT, Firestore, RabbitMQ and OPC UA are)",
     );
@@ -2071,7 +2072,7 @@ describe("the complete engine lists outside the agent docs", () => {
       // The tail stays in registry order, with the two industrial engines between the platform and the store
       // (#1677, then #1722: an agent reads the machines an address space stands in front of).
       expect(row, file).toContain(
-        `\`oxia\`${separator}\`s3\`${separator}\`kubernetes\`${separator}\`opcua\`${separator}\`mtconnect\`${separator}\`libredb\``,
+        `\`oxia\`${separator}\`s3\`${separator}\`kubernetes\`${separator}\`opcua\`${separator}\`mtconnect\`${separator}\`sparkplug\`${separator}\`libredb\``,
       );
     }
     expect(read("docs/BRAND_MESSAGING.md")).toContain(

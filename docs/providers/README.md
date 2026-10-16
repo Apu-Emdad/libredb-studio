@@ -43,6 +43,7 @@ in lockstep with the code (see the tri-sync rule in [`../../CLAUDE.md`](../../CL
 | RabbitMQ | `rabbitmq` | Stream | none: the management HTTP API over the shared `node:http(s)` transport, and Studio's own read-only AMQP 0-9-1 client | A JSON stream read request | [rabbitmq.md](./rabbitmq.md) |
 | OPC UA | `opcua` | Industrial (address space) | `node-opcua-client` (pure JavaScript, `opc.tcp`) | JSON (read request) | [opcua.md](./opcua.md) |
 | MTConnect | `mtconnect` | Industrial (agent) | none: Studio's own client over the shared `node:http(s)` transport | A request line in the agent's own URL grammar | [mtconnect.md](./mtconnect.md) |
+| Sparkplug B | `sparkplug` | Industrial (broker) | none: Studio's own bounded MQTT session over `node:net` and `node:tls`, and its own Sparkplug B payload decoder | JSON (read request) | [sparkplug.md](./sparkplug.md) |
 | LibreDB | `libredb` | Embedded (Key-Value) | `@libredb/libredb` | JSON (command grammar) | [libredb.md](./libredb.md) |
 
 ## Conventions
