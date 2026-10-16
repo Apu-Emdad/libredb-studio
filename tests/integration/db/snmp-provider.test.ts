@@ -114,6 +114,20 @@ function connectionTo(port: number): DatabaseConnection {
  */
 const DEADLINE_MS = 15_000;
 
+/**
+ * The budget each case below is given, and it is declared rather than defaulted.
+ *
+ * The exchange's own deadline is fifteen seconds and bun's default budget is five, so a request
+ * the fixture cannot answer kills the CASE before the DEADLINE ends the exchange. What the reader
+ * then sees is a nameless timeout, while the fixture's own diagnosis - the `missed` list, which
+ * names the request that had no recording - is never asserted. The declaration is not a mask: the
+ * deadline still ends a hung exchange, and a case that fails now fails as `missed: [...]`.
+ *
+ * Measured on 16 October 2026: the cases run in about a millisecond each, so the budget below is
+ * never the thing that ends them.
+ */
+const CASE_BUDGET_MS = 20_000;
+
 async function open(missed: string[]): Promise<SnmpProvider> {
   const port = await recordedAgent(missed);
   opened = new SnmpProvider(connectionTo(port), { queryTimeout: DEADLINE_MS });
@@ -130,90 +144,118 @@ describe("the provider reads what a real agent answered", () => {
     expect(BOOK.size).toBeGreaterThanOrEqual(8);
   });
 
-  test("a get answers with the value the agent holds, by numeric object", async () => {
-    const missed: string[] = [];
-    const provider = await open(missed);
-    const result = await provider.query("get 1.3.6.1.2.1.1.5.0");
-    expect(missed).toEqual([]);
-    expect(result.rows).toEqual([{ object: "1.3.6.1.2.1.1.5.0", value: "live-test-agent", type: "text" }]);
-  });
+  test(
+    "a get answers with the value the agent holds, by numeric object",
+    async () => {
+      const missed: string[] = [];
+      const provider = await open(missed);
+      const result = await provider.query("get 1.3.6.1.2.1.1.5.0");
+      expect(missed).toEqual([]);
+      expect(result.rows).toEqual([{ object: "1.3.6.1.2.1.1.5.0", value: "live-test-agent", type: "text" }]);
+    },
+    CASE_BUDGET_MS,
+  );
 
-  test("a written name reads the same object as its identifier", async () => {
-    const missed: string[] = [];
-    const provider = await open(missed);
-    const result = await provider.query("get sysName.0");
-    expect(missed).toEqual([]);
-    expect(result.rows[0]?.value).toBe("live-test-agent");
-  });
+  test(
+    "a written name reads the same object as its identifier",
+    async () => {
+      const missed: string[] = [];
+      const provider = await open(missed);
+      const result = await provider.query("get sysName.0");
+      expect(missed).toEqual([]);
+      expect(result.rows[0]?.value).toBe("live-test-agent");
+    },
+    CASE_BUDGET_MS,
+  );
 
-  test("a walk returns every object of its subtree and no more", async () => {
-    const missed: string[] = [];
-    const provider = await open(missed);
-    const result = await provider.query("walk 1.3.6.1.4.1.8072.9999.9999");
-    expect(missed).toEqual([]);
-    // Sixteen is what `snmpwalk` reads from the same subtree of the same fixture.
-    expect(result.rowCount).toBe(16);
-    expect(result.rows.every((row) => String(row.object).startsWith("1.3.6.1.4.1.8072.9999.9999."))).toBe(true);
-    expect(result.rows[0]?.value).toBe("1000");
-  });
+  test(
+    "a walk returns every object of its subtree and no more",
+    async () => {
+      const missed: string[] = [];
+      const provider = await open(missed);
+      const result = await provider.query("walk 1.3.6.1.4.1.8072.9999.9999");
+      expect(missed).toEqual([]);
+      // Sixteen is what `snmpwalk` reads from the same subtree of the same fixture.
+      expect(result.rowCount).toBe(16);
+      expect(result.rows.every((row) => String(row.object).startsWith("1.3.6.1.4.1.8072.9999.9999."))).toBe(true);
+      expect(result.rows[0]?.value).toBe("1000");
+    },
+    CASE_BUDGET_MS,
+  );
 
-  test("a walk of the system group reads the group, not the agent", async () => {
-    const missed: string[] = [];
-    const provider = await open(missed);
-    const result = await provider.query("walk system");
-    expect(missed).toEqual([]);
-    expect(result.rowCount).toBe(38);
-  });
+  test(
+    "a walk of the system group reads the group, not the agent",
+    async () => {
+      const missed: string[] = [];
+      const provider = await open(missed);
+      const result = await provider.query("walk system");
+      expect(missed).toEqual([]);
+      expect(result.rowCount).toBe(38);
+    },
+    CASE_BUDGET_MS,
+  );
 
-  test("a table shapes its columns by index", async () => {
-    const missed: string[] = [];
-    const provider = await open(missed);
-    const result = await provider.query("table 1.3.6.1.4.1.8072.9999.9999.10.1");
-    expect(missed).toEqual([]);
-    expect(result.rowCount).toBe(3);
-    expect(result.rows.map((row) => row.column2)).toEqual(["sensor-one", "sensor-two", "sensor-three"]);
-  });
+  test(
+    "a table shapes its columns by index",
+    async () => {
+      const missed: string[] = [];
+      const provider = await open(missed);
+      const result = await provider.query("table 1.3.6.1.4.1.8072.9999.9999.10.1");
+      expect(missed).toEqual([]);
+      expect(result.rowCount).toBe(3);
+      expect(result.rows.map((row) => row.column2)).toEqual(["sensor-one", "sensor-two", "sensor-three"]);
+    },
+    CASE_BUDGET_MS,
+  );
 
-  test("an object the agent does not have is no row, and is not an error", async () => {
-    const missed: string[] = [];
-    const provider = await open(missed);
-    const result = await provider.query("get 1.3.6.1.4.1.8072.9999.9999.404.0");
-    expect(missed).toEqual([]);
-    expect(result.rowCount).toBe(0);
-  });
+  test(
+    "an object the agent does not have is no row, and is not an error",
+    async () => {
+      const missed: string[] = [];
+      const provider = await open(missed);
+      const result = await provider.query("get 1.3.6.1.4.1.8072.9999.9999.404.0");
+      expect(missed).toEqual([]);
+      expect(result.rowCount).toBe(0);
+    },
+    CASE_BUDGET_MS,
+  );
 
-  test("the deadline a caller asks for is the deadline the exchange uses", async () => {
-    /*
-     * The defect this case exists for: `deadlineMs` was read from the connection record, which
-     * carries no such field, so the option was dead and every exchange waited the engine default.
-     * Nothing noticed, because five seconds is a perfectly ordinary thing to wait.
-     *
-     * Measured rather than read off the code, and the shape of the measurement took two attempts.
-     * A port with nothing behind it does NOT work: on loopback the kernel answers a closed UDP
-     * port with an unreachable message and the provider fails in under a millisecond, so the
-     * deadline is never consulted. SILENCE is what consults it, and the agent below is silent by
-     * design for a request it has no recording of. With 1000 ms asked for, the query ends well
-     * inside the 5000 ms this engine would otherwise have used.
-     *
-     * WHY 1000 AND NOT 200, WHICH IS WHAT THIS ASKED FOR FIRST. The deadline applies to `connect()`
-     * too: it sends a probe Get, and that probe is answered by the agent below rather than ignored.
-     * MEASURED on 16 October 2026, under a loaded machine running the whole suite: the probe's
-     * round trip on loopback passed 200 ms and `connect()` threw `No SNMP agent answered`, so the
-     * case failed on the deadline it was asserting rather than on the behaviour. 1000 ms is five
-     * times the headroom and still 4000 ms clear of the engine default, which is what the
-     * assertion below reads: a build that ignored the option would spend 5000.
-     */
-    const missed: string[] = [];
-    const port = await recordedAgent(missed);
-    const impatient = new SnmpProvider(connectionTo(port), { queryTimeout: 1000 });
-    await impatient.connect();
-    opened = impatient;
-    const started = Date.now();
-    await impatient.query("get 1.3.6.1.4.1.8072.9999.9999.55555.0").catch(() => undefined);
-    const spent = Date.now() - started;
-    expect(missed).toHaveLength(1);
-    expect(spent).toBeLessThan(4500);
-  });
+  test(
+    "the deadline a caller asks for is the deadline the exchange uses",
+    async () => {
+      /*
+       * The defect this case exists for: `deadlineMs` was read from the connection record, which
+       * carries no such field, so the option was dead and every exchange waited the engine default.
+       * Nothing noticed, because five seconds is a perfectly ordinary thing to wait.
+       *
+       * Measured rather than read off the code, and the shape of the measurement took two attempts.
+       * A port with nothing behind it does NOT work: on loopback the kernel answers a closed UDP
+       * port with an unreachable message and the provider fails in under a millisecond, so the
+       * deadline is never consulted. SILENCE is what consults it, and the agent below is silent by
+       * design for a request it has no recording of. With 1000 ms asked for, the query ends well
+       * inside the 5000 ms this engine would otherwise have used.
+       *
+       * WHY 1000 AND NOT 200, WHICH IS WHAT THIS ASKED FOR FIRST. The deadline applies to `connect()`
+       * too: it sends a probe Get, and that probe is answered by the agent below rather than ignored.
+       * MEASURED on 16 October 2026, under a loaded machine running the whole suite: the probe's
+       * round trip on loopback passed 200 ms and `connect()` threw `No SNMP agent answered`, so the
+       * case failed on the deadline it was asserting rather than on the behaviour. 1000 ms is five
+       * times the headroom and still 4000 ms clear of the engine default, which is what the
+       * assertion below reads: a build that ignored the option would spend 5000.
+       */
+      const missed: string[] = [];
+      const port = await recordedAgent(missed);
+      const impatient = new SnmpProvider(connectionTo(port), { queryTimeout: 1000 });
+      await impatient.connect();
+      opened = impatient;
+      const started = Date.now();
+      await impatient.query("get 1.3.6.1.4.1.8072.9999.9999.55555.0").catch(() => undefined);
+      const spent = Date.now() - started;
+      expect(missed).toHaveLength(1);
+      expect(spent).toBeLessThan(4500);
+    },
+    CASE_BUDGET_MS,
+  );
 
   test("a walk asks for repetitions, and a walk that does not finds no recording", async () => {
     // The assertion this file exists for, stated twice: the recording exists under a key that
