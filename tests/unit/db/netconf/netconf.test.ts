@@ -201,7 +201,12 @@ test("every measured key value round trips and none keeps the separator", () => 
     "a b",
     "]]>]]>",
     "a,b",
-    "çik",
+    // Two UTF-8 bytes beside ASCII, and four on their own below: the encoder is per CHARACTER and
+    // the decoder reads the percent triplets back, so a value of each width is what shows that a
+    // multi-byte character is escaped whole rather than per byte. U+00B5 is the micro sign and
+    // U+1F600 an emoji; neither is a word in any language, which is the point of choosing them -
+    // this repository is written in plain English and a fixture should not smuggle one in.
+    "a\u{00B5}b",
     "\u{1F600}",
     "",
     "%2F",
