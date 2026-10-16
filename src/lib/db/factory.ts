@@ -423,12 +423,33 @@ export async function createDatabaseProvider(
       return new SnmpProvider(connection, options);
     }
 
+    // Modbus TCP: a device or a gateway, read over a raw socket by this repository's own client
+    // through the shared egress rule. Read-only whatever the flag says, as for the two above, so
+    // no execution context rides along. No library: the client is ours, so the import is the
+    // provider module and nothing else.
+    case "modbus": {
+      // The explicit /index specifier keeps this dynamic import statically analysable.
+      const { ModbusProvider } = await import("./providers/industrial/modbus/index");
+      return new ModbusProvider(connection, options);
+    }
+
     // Platforms - dynamically imported
     case "kubernetes": {
       // The explicit /index specifier keeps this dynamic import statically analysable. Read-only whatever the flag
       // says; the execution context rides along, so `queryReadOnly` answers only under an agent profile.
       const { KubernetesProvider } = await import("./providers/platform/kubernetes/index");
       return new KubernetesProvider(connection, options, {}, execution);
+    }
+
+    // Network devices - dynamically imported
+    //
+    // Before `libredb` on purpose, and the reason is in the tests rather than in style: five
+    // regexes in `tests/isolated/factory.test.ts` anchor on `libredb$`, so a case appended after
+    // it breaks checks that have nothing to do with this engine.
+    case "netconf": {
+      // The explicit /index specifier keeps this dynamic import statically analysable.
+      const { NetconfProvider } = await import("./providers/network/netconf/index");
+      return new NetconfProvider(connection, options);
     }
 
     // Embedded databases - dynamically imported
@@ -442,7 +463,7 @@ export async function createDatabaseProvider(
         // This list is NOT type-checked against the union - a new case above with no
         // entry here is silent - so it is kept in the same order as the cases and
         // tests/isolated/factory.test.ts pins individual names in it by regex.
-        `Unknown database type: ${connection.type}. Supported types: postgres, mysql, sqlite, duckdb, libsql, oracle, db2, mssql, clickhouse, druid, trino, databend, bigquery, snowflake, spark, cassandra, elasticsearch, opensearch, mongodb, couchbase, firestore, redis, etcd, oxia, prometheus, influxdb, influxdb3, kafka, neo4j, milvus, qdrant, s3, mqtt, opcua, mtconnect, snmp, rabbitmq, kubernetes, libredb`,
+        `Unknown database type: ${connection.type}. Supported types: postgres, mysql, sqlite, duckdb, libsql, oracle, db2, mssql, clickhouse, druid, trino, databend, bigquery, snowflake, spark, cassandra, elasticsearch, opensearch, mongodb, couchbase, firestore, redis, etcd, oxia, prometheus, influxdb, influxdb3, kafka, neo4j, milvus, qdrant, s3, mqtt, opcua, mtconnect, modbus, snmp, rabbitmq, kubernetes, netconf, libredb`,
         connection.type,
       );
   }

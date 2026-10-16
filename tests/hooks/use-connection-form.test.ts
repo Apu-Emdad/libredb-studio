@@ -2026,6 +2026,8 @@ describe("useConnectionForm", () => {
     spark: true,
     opcua: true,
     mtconnect: true,
+    modbus: true,
+    netconf: true,
     snmp: true,
   };
 

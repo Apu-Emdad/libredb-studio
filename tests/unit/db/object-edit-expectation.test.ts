@@ -19,11 +19,11 @@ describe("the Phase 3 census expectation", () => {
     expect(EXPECTED_EDITABLE_KINDS.length).toBe(5);
     expect(new Set(EXPECTED_EDITABLE_KINDS.map(([type]) => type)).size).toBe(4);
     // The fleet is EXTERNAL_DATABASE_TYPES.length (38 with db2, neo4j, milvus, qdrant, influxdb, influxdb3, oxia,
-    // databend, bigquery, snowflake, s3, kubernetes, mqtt, firestore, rabbitmq, opcua, mtconnect and snmp) plus
-    // the store; db2, neo4j, milvus, qdrant, influxdb, influxdb3, oxia, databend, bigquery, snowflake, spark, s3,
-    // kubernetes, mqtt, firestore, rabbitmq, opcua, mtconnect and snmp abstain.
-    expect(EXPECTED_EDIT_ABSTAINERS.length).toBe(35);
-    expect(EDIT_CENSUS_TYPES.length).toBe(39);
+    // databend, bigquery, snowflake, s3, kubernetes, mqtt, firestore, rabbitmq, opcua, mtconnect, modbus and snmp) plus the
+    // store; db2, neo4j, milvus, qdrant, influxdb, influxdb3, oxia, databend, bigquery, snowflake, spark, s3,
+    // kubernetes, mqtt, firestore, rabbitmq, opcua, mtconnect, modbus and snmp abstain.
+    expect(EXPECTED_EDIT_ABSTAINERS.length).toBe(37);
+    expect(EDIT_CENSUS_TYPES.length).toBe(41);
   });
 
   test("no pair is written twice", () => {

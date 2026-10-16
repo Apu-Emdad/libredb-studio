@@ -191,6 +191,8 @@ describe("CONNECTION_STRING_ACCEPTED against each provider's own declaration (Sp
       "rabbitmq",
       "opcua",
       "mtconnect",
+      "modbus",
+      "netconf",
       "snmp",
       "libredb",
     ]);

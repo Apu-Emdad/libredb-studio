@@ -916,6 +916,26 @@ export const SparkIcon: React.FC<IconProps> = ({ className, ...props }) => (
  * three samples standing on it at three heights: what a Sample document holds, rather than a
  * protocol badge.
  */
+export const ModbusIcon: React.FC<IconProps> = ({ className, ...props }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    {...props}
+  >
+    <rect x="3" y="8" width="18" height="11" rx="1.5" />
+    <path d="M8 8 V4" />
+    <path d="M16 8 V4" />
+    <circle cx="7.5" cy="13.5" r="1.1" />
+    <circle cx="12" cy="13.5" r="1.1" />
+    <circle cx="16.5" cy="13.5" r="1.1" />
+  </svg>
+);
+
 export const MtconnectIcon: React.FC<IconProps> = ({ className, ...props }) => (
   <svg
     viewBox="0 0 24 24"
@@ -938,6 +958,35 @@ export const MtconnectIcon: React.FC<IconProps> = ({ className, ...props }) => (
 );
 
 /**
+ * NETCONF (#1724). A mark drawn for Studio and never a vendor's: a device with a configuration
+ * tree above it, which is what this provider reads and the one thing every NETCONF device has.
+ * The tree has one branch that forks, because a datastore holds modules and a module holds nodes,
+ * and those two levels are what the object browser draws.
+ */
+export const NetconfIcon: React.FC<IconProps> = ({ className, ...props }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    {...props}
+  >
+    <rect x="3" y="16" width="18" height="5" rx="1.5" />
+    <path d="M7 18.5 H9" />
+    <path d="M12 16 V11" />
+    <path d="M7 11 H17" />
+    <path d="M7 11 V8" />
+    <path d="M17 11 V8" />
+    <circle cx="7" cy="6.5" r="1.5" />
+    <circle cx="17" cy="6.5" r="1.5" />
+  </svg>
+);
+
+/**
+ * SNMP (#1721).
  * A mark drawn for Studio, never a vendor's asset and never a network-gear silhouette: a router
  * or a switch would say WHAT is being read, and every other engine's mark says what the reading
  * IS.

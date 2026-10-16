@@ -124,10 +124,17 @@ export const SHOWCASE_RANK: Record<DatabaseType, number> = {
   // Last (rank 37), behind the address space: a machine tool's agent is a narrower name still, so nothing
   // above it moves for it either (#1722).
   mtconnect: 37,
-  // Last (rank 38), behind the machine tool's agent: the three letters are an acronym a reader
+  // Last (rank 38): a device's registers are narrower still, and a map the user writes is the only
+  // thing that names them, so nothing above it moves for this one either (#1723).
+  modbus: 38,
+  // Rank 39, behind the device's registers: a device's configuration tree is a narrower name still,
+  // and the people who know it are network engineers rather than the readers a page of databases is
+  // written for, so nothing above it moves for this one either (#1724).
+  netconf: 39,
+  // Last (rank 40), behind the configuration tree: the three letters are an acronym a reader
   // either knows from managing networks or does not know at all, and the page is read by people
   // who came for databases (#1721).
-  snmp: 38,
+  snmp: 40,
 };
 
 /**

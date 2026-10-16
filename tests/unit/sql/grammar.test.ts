@@ -458,6 +458,9 @@ const GRAMMAR_COVERAGE: Record<DatabaseType, "established" | "default"> = {
   opcua: "default",
   // One request line in a URL grammar, not SQL: no SQL grammar is established for it (#1722).
   mtconnect: "default",
+  // One JSON read request, not SQL: no SQL grammar is established for it (#1723).
+  modbus: "default",
+  netconf: "default",
   snmp: "default",
 };
 
@@ -784,6 +787,9 @@ const SQL_TEXT_COVERAGE: Record<DatabaseType, boolean> = {
   opcua: false,
   // A request line is a URL, not SQL text.
   mtconnect: false,
+  // A read request is JSON, not SQL text.
+  modbus: false,
+  netconf: false,
   snmp: false,
 };
 
