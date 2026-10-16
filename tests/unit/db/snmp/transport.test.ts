@@ -147,6 +147,6 @@ describe("a send before the socket is connected", () => {
       target: { address: "127.0.0.1", port: PORT },
       createRawSocket: () => dgram.createSocket("udp4"),
     });
-    expect(factory.start()).rejects.toThrow(/has not asked for a socket/);
+    await expect(factory.start()).rejects.toThrow(/has not asked for a socket/);
   });
 });
