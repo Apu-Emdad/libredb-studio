@@ -14,7 +14,7 @@
  */
 import { QueryError } from "@/lib/db/errors";
 import type { QueryResult } from "@/lib/types";
-import type { LevelEntry, PathNode } from "./keypath";
+import { compareUtf8, type LevelEntry, type PathNode } from "./keypath";
 import { READER_LIMITS, type XmlElement, type XmlReaderPort } from "./reader-port";
 import { moduleNamespace, rememberNamespace, type NetconfRequest, type NmdaDatastore } from "./requests";
 import { buildRows } from "./rows";
@@ -107,7 +107,27 @@ export class DeviceReaderImpl {
     if (nmda) datastores.push("operational", "intended");
     return new DeviceReaderImpl(session, xml, {
       datastores,
-      modules: modules.sort(),
+      /*
+       * `compareUtf8` AND NOT `localeCompare`, which is the comparator Sonar's rule suggests. A
+       * bare `sort()` is a real finding and an explicit comparator is the fix; WHICH explicit
+       * comparator was measured rather than chosen.
+       *
+       * A YANG module name is an RFC 7950 `identifier`: ASCII letters, digits, `_`, `-` and `.`,
+       * never a word in a language. MEASURED on the recorded capture: all 71 names the fixture
+       * returns match that pattern and not one carries a byte above ASCII.
+       *
+       * And collation is not stable across machines for these values. MEASURED over eight locales
+       * on those same 71 names, `localeCompare` produces TWO different orders: `lt-LT` puts `yang`
+       * where the other seven put `ietf-crypto-types`, because Lithuanian collates `y` elsewhere in
+       * its alphabet. Choosing it would tie the module list, and the key paths built from it, to
+       * the locale data of whichever machine is running.
+       *
+       * `compareUtf8` is this provider's own comparator, already required for level pages because
+       * the level contract asks for UTF-8 byte order. MEASURED: it gives the identical order to the
+       * bare `sort()` for all 71 names, so nothing a reader sees moves and the order
+       * `tests/unit/db/netconf/reader.test.ts` pins stays pinned.
+       */
+      modules: [...modules].sort(compareUtf8),
       nmda,
       capabilities: hello.capabilities,
       sessionId: hello.sessionId,

@@ -198,6 +198,39 @@ test("only implemented modules are listed, and they are sorted", async () => {
   expectEqual(reader.facts.modules, ["iana-if-type", "ietf-interfaces", "ietf-netconf-nmda"]);
 });
 
+/**
+ * The module order is BYTE ORDER and not a collation, and this is the case that holds it.
+ *
+ * Sonar flags a bare `sort()` and suggests `localeCompare`. The suggestion is wrong for these
+ * values: a YANG module name is an RFC 7950 identifier, never a word in a language, so there is
+ * nothing for a collation to be right about. MEASURED over eight locales on the 71 names the
+ * fixture returns, `localeCompare` gives TWO different answers - `lt-LT` collates `y` elsewhere in
+ * the Lithuanian alphabet and puts `yang` before `ietf-crypto-types` while the other seven put it
+ * after - so the listing, and the key paths built from it, would follow the runner's locale data.
+ *
+ * THE PAIR BELOW WAS CHOSEN BY MEASUREMENT, NOT BY ILLUSTRATION, and the first pair tried was no
+ * good. `yang` against `ietf-crypto-types` reads as the obvious example, but the two comparators
+ * AGREE on it under this machine's locale: swapping `compareUtf8` for `localeCompare` left the
+ * file at 22 pass 0 fail, so the case would have been green for the wrong reason on every runner
+ * but a Lithuanian one. `NETCONF` against `candidate` separates them anywhere: byte order puts the
+ * uppercase name first (0x4E before 0x63) and every collation tested puts it last. `NETCONF` is
+ * also a real name in the recorded capture rather than one invented for this test.
+ */
+test("modules sort by code point, so the order cannot follow the machine's locale", async () => {
+  const reader = await open(
+    harness([
+      reply([
+        data([
+          el("modules-state", undefined, [moduleEntry("candidate", "implement"), moduleEntry("NETCONF", "implement")]),
+        ]),
+      ]),
+    ]),
+  );
+  expectEqual(reader.facts.modules, ["NETCONF", "candidate"]);
+  // The comparator Sonar asks for answers the other way round, which is what this case is for.
+  expectBe(["NETCONF", "candidate"].sort((a, b) => a.localeCompare(b))[0], "candidate");
+});
+
 test("a device that answers no library is refused with a sentence", async () => {
   await expectRejects(open(harness([reply([data([])])])), /no YANG library/);
 });
