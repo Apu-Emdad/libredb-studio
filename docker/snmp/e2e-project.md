@@ -8,11 +8,17 @@ delivery is worth writing down only with the reason, so here it is.
 
 ## What `e2e/snmp-provider.spec.ts` needs
 
-Nothing but the shared server. The five cases drive the connection dialog: the driver is offered,
+Nothing but the shared server. The seven cases drive the connection dialog: the driver is offered,
 the address is a host and a port, the secret is labelled a community rather than a password, the
-consent to a community in clear is drawn in this protocol's words, and the read-only sentence says
-what makes it read-only. **No case reads from an agent**, so no fixture has to be up, and the spec
-is as cheap as any other dialog spec in the shared project.
+consent to a community in clear is drawn in this protocol's words, no SSL / TLS panel is offered,
+no SSH Tunnel toggle is offered, and the read-only sentence says what makes it read-only. **No case
+reads from an agent**, so no fixture has to be up, and the spec is as cheap as any other dialog
+spec in the shared project.
+
+The two absences are measured here as well as in the unit layer because the unit layer's two halves
+are joined by a mock: one test pins that the real entry declares the flag, the other pins that the
+flag removes the control, but the second declares it on a mock entry. Neither draws the real entry
+on a screen, and this engine's dialog is the only place the two meet.
 
 Reading a live agent from a browser is the live check's job
 (`tests/live/snmp-live-check.ts`, nine checks under both runtimes) and the integration layer's
@@ -46,8 +52,11 @@ project.
 
 That project's header records a measured hazard: roughly thirty specs share one account's
 rate-limit bucket (120 requests per 60 s), and `offline-editor.spec.ts` was moved out after it
-spent the budget. This spec signs in once per case in `beforeEach`, so it adds **five logins** to
-that bucket. Measured on this branch: the five cases pass against a shared server
-(`5 passed`). If the bucket ever becomes the reason a later spec fails, this file is one of the
-places to look, and moving these five cases behind their own project is the cheap answer - it
-needs no fixture, so a second server process is all it would take.
+spent the budget. This spec signs in once per case in `beforeEach`, so it adds **seven logins** to
+that bucket. Measured on this branch, and the scope of that measurement matters: the FIVE cases
+that existed then passed against a shared server (`5 passed`). The two absence cases added since
+have NOT been run here - Playwright does not start on this machine - so what is measured is five of
+seven, and the two are written against the same dialog the other five drive. If the bucket ever
+becomes the reason a later spec fails, this file is one of the places to look, and moving these
+cases behind their own project is the cheap answer - it needs no fixture, so a second server
+process is all it would take.

@@ -1380,6 +1380,26 @@ export const DB_UI_CONFIG: Record<DatabaseType, DatabaseUIConfig> = {
     // one way only - an engine with this toggle on must have a scheme, and of the 36 engines
     // measured there was no exception.
     showConnectionStringToggle: false,
+    // AND NO SSL / TLS PANEL. The transport is bare UDP - `client.ts` opens `createSocket("udp4")`
+    // and nothing else - so there is no session for a certificate chain to secure. MEASURED: across
+    // the nineteen files of this provider, `sslMode`, `sslCa`, `sslCert`, `sslKey` and
+    // `rejectUnauthorized` appear zero times, so every value the panel collected was written to the
+    // connection and read by nothing.
+    //
+    // The field below says the same thing in the other direction: the consent box's hint states
+    // there is no transport security under a v2c datagram at all. A panel offering `verify-full`
+    // beside that sentence contradicts it. What secures this protocol is SNMPv3's own USM, inside
+    // the message rather than under it.
+    showSslPanel: false,
+    // AND NO SSH TUNNEL, which is a different reason and not the same one twice. Something would
+    // read it - `factory.ts` opens the tunnel for any connection that carries one, with no test on
+    // the engine - and that is exactly the problem: MEASURED, the shared tunnel is a local TCP
+    // listener (`src/lib/ssh/tunnel.ts` is `net.createServer` plus `forwardOut`, and the word
+    // `dgram` does not appear in its 392 lines). The factory then rewrites host and port to that
+    // TCP endpoint, and this provider sends datagrams to it, where nothing is listening for them.
+    // A tunnel the dialog offers and the transport cannot use is a box that breaks the connection
+    // it promises to carry.
+    showSshTunnel: false,
     // FOUR FIELDS. Three are what the provider reads; the fourth is the consent without which it
     // REFUSES to open. `connection-options.ts` turns down a v2c connection to a host that is not
     // loopback unless `allowInsecureAuth` is set, and names two ways out: choose v3, or consent to

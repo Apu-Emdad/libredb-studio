@@ -80,6 +80,45 @@ test.describe("SNMP in the connection dialog", () => {
     await expect(dialog.getByText("Send the password without TLS", { exact: true })).toHaveCount(0);
   });
 
+  test("no SSL / TLS panel is offered, because there is no session to secure", async ({ page }) => {
+    const dialog = page.locator('[role="dialog"]');
+    await dialog.getByRole("button", { name: "SNMP", exact: true }).click();
+
+    /*
+     * ABSENCE tied to `showSslPanel: false`, measured HERE as well as in the two tests that already
+     * hold it, because those two are joined by a mock: `tests/unit/lib/db-ui-config.test.ts` pins
+     * that the REAL entry declares `false`, and `tests/components/ConnectionModal.test.tsx` pins
+     * that `false` removes the panel - but it declares the flag on a MOCK entry, so neither draws
+     * the real snmp entry on a screen.
+     *
+     * The transport is bare UDP, so a certificate chain has no session to secure, and the consent
+     * box right beside it says there is no transport security under a v2c datagram at all.
+     */
+    await expect(dialog.getByText("SSL / TLS", { exact: false })).toHaveCount(0);
+    // The control, so the absence is not an empty dialog: the consent box IS drawn.
+    await expect(
+      dialog.getByLabel("Send the community in clear to an agent that is not on this machine"),
+    ).toBeVisible();
+  });
+
+  test("no SSH Tunnel toggle is offered, because the shared tunnel carries TCP and this speaks UDP", async ({
+    page,
+  }) => {
+    const dialog = page.locator('[role="dialog"]');
+    await dialog.getByRole("button", { name: "SNMP", exact: true }).click();
+
+    /*
+     * ABSENCE tied to `showSshTunnel: false`, and NOT the same reason as the panel above. Something
+     * would read this one: the factory opens a tunnel for any connection that carries one, with no
+     * test on the engine, and then rewrites host and port to the tunnel's LOCAL TCP endpoint. This
+     * provider would send datagrams to a port where a TCP listener sits, so the box would break the
+     * connection it offers to carry.
+     */
+    await expect(dialog.getByText("SSH Tunnel", { exact: true })).toHaveCount(0);
+    // The control, by the same reading as above: the address boxes are drawn.
+    await expect(dialog.getByLabel("Host", { exact: true })).toBeVisible();
+  });
+
   test("the read-only sentence says what makes it read-only", async ({ page }) => {
     const dialog = page.locator('[role="dialog"]');
     await dialog.getByRole("button", { name: "SNMP", exact: true }).click();
