@@ -192,12 +192,20 @@ describe("the provider reads what a real agent answered", () => {
      * A port with nothing behind it does NOT work: on loopback the kernel answers a closed UDP
      * port with an unreachable message and the provider fails in under a millisecond, so the
      * deadline is never consulted. SILENCE is what consults it, and the agent below is silent by
-     * design for a request it has no recording of. With 200 ms asked for, the query ends well
+     * design for a request it has no recording of. With 1000 ms asked for, the query ends well
      * inside the 5000 ms this engine would otherwise have used.
+     *
+     * WHY 1000 AND NOT 200, WHICH IS WHAT THIS ASKED FOR FIRST. The deadline applies to `connect()`
+     * too: it sends a probe Get, and that probe is answered by the agent below rather than ignored.
+     * MEASURED on 16 October 2026, under a loaded machine running the whole suite: the probe's
+     * round trip on loopback passed 200 ms and `connect()` threw `No SNMP agent answered`, so the
+     * case failed on the deadline it was asserting rather than on the behaviour. 1000 ms is five
+     * times the headroom and still 4000 ms clear of the engine default, which is what the
+     * assertion below reads: a build that ignored the option would spend 5000.
      */
     const missed: string[] = [];
     const port = await recordedAgent(missed);
-    const impatient = new SnmpProvider(connectionTo(port), { queryTimeout: 200 });
+    const impatient = new SnmpProvider(connectionTo(port), { queryTimeout: 1000 });
     await impatient.connect();
     opened = impatient;
     const started = Date.now();
