@@ -1,3 +1,4 @@
+import { connect } from "node:net";
 import { expect, test } from "@playwright/test";
 
 /**
@@ -9,8 +10,16 @@ import { expect, test } from "@playwright/test";
  * read-only declaration are all `DatabaseUIConfig` and `READ_ONLY_ENFORCED` - which is why this
  * runs in a browser.
  *
- * Two of these tests reach the fixture of `docker/sparkplug/compose-service.yml` on
- * 127.0.0.1:1884. The rest are answered before any socket opens.
+ * ONE of these tests reaches the fixture of `docker/sparkplug/compose-service.yml` on
+ * 127.0.0.1:1884, and it names its reason and SKIPS where no broker is listening: CI's "E2E
+ * Tests" job starts no compose service, so a case that needs one cannot pass in the job it runs
+ * in. The live connection itself is measured where a broker is actually started, in
+ * `docker/sparkplug/ci-step.yml`, which is this layer's complement rather than its duplicate -
+ * holding one claim in two layers means whatever reddens one reddens the other, and that is
+ * exactly what happened on #1798.
+ *
+ * The rest are answered before any socket opens, INCLUDING the refusal case: dialling a port with
+ * nothing on it needs no fixture, which is why it carries no skip.
  *
  * ABSENCE IS ASSERTED HERE TOO, and on purpose: a spec that only claims what IS drawn passes
  * just as well on a dialog that draws everything. Sparkplug reads three connection fields and
@@ -26,6 +35,26 @@ const READ_ONLY_HINT =
   "Sparkplug connections are read-only whether or not this is ticked, and not by a setting: this " +
   "provider's encoder has no function that writes a PUBLISH, and its CONNECT carries no Will, which is " +
   "how a death certificate would be registered.";
+
+const BROKER = { host: "127.0.0.1", port: 1884 } as const;
+
+/**
+ * Whether the compose fixture answers a TCP connect. A plain socket and not a request: the broker
+ * speaks MQTT, so there is no URL to fetch, and the one thing this has to tell apart is a listener
+ * from nothing at all. Two seconds is the budget; a broker on loopback answers in single-digit
+ * milliseconds, and anything slower than this is not the fixture.
+ */
+const brokerIsUp = async (): Promise<boolean> =>
+  new Promise((resolve) => {
+    const socket = connect({ ...BROKER, timeout: 2_000 });
+    const settle = (answer: boolean) => {
+      socket.destroy();
+      resolve(answer);
+    };
+    socket.once("connect", () => settle(true));
+    socket.once("timeout", () => settle(false));
+    socket.once("error", () => settle(false));
+  });
 
 test.describe("Sparkplug B in the connection dialog", () => {
   test.beforeEach(async ({ page }) => {
@@ -160,8 +189,20 @@ test.describe("Sparkplug B in the connection dialog", () => {
   });
 
   test("Test Connection reaches the fixture broker, with the Group left empty", async ({ page }) => {
-    // Needs `docker compose -f docker/sparkplug/compose-service.yml up -d`. The empty Group is
-    // the case the dialog's own hint promises: every group under spBv1.0.
+    // SKIPPED AND NOT FAILED WHERE NO BROKER IS LISTENING, with the address in the reason. Skipped
+    // is a third state beside passed and failed: it says this case MEASURED NOTHING here, which is
+    // the honest answer in a job that starts no fixture, and it is not a quiet one - the runner
+    // prints the reason. Where the fixture IS up, `docker compose -f
+    // docker/sparkplug/compose-service.yml up -d`, the case runs and must pass; that arm is the
+    // canary for this skip.
+    const reachable = await brokerIsUp();
+    // THE REASON IS PRINTED, not only recorded. MEASURED with the `list` reporter: a skipped case
+    // shows its title with a `-` and NOT the reason behind it, which the HTML and JSON reporters do
+    // carry. A reader of the job log would see a case that did not run and no word about why, and
+    // "not measured" is only an honest third state when it says what it could not measure.
+    if (!reachable) console.log(`SKIP: no broker is answering on ${BROKER.host}:${BROKER.port}`);
+    test.skip(!reachable, `no broker is answering on ${BROKER.host}:${BROKER.port}`);
+    // The empty Group is the case the dialog's own hint promises: every group under spBv1.0.
     const dialog = page.locator('[role="dialog"]');
     await dialog.getByRole("button", { name: "Sparkplug B", exact: true }).click();
     await dialog.locator("#host").fill("127.0.0.1");
