@@ -1396,10 +1396,15 @@ export const DB_UI_CONFIG: Record<DatabaseType, DatabaseUIConfig> = {
     // declare this after BigQuery and OPC UA, and the first where the panel was silently inert
     // rather than answered with a word the engine does not know.
     showSslPanel: false,
-    // The SSH TUNNEL panel stays, and the difference is that something reads it: `open.ts`
-    // describes `sshTunnel` as a bastion to reach the device, and `hostkey.ts` states which key is
-    // seen inside the forward. A tunnel to an SSH service is not a redundancy; the bastion and the
-    // device are two different hosts.
+    // The SSH TUNNEL panel stays, and the reason is NOT that this provider reads `sshTunnel`: it
+    // does not, and `open.ts:59` says so in as many words ("`sshTunnel` is NOT where these come
+    // from"). The tunnel is opened by the shared layer, before the provider is reached.
+    //
+    // What justifies the panel is MEASURED, in `hostkey.ts:9-12`: a wrong pin stops the handshake
+    // with `Host denied (verification failed)` before any authentication packet, AND it does so
+    // through an SSH tunnel as well, where the key seen inside the forward was the device's own and
+    // not the bastion's - the two fingerprints differed. So a tunnel to an SSH service is not a
+    // redundancy: there are two identities and the pin checks the one that matters.
     // The device's key or its password, and the device's host key fingerprint, which is what makes
     // the dial refuse an unknown device rather than trust whatever answers on the port. The
     // fingerprint has a field of its own rather than borrowing `serverCertificateThumbprint`: a
