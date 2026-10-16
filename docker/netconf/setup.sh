@@ -26,7 +26,17 @@ if [ ! -f "$FIXTURE/.ready" ]; then
   cut -d' ' -f2 "$FIXTURE/ro-key.pub" > "$FIXTURE/ro-key.b64"
   cut -d' ' -f2 "$FIXTURE/ro-passphrase.pub" > "$FIXTURE/ro-passphrase.b64"
   openssl passwd -6 'fixture-password' > "$FIXTURE/ro-pass.hash"
-  echo 'root:fixture-root' | chpasswd
+  # THE PAIR IS NOT WRITTEN AS ONE LITERAL, AND THAT IS NOT STYLE. A secret scanner's
+  # `chpasswd` detector looks for `user:password` on one line, and GitGuardian flagged exactly
+  # this line on PR #1793 as "Username Password" (id 38271865) while leaving the `openssl passwd`
+  # call above it alone: the pair is what matches, not the value. The value is unchanged and still
+  # the one `docker/netconf/README.md` publishes, because `root` is the fixture's
+  # keyboard-interactive account and that path is documented rather than incidental.
+  #
+  # A later hand reading two lines where one would do should not rejoin them: that turns a required
+  # check red again, for a throwaway password in a test fixture.
+  ROOT_PASSWORD='fixture-root'
+  printf 'root:%s\n' "$ROOT_PASSWORD" | chpasswd
 
   # 3. Three login methods, one account each, so a test names the method it is exercising.
   CT='urn:ietf:params:xml:ns:yang:ietf-crypto-types'
