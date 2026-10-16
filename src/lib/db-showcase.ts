@@ -124,10 +124,10 @@ export const SHOWCASE_RANK: Record<DatabaseType, number> = {
   // Last (rank 37), behind the address space: a machine tool's agent is a narrower name still, so nothing
   // above it moves for it either (#1722).
   mtconnect: 37,
-  // Last (rank 41), behind the specification's name: the three letters are an acronym a reader
+  // Last (rank 38), behind the machine tool's agent: the three letters are an acronym a reader
   // either knows from managing networks or does not know at all, and the page is read by people
   // who came for databases (#1721).
-  snmp: 37,
+  snmp: 38,
 };
 
 /**

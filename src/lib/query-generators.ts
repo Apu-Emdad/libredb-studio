@@ -977,6 +977,7 @@ const DIALECT_GENERATORS: Readonly<Record<QueryDialect, DialectGenerators>> = Ob
   mtconnect: Object.freeze({
     table: (path: readonly string[]) => mtconnectCurrentRequest(path),
     select: (path: readonly string[]) => mtconnectCurrentRequest(path),
+  }),
   // A tree click writes the statement this provider's own grammar reads, and nothing else: four
   // words and a numbered name. `walk` rather than `get`, because a click lands on a subtree and
   // a Get of a subtree answers one object or nothing at all.

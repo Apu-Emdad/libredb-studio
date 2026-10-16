@@ -144,6 +144,10 @@ describe("QUERY_DIALECTS", () => {
       },
       mtconnect: {
         tabType: "mtconnect",
+        offersColumnProfiling: false,
+        offersCodeGeneration: false,
+        offersCountQuery: false,
+      },
       snmp: {
         tabType: "snmp",
         offersColumnProfiling: false,

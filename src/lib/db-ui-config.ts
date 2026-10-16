@@ -1358,6 +1358,7 @@ export const DB_UI_CONFIG: Record<DatabaseType, DatabaseUIConfig> = {
     // The dialog's own sentence says the mode can be turned off, which is false here.
     readOnlyHint:
       "MTConnect connections are read-only whether or not this is ticked: Studio sends the agent GET requests from a closed table and nothing else.",
+  },
   snmp: {
     // A mark drawn for Studio: a trunk with three numbered stops descending from it, because an
     // agent answers from a named tree and is read by walking it. Not a router silhouette, which

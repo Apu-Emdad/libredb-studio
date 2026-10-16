@@ -991,7 +991,7 @@ export interface ProviderCapabilities {
     | "rabbitmq"
     | "kubectl"
     | "opcua"
-    | "mtconnect";
+    | "mtconnect"
     | "snmp";
   supportsExplain: boolean;
   /**

@@ -185,6 +185,10 @@ export const QUERY_DIALECTS: Readonly<Record<QueryDialect, DialectSpec>> = Objec
   // nothing for history to mask.
   mtconnect: Object.freeze({
     tabType: "mtconnect",
+    offersColumnProfiling: false,
+    offersCodeGeneration: false,
+    offersCountQuery: false,
+  }),
   // Registered rather than left absent, and the measurement is why: with no dialect the registry
   // fell back to MongoDB's tab, so a tree click on an SNMP object would have opened a MongoDB
   // editor and the generator would have written a `find`. No profiling, because summarising a

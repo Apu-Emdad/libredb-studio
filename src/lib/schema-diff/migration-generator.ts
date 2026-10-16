@@ -310,6 +310,7 @@ const NO_COLUMN_MODIFICATION: Partial<Record<DatabaseType, { label: string; reas
     label: "MTConnect",
     reason:
       "An MTConnect data item's shape is declared in the agent's own device model, not in columns a client can change, and every request this provider sends is a GET, so there is no column definition to change.",
+  },
   snmp: {
     label: "SNMP",
     reason:

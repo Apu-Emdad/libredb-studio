@@ -413,6 +413,7 @@ export async function createDatabaseProvider(
       // The explicit /index specifier keeps this dynamic import statically analysable.
       const { MTConnectProvider } = await import("./providers/industrial/mtconnect/index");
       return new MTConnectProvider(connection, options);
+    }
     // SNMP: an agent on a device, read over UDP by this repository's own client through the
     // shared egress rule. Read-only not by a flag but by construction: the outgoing valve parses
     // every datagram and refuses any PDU that is not a Get, GetNext or GetBulk, so a Set never
