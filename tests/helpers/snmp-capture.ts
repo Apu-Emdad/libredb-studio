@@ -12,7 +12,14 @@
  * to the wire until 14 October 2026, and a key that ignored it would match a broken request to a
  * healthy answer, which is the one thing these recordings must never do.
  */
-import { readChildren, readField } from "@/lib/db/providers/network/snmp/ber";
+import {
+  type BerField,
+  readChildren,
+  readField,
+  TAG_INTEGER,
+  writeLength,
+  writeSequence,
+} from "@/lib/db/providers/network/snmp/ber";
 
 export interface CapturedExchange {
   /** The key below, as text. */
@@ -52,19 +59,42 @@ export function keyOf(request: ReturnType<typeof readRequest>): string {
   return `pdu=${request.pduTag} max=${request.thirdInteger} oids=${request.oids.join(",")}`;
 }
 
-/** The same answer with the live request's id written over the recorded one. */
+/**
+ * The same answer with the live request's id written over the recorded one.
+ *
+ * REBUILT RATHER THAN OVERWRITTEN IN PLACE, and the reason is measured. An id is an ASN.1
+ * INTEGER, so its width follows its value: `randomInt(1, 0x7fffffff)` encodes in four octets
+ * 99.61% of the time and in three 0.39% of the time, while all eight recordings carry four. The
+ * first version of this function wrote the id over the recorded one only when the widths matched
+ * and otherwise returned the recording UNCHANGED - which answers a live request with a stranger's
+ * id. The provider drops that answer, correctly, and then waits its whole deadline for one that
+ * never comes.
+ *
+ * MEASURED: with the generator narrowed to two octets, this file's first two cases time out at
+ * the runner's 5000 ms budget, which is exactly the shape CI reported on 16 October 2026. At the
+ * real width the odds are about four in a thousand per request, so the suite drew it once in
+ * however many runs this branch has had.
+ *
+ * So the fields are re-encoded through the provider's own writers: the id becomes a fresh INTEGER
+ * of whatever width it needs, and the two enclosing lengths are computed rather than patched. The
+ * recorded BODY - the varbinds the agent decided - is copied as it stands.
+ */
 export function withRequestId(answer: Uint8Array, idBytes: Uint8Array): Uint8Array {
-  const [, , pduField] = readChildren(answer, readField(answer, 0));
+  const [version, community, pduField] = readChildren(answer, readField(answer, 0));
   const pdu = readChildren(answer, pduField);
-  const field = pdu[0];
-  const out = Uint8Array.from(answer);
-  if (field.end - field.start !== idBytes.length) {
-    // Same width or nothing: a different width would move every field after it, and silently
-    // re-encoding the whole datagram here would make the recording say something it did not.
-    return out;
-  }
-  out.set(idBytes, field.start);
-  return out;
+  // Each field re-encoded from its own tag, length and content. NOT from a header width computed
+  // backwards from the byte before the content: that byte is the LAST length octet, and in the
+  // long form - which the sixteen-varbind answers use - its value is part of the length rather
+  // than the header's size. Reading it as a header width is what made the walk cases fail while
+  // the single-value ones passed, measured on 16 October 2026.
+  const tlv = (field: BerField): Uint8Array =>
+    Uint8Array.from([field.tag, ...writeLength(field.end - field.start), ...answer.slice(field.start, field.end)]);
+  const id = Uint8Array.from([TAG_INTEGER, ...writeLength(idBytes.length), ...idBytes]);
+  return writeSequence([
+    tlv(version),
+    tlv(community),
+    writeSequence([id, tlv(pdu[1]), tlv(pdu[2]), tlv(pdu[3])], pduField.tag),
+  ]);
 }
 
 function headerLength(buf: Uint8Array, field: { readonly start: number }): number {
