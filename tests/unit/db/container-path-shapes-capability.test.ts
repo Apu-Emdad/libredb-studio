@@ -64,6 +64,7 @@ const EXPECTED_CONTAINER_PATH_SHAPES: Readonly<
   // One level, the agent's devices, and a path is the device name exactly as the probe document
   // spells it: nothing is prefixed and nothing is derived (#1722).
   mtconnect: "exact",
+  snmp: "absent",
   libredb: "exact",
   duckdb: "prefixes",
   mssql: "prefixes",

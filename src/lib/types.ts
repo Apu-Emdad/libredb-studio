@@ -206,7 +206,8 @@ export type DatabaseType =
   // Basic answers with an HTML 401 rather than an MTConnect document, which the provider reports as what it is.
   // Read-only is structural rather than a mode: the request table holds nine routes and every one of them is a GET,
   // so there is nothing to send that writes.
-  | "mtconnect";
+  | "mtconnect"
+  | "snmp";
 
 export type ConnectionEnvironment = "production" | "staging" | "development" | "local" | "other";
 
@@ -942,7 +943,8 @@ export interface QueryTab {
     | "firestore"
     | "rabbitmq"
     | "opcua"
-    | "mtconnect";
+    | "mtconnect"
+    | "snmp";
   viewMode?: "results" | "explain" | "history" | "saved";
   explainPlan?: unknown;
   // Pagination state

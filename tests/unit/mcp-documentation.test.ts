@@ -54,9 +54,10 @@ describe("docs/MCP.md", () => {
       (type) => DB_UI_CONFIG[type].label,
     );
     // The control that the record answers: etcd, Oxia, S3, Kubernetes, MQTT, Firestore and OPC UA are the engines it
-    // refuses today.
+    // refuses today, with SNMP (#1721) the eighth: a Get is a read of one numbered object, and the
+    // tools answer schemas rather than objects.
     expect(refused).toEqual(
-      ["etcd", "oxia", "s3", "kubernetes", "mqtt", "firestore", "opcua"].map(
+      ["etcd", "oxia", "s3", "kubernetes", "mqtt", "firestore", "opcua", "snmp"].map(
         (type) => DB_UI_CONFIG[type as DatabaseType].label,
       ),
     );

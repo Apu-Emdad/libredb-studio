@@ -58,6 +58,7 @@ const COLUMN_GRAMMAR: Record<DatabaseType, [string, string] | null> = {
   opcua: null,
   // No migration dialect: a data item's shape is the agent's own model, which no client writes (#1722).
   mtconnect: null,
+  snmp: null,
 };
 
 describe("migration dialect regressions (#284)", () => {

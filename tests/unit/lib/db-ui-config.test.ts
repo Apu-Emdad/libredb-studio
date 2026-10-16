@@ -122,6 +122,7 @@ const ALL_TYPES: DatabaseType[] = [
   "rabbitmq",
   "opcua",
   "mtconnect",
+  "snmp",
 ];
 
 describe("db-ui-config", () => {
@@ -334,9 +335,14 @@ describe("db-ui-config", () => {
       expect(offersSshTunnel("postgres")).toBe(true);
     });
 
-    test("only kafka's, bigquery's, snowflake's, firestore's and rabbitmq's connections refuse an SSH tunnel, and only because their entries declare it", () => {
+    test("only kafka's, bigquery's, snowflake's, firestore's, rabbitmq's and snmp's connections refuse an SSH tunnel, and only because their entries declare it", () => {
       // Derived from the declaration rather than typed out: a tunnel forwards one address, and a
       // Kafka client reaches every broker at the address the broker advertises (docs/providers/kafka.md).
+      // SNMP refuses it for a different reason, and the difference is worth keeping: something WOULD read it,
+      // because `factory.ts` opens a tunnel for any connection that carries one with no test on the engine.
+      // MEASURED: the shared tunnel is a local TCP listener (`src/lib/ssh/tunnel.ts`, `net.createServer` plus
+      // `forwardOut`, and `dgram` appears zero times in it), and this provider sends datagrams. The factory
+      // would rewrite host and port to that TCP endpoint and the reads would go nowhere (#1721).
       for (const type of ALL_TYPES) {
         expect({ type, offered: offersSshTunnel(type) }).toEqual({
           type,
@@ -344,18 +350,22 @@ describe("db-ui-config", () => {
         });
       }
       const refusing = ALL_TYPES.filter((type) => !offersSshTunnel(type));
-      expect(refusing.sort()).toEqual(["bigquery", "firestore", "kafka", "rabbitmq", "snowflake"]);
+      expect(refusing.sort()).toEqual(["bigquery", "firestore", "kafka", "rabbitmq", "snmp", "snowflake"]);
       // A file-based engine still answers true: its panel is hidden by isFileBased instead.
       expect(offersSshTunnel("sqlite")).toBe(true);
     });
 
-    test("only bigquery's, snowflake's, firestore's and opcua's connections withhold the SSL panel, and only because their entries declare it", () => {
+    test("only bigquery's, snowflake's, firestore's, opcua's and snmp's connections withhold the SSL panel, and only because their entries declare it", () => {
       // BigQuery always speaks HTTPS to googleapis.com with the system trust store, and Snowflake to the account host with
       // the certificate checked against that name, so an SSL mode is read by nothing.
       // OPC UA's transport security is its own: a security mode of None, Sign or SignAndEncrypt and a pinned server
       // certificate, with the client's key pair in the installation's PKI directory. The shared panel's vocabulary
       // names nothing a server offers, and a reader who chose `require` there was refused with a word this engine
       // does not know (#1677).
+      // SNMP has no session to secure at all: the transport is bare UDP (`createSocket("udp4")`), and MEASURED,
+      // the nineteen files of that provider read `sslMode`, `sslCa`, `sslCert`, `sslKey` and `rejectUnauthorized`
+      // zero times. Its own consent hint says there is no transport security under a v2c datagram, which a panel
+      // offering `verify-full` beside it would contradict; v3's answer is USM, inside the message (#1721).
       for (const type of ALL_TYPES) {
         expect({ type, offered: offersSslPanel(type) }).toEqual({
           type,
@@ -366,6 +376,7 @@ describe("db-ui-config", () => {
         "bigquery",
         "firestore",
         "opcua",
+        "snmp",
         "snowflake",
       ]);
     });
@@ -1002,7 +1013,7 @@ describe("declared connection-field copy (#1085)", () => {
     // The consent box draws the type's own sentence, with no fallback, so a type that takes the field and declares no
     // hint would draw an empty paragraph under the box (InfluxDB spec R4).
     const taking = ALL_TYPES.filter((type) => takesConnectionField(type, "allowInsecureAuth"));
-    expect(taking).toEqual(["db2", "influxdb", "influxdb3", "oxia", "databend", "s3", "mqtt", "rabbitmq"]);
+    expect(taking).toEqual(["db2", "influxdb", "influxdb3", "oxia", "databend", "s3", "mqtt", "rabbitmq", "snmp"]);
     for (const type of taking) {
       const hint = connectionFieldHint(getDBConfig(type), "allowInsecureAuth");
       expect({ type, hint: typeof hint, empty: hint?.length === 0 }).toEqual({ type, hint: "string", empty: false });
@@ -1037,6 +1048,7 @@ describe("declared connection-field copy (#1085)", () => {
       // OPC UA relabels Host as the endpoint URL and adds its own two boxes, each with a hint (#1677).
       "opcua",
       "mtconnect",
+      "snmp",
     ]);
     // The control that the walk saw the whole table rather than nothing.
     expect(Object.keys(DB_UI_CONFIG).sort()).toEqual([...ALL_TYPES].sort());
@@ -1567,6 +1579,7 @@ describe("db-showcase", () => {
         // name on a page of databases, so no existing engine moves for it (#1677).
         "opcua",
         "mtconnect",
+        "snmp",
       ]);
     });
   });
