@@ -118,6 +118,24 @@ test.describe("NETCONF in the connection dialog", () => {
     await expect(page.locator('[role="dialog"]').locator("#serverCertificateThumbprint")).toHaveCount(0);
   });
 
+  test("no SSL / TLS panel is offered, because this transport's security is its own", async ({ page }) => {
+    /*
+     * ABSENCE tied to `showSslPanel: false`, and the third of this engine's three. It is measured
+     * HERE and not only in the two tests that already hold it, because those two are joined by a
+     * mock: `tests/unit/lib/db-ui-config.test.ts` pins that the REAL entry declares `false`, and
+     * `tests/components/ConnectionModal.test.tsx` pins that `false` removes the panel - but it
+     * declares that flag on a MOCK entry, so neither one draws the real netconf entry on a screen.
+     *
+     * This is also the absence whose reason the config calls the worst of the three: the panel was
+     * not answered with a word this engine does not know, it was read by nothing at all, so a
+     * reader who chose `verify-full` was shown no objection and given no verification either.
+     *
+     * The selector is not vacuous: `ConnectionModal.test.tsx` asserts this same text IS drawn for
+     * an engine that declares no flag, and Kafka's case asserts it is kept.
+     */
+    await expect(page.locator('[role="dialog"]').getByText("SSL / TLS", { exact: false })).toHaveCount(0);
+  });
+
   test("no connection string is offered, because this protocol has no address to paste", async ({ page }) => {
     // ABSENCE tied to `showConnectionStringToggle: false`. MEASURED in the config's own comment:
     // `netconf://host:830`, `ssh://host:830` and a bare `host:830` are all answered `null` by the
