@@ -24,6 +24,7 @@
  */
 import { BaseDatabaseProvider } from "@/lib/db/base-provider";
 import { ConnectionError, DatabaseConfigError, QueryError } from "@/lib/db/errors";
+import { isTlsFailureCode, type NodeTlsMaterial } from "@/lib/db/http/node-transport";
 import type {
   ActiveSessionDetails,
   Container,
@@ -61,6 +62,7 @@ import {
   SPARKPLUG_KINDS,
   SPARKPLUG_OBJECT_KINDS,
 } from "./objects";
+import { sparkplugTlsMaterial } from "./connection-options";
 import { describeScope, parseReadQuery } from "./request";
 import { buildRows, describeResult, RESULT_FIELDS } from "./results";
 import { readOnce, type TransportFactory } from "./session";
@@ -73,6 +75,14 @@ export { SPARKPLUG_DEFAULT_PORT };
 export interface SparkplugReadRequest {
   readonly host: string;
   readonly port: number;
+  /**
+   * The SSL / TLS panel as the socket takes it, or null for a plain socket.
+   *
+   * It is part of the REQUEST and not of the transport's own setup because the dialog's panel is
+   * part of what the user asked for: a read against a TLS-only broker is a different read from one
+   * against a plain port, and a request that cannot carry it leaves the panel with nowhere to go.
+   */
+  readonly tls?: NodeTlsMaterial | null;
   /** One group, or empty for every group. */
   readonly groupId: string;
   readonly filters: readonly string[];
@@ -106,6 +116,8 @@ export interface SparkplugReadOutcome {
   readonly unresolved?: readonly UnresolvedValue[];
   /** The broker's own reason code, when a refusal carried one. */
   readonly refusalCode?: number;
+  /** The runtime's code for the error that ended the dial, when there was one. */
+  readonly transportErrorCode?: string;
   readonly endReason: string;
   readonly messagesSeen: number;
   readonly bytesSeen: number;
@@ -141,6 +153,7 @@ export async function dialAndRead(
     port: request.port,
     filters: request.filters,
     windowMs: request.windowSeconds * 1000,
+    ...(request.tls === undefined ? {} : { tls: request.tls }),
     maxMessages: MAX_MESSAGES_PER_READ,
     maxBytes: MAX_BYTES_PER_READ,
     ...(openTransport === undefined ? {} : { openTransport }),
@@ -150,6 +163,7 @@ export async function dialAndRead(
     state: folded.state,
     unresolved: folded.unresolved,
     ...(outcome.refusalCode === undefined ? {} : { refusalCode: outcome.refusalCode }),
+    ...(outcome.transportErrorCode === undefined ? {} : { transportErrorCode: outcome.transportErrorCode }),
     endReason: outcome.endReason,
     messagesSeen: outcome.messages.length,
     bytesSeen: outcome.bytesSeen,
@@ -250,12 +264,17 @@ export class SparkplugProvider extends BaseDatabaseProvider {
           "holding one cannot be subscribed to on its own. Leave the field empty to read every group.",
       );
 
+    // THE PANEL IS READ HERE, BEFORE ANY SOCKET, for the reason every other refusal in this method
+    // is here: a malformed panel is a sentence about the form rather than about the broker.
+    const tls = sparkplugTlsMaterial(this.config, host);
+
     return {
       host,
       port,
       groupId,
       filters: readFilters(groupId === "" ? undefined : groupId),
       windowSeconds,
+      tls,
     };
   }
 
@@ -286,7 +305,23 @@ export class SparkplugProvider extends BaseDatabaseProvider {
     // user their request was wrong when what was wrong was the address. The two that happen BEFORE
     // a session exists are connection failures; the two that happen after it opened are refusals of
     // this read, and those stay QueryErrors.
-    if (outcome.endReason === "dial-failed")
+    if (outcome.endReason === "dial-failed") {
+      // A TLS FAILURE IS NOT AN ADDRESS FAILURE, and the old sentence said it was. The dial ended
+      // before any MQTT byte either way, so the end reason is the same; what differs is what the
+      // user has to change. The runtime's code decides: a certificate verification name arrives
+      // without the `ERR_` prefix (OpenSSL's X509_V_ERR_* names, `UNABLE_TO_VERIFY_LEAF_SIGNATURE`
+      // measured against a CA that signed nothing), and the host name check is
+      // ERR_TLS_CERT_ALTNAME_INVALID. Both are the panel's business; anything else is the address's.
+      const code = outcome.transportErrorCode;
+      if (code !== undefined && isTlsFailureCode(code))
+        throw new ConnectionError(
+          `${request.host}:${request.port} presented a certificate Studio does not trust for this host: ` +
+            "check the CA certificate under SSL / TLS, and that the certificate names the host set in the " +
+            `connection. The runtime's own reason was ${code}.`,
+          "sparkplug",
+          request.host,
+          request.port,
+        );
       throw new ConnectionError(
         `Could not open a connection to ${request.host}:${request.port}. Nothing was read, so this is ` +
           "not an empty broker: check the address, the port and whether the broker accepts a connection " +
@@ -295,6 +330,7 @@ export class SparkplugProvider extends BaseDatabaseProvider {
         request.host,
         request.port,
       );
+    }
     if (outcome.endReason === "connect-refused")
       throw new ConnectionError(
         `The broker at ${request.host}:${request.port} refused the connection.${code} The address and the ` +

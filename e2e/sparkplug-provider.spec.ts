@@ -70,6 +70,46 @@ test.describe("Sparkplug B in the connection dialog", () => {
     await expect(dialog.locator("#allowInsecureAuth")).toHaveCount(0);
   });
 
+  /**
+   * THE PANEL HAS TO BE OPENED BEFORE ANYTHING ABOUT IT CAN BE MEASURED, which is why this case
+   * clicks twice before it asserts. Measured on this dialog: with the SSL / TLS panel closed the
+   * three boxes are not in the DOM at all, so a broadly written claim - "the dialog draws no
+   * certificate box" or "no CA field is on the page" - stays green while the panel sits one click
+   * away with all three. The case above this one is right about what it measures (`#user`,
+   * `#password` and `#allowInsecureAuth` are absent) and its reason covers these boxes too, but it
+   * never reaches them; this one does.
+   *
+   * WHAT IT PINS. The panel is offered because TLS is a real capability of this transport: 8883 is
+   * the IANA TLS port for MQTT, and since #1720's TLS wiring the provider reads every one of these
+   * three fields (`tests/integration/db/sparkplug-provider.test.ts`, the four SSL / TLS cases).
+   * Hiding the panel would hide a working capability, so its disappearance should fail here.
+   */
+  test("the SSL / TLS panel, once opened, draws the three boxes the provider reads", async ({ page }) => {
+    const dialog = page.locator('[role="dialog"]');
+    await dialog.getByRole("button", { name: "Sparkplug B", exact: true }).click();
+
+    // Closed: the absence that makes a broad assertion worthless.
+    await expect(dialog.getByText("CA Certificate (PEM)", { exact: true })).toHaveCount(0);
+
+    // OPENING IS NOT ENOUGH EITHER, and that is the second thing a broad claim would miss: the
+    // mode starts at `disable` (`use-connection-form.ts`, `sslMode: "disable"`), and every box
+    // below the mode row is drawn only where the mode is something else.
+    await dialog.getByRole("button", { name: "SSL / TLS" }).click();
+    await expect(dialog.getByTestId("ssl-mode-hint")).toBeVisible();
+    await expect(dialog.getByText("CA Certificate (PEM)", { exact: true })).toHaveCount(0);
+
+    await dialog.getByRole("button", { name: "require", exact: true }).click();
+    await expect(dialog.getByText("CA Certificate (PEM)", { exact: true })).toBeVisible();
+    // `require` carries no client material, so the two client boxes are still absent here.
+    await expect(dialog.getByText("Client Certificate (PEM)", { exact: true })).toHaveCount(0);
+    await expect(dialog.getByText("Client Private Key (PEM)", { exact: true })).toHaveCount(0);
+
+    await dialog.getByRole("button", { name: "verify-ca", exact: true }).click();
+    await expect(dialog.getByText("CA Certificate (PEM)", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Client Certificate (PEM)", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Client Private Key (PEM)", { exact: true })).toBeVisible();
+  });
+
   test("the Database box is NOT called Database, because the word would name the wrong thing", async ({ page }) => {
     // A group is a level of the topic, not a database on the broker, and the dialog says so by
     // never using the house word for this box. The absence is the claim.

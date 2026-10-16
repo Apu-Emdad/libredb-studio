@@ -24,6 +24,7 @@ import { connect as netConnect, type Socket } from "node:net";
 import { connect as tlsConnect } from "node:tls";
 import { QueryError } from "@/lib/db/errors";
 import { socketEgress } from "@/lib/db/http/egress-policy";
+import { type NodeTlsMaterial, nodeTlsConnectOptions } from "@/lib/db/http/node-transport";
 import {
   CLIENT_ID_PREFIX,
   CLIENT_ID_RANDOM_BYTES,
@@ -110,7 +111,15 @@ export interface SessionOptions {
   readonly pingIntervalMs?: number;
   readonly maxMessages: number;
   readonly maxBytes: number;
-  readonly tls?: boolean;
+  /**
+   * The SSL / TLS panel as `tls.connect` takes it, or null/absent for a plain socket.
+   *
+   * IT IS THE MATERIAL AND NOT A FLAG, which is the whole fix: a boolean can only say "use TLS"
+   * and the panel's CA, client certificate, key and identity have nowhere to go, so a dial would
+   * verify against the system store and against the address dialled. `nodeTlsConnectOptions`
+   * carries all of it, including `servername` and `checkServerIdentity`.
+   */
+  readonly tls?: NodeTlsMaterial | null;
   readonly user?: string;
   readonly password?: string;
   /** The test seam. Given, no socket is opened and no address is resolved. */
@@ -146,6 +155,16 @@ export interface ReadOutcome {
    * the one a refused wildcard gives.
    */
   readonly refusalCode?: number;
+  /**
+   * The runtime's own code for the error that ended the dial, when there was one.
+   *
+   * CARRIED AND NOT DISCARDED, which is the fix: the handler used to be `() => stop("dial-failed")`,
+   * so a TLS verification failure and an address with nothing on it reached the caller as the same
+   * fact and earned the same sentence - *"check the address, the port"* - for a connection whose
+   * address and port were both right. The code is the runtime's word (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`,
+   * measured here with a CA that signed nothing), and the sentence is the provider's.
+   */
+  readonly transportErrorCode?: string;
   readonly elapsedMs: number;
   /**
    * True when the broker answered with a CONNACK the session accepted, which is the only evidence
@@ -195,11 +214,12 @@ async function newParser(): Promise<ParserLike> {
 function openSocket(options: SessionOptions): { transport: Transport; readyEvent: string } {
   const lookup = socketEgress(options.host, { refusesLinkLocal: true });
   const common = { host: options.host, port: options.port, ...(lookup === undefined ? {} : { lookup }) };
+  const tls = options.tls ?? null;
   const socket: Socket =
-    options.tls === true
-      ? (tlsConnect({ ...common, servername: options.host }) as unknown as Socket)
-      : netConnect(common);
-  return { transport: socket as unknown as Transport, readyEvent: options.tls === true ? "secureConnect" : "connect" };
+    tls === null ? netConnect(common) : (tlsConnect({ ...common, ...nodeTlsConnectOptions(tls) }) as unknown as Socket);
+  // `secureConnect` and not `connect`: on a TLS socket `connect` fires before the handshake, so a
+  // CONNECT written on it would go out before the peer is verified.
+  return { transport: socket as unknown as Transport, readyEvent: tls === null ? "connect" : "secureConnect" };
 }
 
 /**
@@ -222,6 +242,7 @@ export async function readOnce(options: SessionOptions): Promise<ReadOutcome> {
   let payloadsDropped = 0;
   let handshook = false;
   let ended: EndReason | undefined;
+  let transportErrorCode: string | undefined;
   let refusalCode: number | undefined;
   let finish: (() => void) | undefined;
 
@@ -315,7 +336,11 @@ export async function readOnce(options: SessionOptions): Promise<ReadOutcome> {
     parser.parse(chunk);
   });
 
-  transport.on("error", () => stop("dial-failed"));
+  transport.on("error", (error: Error) => {
+    const code = (error as Error & { readonly code?: unknown }).code;
+    if (typeof code === "string") transportErrorCode = code;
+    stop("dial-failed");
+  });
   transport.on("close", () => stop("broker-closed"));
 
   const timer = setTimeout(() => stop("time-budget"), options.windowMs);
@@ -356,6 +381,7 @@ export async function readOnce(options: SessionOptions): Promise<ReadOutcome> {
     messages,
     endReason: ended ?? "time-budget",
     ...(refusalCode === undefined ? {} : { refusalCode }),
+    ...(transportErrorCode === undefined ? {} : { transportErrorCode }),
     bytesSeen,
     payloadsDropped,
     handshook,

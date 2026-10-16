@@ -19,10 +19,12 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
+import { createServer as createTlsServer, type TLSSocket } from "node:tls";
 import path from "node:path";
 
 import { createDatabaseProvider } from "@/lib/db/factory";
 import type { DatabaseConnection, QueryResult } from "@/lib/types";
+import { loadTlsFixtures } from "../../helpers/tls-fixtures";
 
 const ROOT = path.join(import.meta.dir, "..", "..", "..");
 const CAPTURE = JSON.parse(readFileSync(path.join(ROOT, "tests/fixtures/sparkplug/plant.json"), "utf8")) as {
@@ -114,9 +116,12 @@ function read(statement: string, group = ""): Promise<Replay> {
   return started;
 }
 
-async function replay(statement: string, group: string): Promise<Replay> {
-  const seen: string[] = [];
-  const server: Server = createServer((socket: Socket) => {
+/**
+ * The broker's side of one read, for a plain socket and a TLS one alike: CONNACK, then SUBACK and
+ * every captured packet the subscription asked for. `seen` collects the filters it was asked.
+ */
+function broker(seen: string[]): (socket: Socket | TLSSocket) => void {
+  return (socket: Socket | TLSSocket) => {
     socket.on("data", (chunk: Buffer) => {
       let buffered = chunk;
       while (buffered.length >= 2) {
@@ -141,7 +146,14 @@ async function replay(statement: string, group: string): Promise<Replay> {
         }
       }
     });
-  });
+    // A TLS endpoint ends a refused handshake on the server side too; nothing here is measured from it.
+    socket.on("error", () => {});
+  };
+}
+
+async function replay(statement: string, group: string): Promise<Replay> {
+  const seen: string[] = [];
+  const server: Server = createServer(broker(seen));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as { port: number };
   const provider = await createDatabaseProvider({
@@ -327,5 +339,117 @@ describe("the Group field, measured by what the provider subscribes to", () => {
     expect(rows.length).toBeGreaterThan(0);
     expect([...new Set(rows.map((row) => row.group))]).toEqual(["AnkaraPlant"]);
     expect(valueOf(rows, "MixerSpeed")).toBe("1450");
+  });
+});
+
+/**
+ * THE SSL / TLS PANEL, AGAINST A REAL TLS ENDPOINT (#1720).
+ *
+ * The dialog offers this engine the panel - `offersSslPanel` is opt-out and this entry does not opt
+ * out - and before these four cases nothing in `src/` read it: `SessionOptions` carried a `tls`
+ * flag and a real `tlsConnect` branch, and no caller ever set either. A connection to a TLS-only
+ * broker failed with the plain socket's own sentence, and the CA under the panel changed nothing.
+ *
+ * THE FOUR ARE ONE MEASUREMENT AND NOT FOUR EXAMPLES:
+ *   control    a plain endpoint, no panel          -> the rows this file's other cases read
+ *   the fix    a TLS endpoint, the fixture's CA    -> THE SAME ROWS, which is the read that could
+ *                                                     not be taken before the panel was wired
+ *   negative   a TLS endpoint, a CA that signed    -> refused, and the refusal names the certificate
+ *              nothing                                rather than the address
+ *   symptom    a TLS endpoint, no panel            -> no connection, and the message says nothing
+ *                                                     about a certificate, because none was checked
+ *
+ * THE NEGATIVE IS THE ONE THAT MATTERS. A panel that is carried and ignored passes the first two:
+ * the fix case would connect because the endpoint's certificate is in the system store of nothing,
+ * and the control is unaffected. What separates "the CA is applied" from "the CA is along for the
+ * ride" is a CA that must fail, failing.
+ */
+describe("the SSL / TLS panel against a real TLS endpoint", () => {
+  const TLS = loadTlsFixtures();
+
+  interface Dialled {
+    readonly rows: readonly Record<string, unknown>[];
+    readonly refusal: string;
+  }
+
+  /** One read against a plain or a TLS endpoint, with the panel the case gives, refusal and all. */
+  async function dialled(overTls: boolean, panel?: unknown): Promise<Dialled> {
+    const seen: string[] = [];
+    const server: Server = overTls
+      ? (createTlsServer({ cert: TLS.server.cert, key: TLS.server.key }, broker(seen)) as unknown as Server)
+      : createServer(broker(seen));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as { port: number };
+    try {
+      const provider = await createDatabaseProvider({
+        id: "sparkplug-tls",
+        name: "fixture",
+        type: "sparkplug",
+        host: "127.0.0.1",
+        port,
+        database: "",
+        ...(panel === undefined ? {} : { ssl: panel }),
+      } as unknown as DatabaseConnection);
+      try {
+        await provider.connect();
+        const result: QueryResult = await provider.query('{"seconds":1}');
+        return { rows: (result.rows ?? []) as readonly Record<string, unknown>[], refusal: "" };
+      } finally {
+        await provider.disconnect();
+      }
+    } catch (error) {
+      return { rows: [], refusal: (error as Error).message };
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }
+
+  /**
+   * The control read, taken once and shared.
+   *
+   * ONE READ AND NOT TWO PER CASE, measured: every case waits out a real one-second window on a
+   * real socket, and a case that read the plain endpoint as well as the TLS one crossed bun's
+   * 5000 ms per-test default and failed as a timeout rather than on anything it measured.
+   */
+  let control: Promise<Dialled> | undefined;
+  const controlOnce = (): Promise<Dialled> => {
+    control ??= dialled(false);
+    return control;
+  };
+
+  test("control: a plain endpoint with no panel reads the plant", async () => {
+    const { rows, refusal } = await controlOnce();
+    expect(refusal).toBe("");
+    expect(rows.length).toBeGreaterThan(0);
+    expect(valueOf(rows, "MixerSpeed")).toBe("1450");
+  });
+
+  test("the fix: a TLS endpoint with the panel's CA reads the same plant", async () => {
+    const plain = await controlOnce();
+    const { rows, refusal } = await dialled(true, { mode: "verify-full", caCert: TLS.ca });
+    expect(refusal).toBe("");
+    // `verify-full` and not `verify-ca`: the host name is checked too, which for 127.0.0.1 reads the
+    // certificate's IP SAN. A read that only verified the chain would pass a weaker case than this.
+    expect(rows.length).toBe(plain.rows.length);
+    expect(valueOf(rows, "MixerSpeed")).toBe("1450");
+  });
+
+  test("negative: a CA that signed nothing is refused, by the certificate and not by the address", async () => {
+    const { rows, refusal } = await dialled(true, { mode: "verify-full", caCert: TLS.otherCa });
+    expect(rows).toEqual([]);
+    expect(refusal).toContain("presented a certificate Studio does not trust for this host");
+    expect(refusal).toContain("check the CA certificate under SSL / TLS");
+    // NOT the address sentence: both the address and the port were right, and saying otherwise sent
+    // a user to check the two things that were not wrong.
+    expect(refusal).not.toContain("check the address, the port");
+  });
+
+  test("symptom: a TLS endpoint with no panel does not connect, and no certificate is mentioned", async () => {
+    const { rows, refusal } = await dialled(true);
+    expect(rows).toEqual([]);
+    expect(refusal).toContain("accepted a connection and then answered nothing");
+    expect(refusal).toContain("the port does not require TLS");
+    // Nothing was verified, so nothing about a certificate may be claimed.
+    expect(refusal.toLowerCase()).not.toContain("certificate");
   });
 });
