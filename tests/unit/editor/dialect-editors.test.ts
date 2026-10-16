@@ -51,6 +51,7 @@ describe("DIALECT_EDITORS", () => {
       "rabbitmq",
       "redis",
       "s3",
+      "snmp",
       "sparkplug",
       "sql",
     ]);
@@ -68,6 +69,7 @@ describe("DIALECT_EDITORS", () => {
       opcua: "json",
       mtconnect: "mtconnect",
       netconf: "json",
+      snmp: "json",
       sparkplug: "json",
       libredb: "libredb",
       redis: "redis",
@@ -101,6 +103,7 @@ describe("DIALECT_EDITORS", () => {
       "opcua",
       "qdrant",
       "rabbitmq",
+      "snmp",
       "sparkplug",
       "sql",
     ]);

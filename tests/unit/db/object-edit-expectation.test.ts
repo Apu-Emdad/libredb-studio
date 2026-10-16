@@ -18,13 +18,14 @@ describe("the Phase 3 census expectation", () => {
   test("the set is five pairs on four engines, etcd's key the fifth (#1089)", () => {
     expect(EXPECTED_EDITABLE_KINDS.length).toBe(5);
     expect(new Set(EXPECTED_EDITABLE_KINDS.map(([type]) => type)).size).toBe(4);
-    // The fleet is EXTERNAL_DATABASE_TYPES.length plus the embedded store, so 41 type-ids, and all
-    // but four of them abstain from editing an object: the abstainers are listed by name in
-    // `tests/helpers/object-edit-expectation.ts`, which is where a new engine is written down, and
-    // the two numerals here only say how many that list holds. Sparkplug B abstains with the rest:
-    // a metric's shape is the birth certificate's, and this provider writes no PUBLISH (#1720).
-    expect(EXPECTED_EDIT_ABSTAINERS.length).toBe(37);
-    expect(EDIT_CENSUS_TYPES.length).toBe(41);
+    // The fleet is EXTERNAL_DATABASE_TYPES.length plus the embedded store, and all but four of
+    // those type-ids abstain from editing an object. The abstainers are listed by name in
+    // `tests/helpers/object-edit-expectation.ts`, which is where a new engine is written down;
+    // the two numerals here only say how long that list is. SNMP and Sparkplug B abstain with
+    // the rest: an SNMP object is a value at a numbered place, and a Sparkplug metric's shape is
+    // the birth certificate's, which no client here writes.
+    expect(EXPECTED_EDIT_ABSTAINERS.length).toBe(38);
+    expect(EDIT_CENSUS_TYPES.length).toBe(42);
   });
 
   test("no pair is written twice", () => {

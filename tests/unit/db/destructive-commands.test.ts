@@ -383,6 +383,7 @@ describe("vocabularyDecidesAlone", () => {
       "mtconnect",
       "modbus",
       "netconf",
+      "snmp",
       "sparkplug",
     ]);
   });
@@ -414,6 +415,7 @@ describe("NON_SQL_DESTRUCTIVE_VOCABULARY", () => {
       "rabbitmq",
       "redis",
       "s3",
+      "snmp",
       "sparkplug",
     ]);
   });
@@ -520,7 +522,7 @@ describe("vocabularySendsToModel", () => {
 
   // What the dialog did for every engine before the field existed, but for etcd, whose row keeps its statements,
   // values included, on this deployment (#1089 E10).
-  test("keeps etcd's, Milvus's, Qdrant's, InfluxDB's, Oxia's, S3's, Kubernetes's, MQTT's, Firestore's, RabbitMQ's, OPC UA's, MTConnect's and Modbus's statements from the AI analysis, and no other shipped type's", () => {
+  test("keeps etcd's, Milvus's, Qdrant's, InfluxDB's, Oxia's, S3's, Kubernetes's, MQTT's, Firestore's, RabbitMQ's, OPC UA's, MTConnect's, Modbus's and SNMP's statements from the AI analysis, and no other shipped type's", () => {
     expect(SHIPPED_DATABASE_TYPES.filter((type) => !vocabularySendsToModel(type))).toEqual([
       "etcd",
       "milvus",
@@ -536,6 +538,7 @@ describe("vocabularySendsToModel", () => {
       "mtconnect",
       "modbus",
       "netconf",
+      "snmp",
       "sparkplug",
     ]);
   });

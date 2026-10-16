@@ -219,6 +219,7 @@ export type DatabaseType =
   // every namespace come from the device's own YANG library, never from a guess, because a wrong
   // namespace answers an empty document rather than an error on both servers measured.
   | "netconf"
+  | "snmp"
   // Eclipse Sparkplug B (#1720). One MQTT subscription read only, the third member of the `industrial/` family,
   // with its own bounded session (`src/lib/db/providers/industrial/sparkplug/`) rather than the shipped MQTT read,
   // because that read returns a map keyed by topic while a Sparkplug read depends on the ORDER of successive
@@ -1012,6 +1013,7 @@ export interface QueryTab {
     | "mtconnect"
     | "modbus"
     | "netconf"
+    | "snmp"
     | "sparkplug";
   viewMode?: "results" | "explain" | "history" | "saved";
   explainPlan?: unknown;

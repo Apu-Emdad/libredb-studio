@@ -140,6 +140,7 @@ export const DIALECT_EDITORS: Readonly<Record<QueryTab["type"], DialectEditor>> 
   modbus: Object.freeze({ monacoId: "json", format: formatJson }),
   // language is XML, and a reader never types any, so no XML editor is registered here.
   netconf: Object.freeze({ monacoId: "json", format: formatJson }),
+  snmp: Object.freeze({ monacoId: "json", format: formatJson }),
   // A Sparkplug read request is a JSON object, as MQTT's and OPC UA's are, so it renders in `json` and
   // Format is the JSON formatter. No console language of its own: the request names a group, an edge node and
   // a window rather than a route, so there is no grammar or route table to register (#1720).

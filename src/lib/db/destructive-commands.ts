@@ -554,6 +554,7 @@ export const NON_SQL_DESTRUCTIVE_VOCABULARY: Readonly<Partial<Record<DatabaseTyp
   // `requests.ts` builds four read operations and a close, and no function in the provider can build an
   // `<edit-config>`, a `<commit>` or a `<lock>`. Naming an operation here would claim this provider can send one.
   netconf: { operations: new Set<string>(), read: () => [], decidesAlone: true, safetyAnalysis: false },
+  snmp: { operations: new Set<string>(), read: () => [], decidesAlone: true, safetyAnalysis: false },
   // Sparkplug B (#1720): a read request names a group, an edge node and a window, so there is no destructive verb
   // to read, and nothing is posted for an AI analysis. The absence is structural: the encoder has no function that
   // writes a PUBLISH, so no console text could change a plant even if one named a verb.

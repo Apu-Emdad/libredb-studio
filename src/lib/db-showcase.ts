@@ -127,18 +127,23 @@ export const SHOWCASE_RANK: Record<DatabaseType, number> = {
   // Last (rank 38): a device's registers are narrower still, and a map the user writes is the only
   // thing that names them, so nothing above it moves for this one either (#1723).
   modbus: 38,
-  // Last (rank 38): a device's configuration tree is the narrowest name of the four, and the people
-  // who know it are network engineers rather than the readers a page of databases is written for, so
-  // nothing above it moves for this one either (#1724).
+  // Rank 39, behind the device's registers: a device's configuration tree is a narrower name still,
+  // and the people who know it are network engineers rather than the readers a page of databases is
+  // written for, so nothing above it moves for this one either (#1724).
   netconf: 39,
-  // Last (rank 40), behind the configuration tree: the name on the box is a specification's rather
+  // Last (rank 40), behind the configuration tree: the three letters are an acronym a reader
+  // either knows from managing networks or does not know at all, and the page is read by people
+  // who came for databases (#1721).
+  snmp: 40,
+  // Last (rank 41), behind the agent's object tree: the name on the box is a specification's rather
   // than a product's, so a reader scanning the login page is least likely to arrive already knowing
   // it (#1720). THE RANK MOVES WITH THE BASE AND THE SENTENCE WITH IT: this entry has been written
-  // against four trees now, whose last engine was in turn NETCONF, MTConnect, Modbus and NETCONF
-  // again. A rank carried from another base collides silently - 37, then 38, then 39 were each
-  // already taken - and the census that covers 0..N-1 is what said so, all three times. Nothing but
-  // that census would: a duplicate rank only reorders two engines on the page.
-  sparkplug: 40,
+  // against five trees now, whose last engine was in turn NETCONF, MTConnect, Modbus, NETCONF again
+  // and SNMP. A rank carried from another base collides silently - 37, 38, 39 and 40 were each
+  // already taken by the time this branch rebased onto them - and the census that covers 0..N-1 is
+  // what said so, all four times. Nothing else would: a duplicate rank only reorders two engines on
+  // the page, so there is no failure to notice and no user to report it.
+  sparkplug: 41,
 };
 
 /**

@@ -324,6 +324,11 @@ const NO_COLUMN_MODIFICATION: Partial<Record<DatabaseType, { label: string; reas
     reason:
       "A NETCONF node's shape is declared in the device's YANG module, which the device serves and a client reads, and this provider builds four read operations and a close, and nothing else, so there is no column definition here for anything to change.",
   },
+  snmp: {
+    label: "SNMP",
+    reason:
+      "An SNMP object's type is declared in the MIB module the device was built with, not in columns a client can change, and this provider's valve refuses any PDU that is not a Get, GetNext or GetBulk, so there is no column definition to change.",
+  },
 
   // Not a table store either (#1720): a metric's shape is declared by the birth certificate the edge
   // node publishes, and this provider's encoder has no function that writes a PUBLISH, so there is
@@ -423,6 +428,7 @@ const NO_TRANSACTION_WRAPPER: ReadonlySet<DatabaseType> = new Set<DatabaseType>(
   "influxdb3",
   "oxia",
   "databend",
+  "snmp",
   // BigQuery runs a statement as its own job; BEGIN TRANSACTION exists only inside a multi-statement script.
   "bigquery",
   // On Databend's reason: a DDL statement commits the open transaction, and each SQL API statement runs in its own
@@ -483,6 +489,7 @@ const NO_TABLE_DDL: ReadonlySet<DatabaseType> = new Set<DatabaseType>([
   // provider has no code that could write one (#1723).
   "modbus",
   "netconf",
+  "snmp",
   // One container level of edge nodes and no schema; a metric's shape is the birth certificate's,
   // and the encoder has no function that writes a PUBLISH (#1720).
   "sparkplug",

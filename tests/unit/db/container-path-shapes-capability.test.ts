@@ -69,6 +69,7 @@ const EXPECTED_CONTAINER_PATH_SHAPES: Readonly<
   modbus: "prefixes",
   // datastore and a module), which is the same shape the other absent engines are in.
   netconf: "absent",
+  snmp: "absent",
   // ABSENT, and measuring the landed rule rather than the behaviour is what corrected this: the old
   // row said `exact` and described the BEHAVIOUR truthfully (two levels, group then edge node, each
   // spelled as the topic spells it, 4.1), but the landed rule is stricter - a type-id declares a value

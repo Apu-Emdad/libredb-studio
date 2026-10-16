@@ -119,6 +119,7 @@ const EXPECTED: Readonly<Record<DatabaseType, boolean>> = Object.freeze({
   // what was asked for: there is no page two to ask for (#1723).
   modbus: false,
   netconf: false,
+  snmp: false,
   // A read is bounded by time, by message count and by bytes, and the next messages are whatever the broker
   // publishes next, not a page a panel can ask the broker for (#1720).
   sparkplug: false,
