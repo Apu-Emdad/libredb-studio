@@ -124,13 +124,16 @@ export const SHOWCASE_RANK: Record<DatabaseType, number> = {
   // Last (rank 37), behind the address space: a machine tool's agent is a narrower name still, so nothing
   // above it moves for it either (#1722).
   mtconnect: 37,
-  // Last (rank 38), behind the agent: the name on the box is a specification's rather than a
+  // Last (rank 38): a device's registers are narrower still, and a map the user writes is the only
+  // thing that names them, so nothing above it moves for this one either (#1723).
+  modbus: 38,
+  // Last (rank 39), behind the register map: the name on the box is a specification's rather than a
   // product's, so a reader scanning the login page is least likely to arrive already knowing it
-  // (#1720). THE RANK AND THE SENTENCE BOTH MOVED WITH THE BASE: this entry was written against a
-  // tree where NETCONF's configuration store sat above it at 39, and on main the engine above it is
-  // MTConnect. A rank carried from another base collides silently - 37 was taken - and the census
-  // that covers 0..N-1 is what said so.
-  sparkplug: 38,
+  // (#1720). THE RANK MOVES WITH THE BASE AND THE SENTENCE WITH IT: this entry was written against a
+  // tree where NETCONF sat above it, then against one whose last engine was MTConnect, and on main
+  // the engine above it is Modbus. A rank carried from another base collides silently - 37 and then
+  // 38 were already taken - and the census that covers 0..N-1 is what said so, twice.
+  sparkplug: 39,
 };
 
 /**

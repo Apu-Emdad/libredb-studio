@@ -129,6 +129,7 @@ const SHIPPED: Readonly<Record<DatabaseType, true>> = Object.freeze({
   // An agent's device model and its observations rather than a store, read through a request table of nine routes
   // that are all GET, so the read-only guarantee is a type rather than a setting.
   mtconnect: true,
+  modbus: true,
   // Eclipse Sparkplug B (#1720): its own provider, doc and integration test, the third member of the
   // `industrial/` family. An MQTT broker's published certificates and data rather than a store, and the
   // read-only guarantee is the absence of code: the encoder has no function that writes a PUBLISH.
@@ -217,6 +218,7 @@ const EXTERNAL: Readonly<Record<DatabaseType, boolean>> = Object.freeze({
   opcua: true,
   // An agent the plant already runs, reached over HTTP at one address the reader types.
   mtconnect: true,
+  modbus: true,
   // A broker the plant already runs, reached over MQTT at one address the reader types.
   sparkplug: true,
   // The one false entry. SQLite is a file rather than a server and is still
@@ -327,6 +329,10 @@ export const READ_ONLY_ENFORCED: Record<DatabaseType, boolean> = Object.freeze({
   // Structural rather than a mode: the request table holds nine routes and every one of them is a GET, so there
   // is no write to enforce against (`src/lib/db/providers/industrial/mtconnect/routes.ts`).
   mtconnect: true,
+  // Structural rather than configured: the encoder names four read function codes and device
+  // identification, and there is no code in the provider that can build a write (#1723 MB-S1,
+  // `src/lib/db/providers/industrial/modbus/valve.ts` re-checks every outbound byte).
+  modbus: true,
   // Structural rather than a mode, and the structure is an absence: `encoder.ts` encodes CONNECT, SUBSCRIBE,
   // UNSUBSCRIBE, PINGREQ and DISCONNECT and has no function that writes a PUBLISH, while the CONNECT takes no
   // will parameter at all, so no later edit can register a death certificate by passing a value (5.4).
@@ -392,6 +398,7 @@ export const READS_FILE_ACCESS_POSTURE: Readonly<Record<DatabaseType, boolean>> 
   rabbitmq: false,
   opcua: false,
   mtconnect: false,
+  modbus: false,
   sparkplug: false,
   libredb: false,
 });
@@ -473,6 +480,10 @@ export const MCP_EXPOSABLE: Readonly<Record<DatabaseType, boolean>> = Object.fre
   // grounded on an address space would be reasoning about figures it cannot qualify.
   opcua: false,
   mtconnect: true,
+  // MCP is outside this provider's first version. A read also needs the register map kept with
+  // the connection, because Modbus has no discovery and a name means only what that document
+  // says it means, so an MCP client has nothing to form a read from on its own.
+  modbus: false,
   // Outside this version, for the reason MQTT's entry gives rather than for the absence of a read query path:
   // a read whose completeness cannot be proved is not a read an agent should be handed without a reader looking
   // at it. Sparkplug has no command that lists edge nodes, so a read reports what it saw during its window and
@@ -532,6 +543,7 @@ export const CONNECTION_FORM_URI_MODE: Readonly<Record<DatabaseType, boolean>> =
   rabbitmq: false,
   opcua: false,
   mtconnect: false,
+  modbus: false,
   // Host and port are the address, as MQTT's are, so there is no string form to parse.
   sparkplug: false,
   libredb: false,
@@ -594,6 +606,7 @@ export const CONNECTION_STRING_ACCEPTED: Readonly<Record<DatabaseType, boolean>>
   opcua: false,
   // Host and port are the address and `apiPath` is a field of its own, so there is no string form to parse.
   mtconnect: false,
+  modbus: false,
   sparkplug: false,
   libredb: false,
 });

@@ -227,6 +227,9 @@ const SOURCE_DECLARATIONS: Readonly<Record<DatabaseType, readonly string[]>> = O
   // Source tab renders it in `xml` rather than re-encoding it as JSON. A data item and a condition
   // carry no document, so neither declares a source (#1722).
   mtconnect: ["asset/xml"],
+  // No kind carries a document. A point's definition is the line the user wrote in their own register
+  // map, which is not the device's and is already in front of them (#1723).
+  modbus: [],
   // Both kinds, in `json`: the readable definition of either is the BIRTH CERTIFICATE that defined it,
   // and a Sparkplug payload is protobuf, so the decoded object is the only readable form of it. The
   // device kind declares one too, because a device's definition is its DBIRTH rather than its node's
@@ -258,6 +261,9 @@ const CENSUS_ABSTAINERS: readonly DatabaseType[] = Object.freeze([
   "influxdb",
   "influxdb3",
   "libredb",
+  // No kind carries a definition text: a point is a line in the user's own register map, which is a
+  // connection field rather than something the device publishes (#1723).
+  "modbus",
 ]);
 
 /** MariaDB's two extra kinds, which arrive only once the flavour has been measured. */
@@ -325,10 +331,12 @@ describe("the fleet census of object source declarations", () => {
     // The population every assertion below iterates. If this were empty or short, each of those
     // loops would certify only the engines it happened to reach, so it is asserted first.
     expect([...CENSUS_TYPES].sort()).toEqual([...SHIPPED_DATABASE_TYPES].sort());
+    // EXTERNAL_DATABASE_TYPES.length (36 with db2, neo4j, milvus, qdrant, influxdb, influxdb3, oxia, databend,
+    // bigquery, snowflake, s3, kubernetes, mqtt, firestore, rabbitmq, opcua and mtconnect) plus the embedded store.
     // EXTERNAL_DATABASE_TYPES.length (38 with db2, neo4j, milvus, qdrant, influxdb, influxdb3, oxia, databend,
     // bigquery, snowflake, s3, kubernetes, mqtt, firestore, rabbitmq, opcua, mtconnect and sparkplug) plus the
     // embedded store.
-    expect(CENSUS_TYPES).toHaveLength(39);
+    expect(CENSUS_TYPES).toHaveLength(40);
     expect(Object.keys(SOURCE_DECLARATIONS).sort()).toEqual([...SHIPPED_DATABASE_TYPES].sort());
   });
 
@@ -353,11 +361,11 @@ describe("the fleet census of object source declarations", () => {
     // two source-bearing kinds, databend four source-bearing kinds, bigquery three kinds, snowflake nine source-bearing
     // kinds and its stage, s3 two source-bearing kinds, kubernetes 37 source-bearing kinds and its Custom Resources
     // kind, firestore one source-bearing kind and one other, rabbitmq three source-bearing kinds, opcua one
-    // source-bearing kind, mtconnect three kinds of which two are not source-bearing (a data item and a
-    // condition), and sparkplug two kinds, BOTH source-bearing: the non-source half is unchanged at 42 and
-    // the whole set grew by exactly those two (#1720).
-    expect(rows.filter((row) => row.kind.hasSource !== true)).toHaveLength(42);
-    expect(rows).toHaveLength(186);
+    // source-bearing kind, mtconnect three kinds of which two are not source-bearing (a data item and a condition),
+    // modbus four kinds of which four are not source-bearing, and sparkplug two kinds, BOTH
+    // source-bearing: the non-source half is 46 and the whole set is 190.
+    expect(rows.filter((row) => row.kind.hasSource !== true)).toHaveLength(46);
+    expect(rows).toHaveLength(190);
   });
 
   test("the MariaDB branch declares two more, which an unconnected provider cannot show", async () => {
@@ -473,7 +481,7 @@ describe("the fleet census of object source declarations", () => {
       }
     }
     // 181 unconnected kinds plus the MariaDB branch's eight: MTConnect's three joined (#1722), of which
-    expect(rows).toHaveLength(194);
+    expect(rows).toHaveLength(198);
 
     const halfDeclared = rows
       .filter((row) => row.kind.sourceLanguage !== undefined && row.kind.hasSource !== true)

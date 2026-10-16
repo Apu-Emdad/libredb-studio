@@ -599,6 +599,8 @@ const STANDS_ALONE: Record<DatabaseType, readonly string[]> = {
   opcua: NOTHING_STANDS_ALONE,
   // A request line is a URL and names observations, not rows: nothing it produces stands alone as a statement.
   mtconnect: NOTHING_STANDS_ALONE,
+  // A read request names points of a map, not rows: nothing it produces stands alone as a statement.
+  modbus: NOTHING_STANDS_ALONE,
   // A read request names a group and a window, not rows: nothing it produces stands alone as a statement.
   sparkplug: NOTHING_STANDS_ALONE,
   // Measured by M08a and M08c on the pinned image: each was created and read back unbounded (`String`, `Timestamp`
@@ -838,6 +840,8 @@ const BINARY_LITERAL: Record<DatabaseType, BinaryLiteral> = {
   opcua: "standard-hex",
   // Every observation value arrives as the text the document carried; the inert default, as RabbitMQ's.
   mtconnect: "standard-hex",
+  // Raw words are shown as hex by the provider itself; the inert default, as MTConnect's.
+  modbus: "standard-hex",
   // Not the inert default here: Sparkplug's Bytes and File datatypes carry real binary, and the value layer
   // already renders them as hex, so an exported cell is the same hex the panel showed (#1720).
   sparkplug: "standard-hex",

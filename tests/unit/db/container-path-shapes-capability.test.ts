@@ -64,6 +64,9 @@ const EXPECTED_CONTAINER_PATH_SHAPES: Readonly<
   // One level, the agent's devices, and a path is the device name exactly as the probe document
   // spells it: nothing is prefixed and nothing is derived (#1722).
   mtconnect: "exact",
+  // A container is one unit id, written as the number the map holds: nothing is prefixed and nothing
+  // is derived (#1723).
+  modbus: "prefixes",
   // ABSENT, and measuring the landed rule rather than the behaviour is what corrected this: the old
   // row said `exact` and described the BEHAVIOUR truthfully (two levels, group then edge node, each
   // spelled as the topic spells it, 4.1), but the landed rule is stricter - a type-id declares a value
@@ -180,7 +183,7 @@ describe("the declaration follows the check (#1147)", () => {
     expect(unknownTypeIds(callerFiles)).toEqual([]);
     const callers = callerFiles.map(providerTypeId).sort();
     const declaring = TYPES.filter((type) => EXPECTED_CONTAINER_PATH_SHAPES[type] !== "absent").sort();
-    expect(callers).toHaveLength(25);
+    expect(callers).toHaveLength(26);
     expect(callers).toEqual(declaring);
   });
 });

@@ -39,6 +39,7 @@ describe("DIALECT_EDITORS", () => {
       "kubectl",
       "libredb",
       "milvus",
+      "modbus",
       "mongodb",
       "mqtt",
       "mtconnect",
@@ -62,6 +63,7 @@ describe("DIALECT_EDITORS", () => {
       sql: "sql",
       mongodb: "json",
       mqtt: "json",
+      modbus: "json",
       opcua: "json",
       mtconnect: "mtconnect",
       sparkplug: "json",
@@ -82,7 +84,7 @@ describe("DIALECT_EDITORS", () => {
     });
   });
 
-  test("only the SQL tab, the five JSON tabs and the Milvus and Qdrant consoles have a formatter", () => {
+  test("only the SQL tab, the six JSON tabs and the Milvus and Qdrant consoles have a formatter", () => {
     const formatted = Object.entries(DIALECT_EDITORS)
       .filter(([, editor]) => editor.format !== undefined)
       .map(([type]) => type)
@@ -90,6 +92,7 @@ describe("DIALECT_EDITORS", () => {
     expect(formatted).toEqual([
       "kafka",
       "milvus",
+      "modbus",
       "mongodb",
       "mqtt",
       "opcua",

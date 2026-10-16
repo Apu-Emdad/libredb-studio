@@ -965,6 +965,10 @@ const DIALECT_GENERATORS: Readonly<Record<QueryDialect, DialectGenerators>> = Ob
     table: (path: readonly string[]) => mtconnectCurrentRequest(path),
     select: (path: readonly string[]) => mtconnectCurrentRequest(path),
   }),
+  modbus: Object.freeze({
+    table: (path: readonly string[]) => modbusReadRequest(path),
+    select: (path: readonly string[]) => modbusReadRequest(path),
+  }),
 
   /*
    * A tree click writes the read request for what was clicked, which is a JSON object rather than a
@@ -978,15 +982,25 @@ const DIALECT_GENERATORS: Readonly<Record<QueryDialect, DialectGenerators>> = Ob
   }),
 });
 
-/** The device's `current`, with the clicked item named in a comment where the path holds one. */
-function mtconnectCurrentRequest(path: readonly string[]): string {
-  const device = path[0];
-  if (device === undefined || device === "") {
-    return "# A request names a device from the tree.\nGET /current";
-  }
-  const item = path.length > 1 ? path[path.length - 1] : undefined;
-  const route = `GET /${encodeURIComponent(device)}/current`;
-  return item === undefined ? route : `# ${item}: one row of this answer\n${route}`;
+/**
+ * One JSON read request for the clicked point.
+ *
+ * A point's path is its unit id and its name (`src/lib/db/providers/industrial/modbus/index.ts`),
+ * and the name is the only thing a read needs: the map already holds the unit, the table, the
+ * address and the type. Where the path stops at the unit there is no point to name, so the
+ * request written is the one shape that needs no map - a range by address - with the unit filled
+ * in and the rest left for the reader to say.
+ */
+function modbusReadRequest(path: readonly string[]): string {
+  const unit = path[0];
+  const name = path.length > 1 ? path[path.length - 1] : undefined;
+  if (name !== undefined) return JSON.stringify({ read: [name] }, null, 2);
+  const unitId = unit === undefined || unit === "" ? 1 : Number(unit);
+  return JSON.stringify(
+    { unit: Number.isInteger(unitId) ? unitId : 1, table: "holding_register", address: 0, count: 1 },
+    null,
+    2,
+  );
 }
 
 /**
@@ -1002,6 +1016,17 @@ function sparkplugReadRequest(path: readonly string[]): string {
   if (edgeNode !== undefined && edgeNode !== "") request.edgeNode = edgeNode;
   if (device !== undefined && device !== "") request.device = device;
   return JSON.stringify(request, null, 2);
+}
+
+/** The device's `current`, with the clicked item named in a comment where the path holds one. */
+function mtconnectCurrentRequest(path: readonly string[]): string {
+  const device = path[0];
+  if (device === undefined || device === "") {
+    return "# A request names a device from the tree.\nGET /current";
+  }
+  const item = path.length > 1 ? path[path.length - 1] : undefined;
+  const route = `GET /${encodeURIComponent(device)}/current`;
+  return item === undefined ? route : `# ${item}: one row of this answer\n${route}`;
 }
 
 /**
