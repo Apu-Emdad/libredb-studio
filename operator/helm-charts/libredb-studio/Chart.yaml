@@ -114,6 +114,10 @@ keywords:
   # One keyword, like opcua above: `mtconnect` is the type-id and the protocol an evaluator
   # searches for, and the agent itself is not a product name anyone would search.
   - mtconnect
+  # One keyword, like mtconnect above: `netconf` is the type-id and the protocol an evaluator
+  # searches for. No product name to catch either, and here that is the standard's own doing:
+  # RFC 6241 is what a device implements, so an evaluator looks for the protocol and not for
+  # Netopeer2 or a vendor's agent.
   - netconf
   - web-ide
 maintainers:
