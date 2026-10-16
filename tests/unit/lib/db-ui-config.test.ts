@@ -350,13 +350,18 @@ describe("db-ui-config", () => {
       expect(offersSshTunnel("sqlite")).toBe(true);
     });
 
-    test("only bigquery's, snowflake's, firestore's and opcua's connections withhold the SSL panel, and only because their entries declare it", () => {
+    test("only bigquery's, snowflake's, firestore's, opcua's and netconf's connections withhold the SSL panel, and only because their entries declare it", () => {
       // BigQuery always speaks HTTPS to googleapis.com with the system trust store, and Snowflake to the account host with
       // the certificate checked against that name, so an SSL mode is read by nothing.
       // OPC UA's transport security is its own: a security mode of None, Sign or SignAndEncrypt and a pinned server
       // certificate, with the client's key pair in the installation's PKI directory. The shared panel's vocabulary
       // names nothing a server offers, and a reader who chose `require` there was refused with a word this engine
       // does not know (#1677).
+      // NETCONF is the same shape with one difference worth stating: RFC 6242 carries it over SSH, so the host key pin in
+      // `hostKeyFingerprint` is what secures the dial, and MEASURED, no file under `providers/network/netconf/` read
+      // `sslMode`, `sslCa`, `sslCert`, `sslKey` or `rejectUnauthorized`. The panel was not answered with the wrong word
+      // there; it was read by nothing at all, so a reader who chose `verify-full` was shown no objection and given no
+      // verification (#1722).
       for (const type of ALL_TYPES) {
         expect({ type, offered: offersSslPanel(type) }).toEqual({
           type,
@@ -366,6 +371,7 @@ describe("db-ui-config", () => {
       expect(ALL_TYPES.filter((type) => !offersSslPanel(type)).sort()).toEqual([
         "bigquery",
         "firestore",
+        "netconf",
         "opcua",
         "snowflake",
       ]);

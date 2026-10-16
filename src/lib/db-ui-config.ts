@@ -1384,6 +1384,22 @@ export const DB_UI_CONFIG: Record<DatabaseType, DatabaseUIConfig> = {
     // `ssh://host:830` and a bare `host:830`, is answered `null` by the shared parser, so the box
     // would offer a reading nothing can do.
     showConnectionStringToggle: false,
+    // AND NO SSL/TLS PANEL, for the reason OPC UA states above: this transport's security is its
+    // own. RFC 6242 carries NETCONF over SSH, so what secures the dial is the host key pin in
+    // `hostKeyFingerprint` below and not a certificate chain. The shared panel's vocabulary -
+    // disable, require, verify-ca, verify-full - names nothing a NETCONF device offers.
+    //
+    // MEASURED: no file under `providers/network/netconf/` reads `sslMode`, `sslCa`, `sslCert`,
+    // `sslKey` or `rejectUnauthorized`, so every value the panel collected was written to the
+    // connection and then read by nothing. That is worse than a refusal: a reader who set
+    // `verify-full` was shown no objection and got no verification either. The third engine to
+    // declare this after BigQuery and OPC UA, and the first where the panel was silently inert
+    // rather than answered with a word the engine does not know.
+    showSslPanel: false,
+    // The SSH TUNNEL panel stays, and the difference is that something reads it: `open.ts`
+    // describes `sshTunnel` as a bastion to reach the device, and `hostkey.ts` states which key is
+    // seen inside the forward. A tunnel to an SSH service is not a redundancy; the bastion and the
+    // device are two different hosts.
     // The device's key or its password, and the device's host key fingerprint, which is what makes
     // the dial refuse an unknown device rather than trust whatever answers on the port. The
     // fingerprint has a field of its own rather than borrowing `serverCertificateThumbprint`: a
