@@ -47,7 +47,9 @@ import type { ProviderCapabilities } from "@/lib/db/types";
 import { DEFAULT_SQL_GRAMMAR } from "@/lib/sql/grammar";
 import { readSqlSpan, type SqlSpanKind } from "@/lib/sql/spans";
 import { readSqlWord } from "@/lib/sql/words";
+import type { AgentStatementLanguageId } from "./agent-manifest";
 import { addressableObjects } from "./inventory-objects";
+import { collectionsNotListed } from "./mongo-inventory-check";
 import type { AgentInventory } from "./types";
 
 // ============================================================================
@@ -407,7 +409,29 @@ export function validatePlanStatement(
   sql: string,
   inventory: AgentInventory | null,
   language: ProviderCapabilities["queryLanguage"],
+  agentLanguage?: AgentStatementLanguageId,
 ): PlanStatementValidation {
+  if (agentLanguage === "mongo") {
+    // The guard still reads only SQL, so it stays unapplied; the NAMES are readable, because a MongoDB draft is one
+    // JSON command whose collections sit in known keys. A draft that is not JSON is one no reader here can open,
+    // which is the not-applicable answer. Matching is on the collection's own name and case, never on the
+    // inventory's qualified spelling: `shop.orders` written into a command is a collection that does not exist,
+    // which three of ten live drafts did on 2026-10-17 and the editor answered with no rows.
+    let command: unknown;
+    try {
+      command = JSON.parse(sql);
+    } catch {
+      return { readOnly: false, guardApplicable: false, identifiers: { kind: "not-applicable" } };
+    }
+    return {
+      readOnly: false,
+      guardApplicable: false,
+      identifiers:
+        inventory === null
+          ? { kind: "no-inventory" }
+          : { kind: "checked", unknownTables: collectionsNotListed(command, inventory) },
+    };
+  }
   if (language !== "sql") {
     // No `guardViolation`: there was no objection, only a reader that does not speak
     // this language, and recording one of the guard's own reason codes here would

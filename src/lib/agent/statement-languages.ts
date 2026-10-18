@@ -17,7 +17,9 @@ import { admitKubectlStatement } from "@/lib/db/operations/kubectl-admission";
 import { admitMongoStatement } from "@/lib/db/operations/mongo-admission";
 import { readKubectlRun } from "@/lib/db/providers/platform/kubernetes/console/paging";
 import type { AgentStatementLanguageId } from "./agent-manifest";
+import { mongoInventoryProblem } from "./mongo-inventory-check";
 import { fingerprintStatement } from "./repair-ledger";
+import type { AgentInventory } from "./types";
 
 export interface AgentLanguageServerAdapter {
   /** The descriptor this language's model-written reads are evaluated under. */
@@ -36,6 +38,13 @@ export interface AgentLanguageServerAdapter {
   readonly admit: ((text: string) => { readonly code: string; readonly message: string } | null) | null;
   /** The sentence a shape denial carries, in this language's words. Absent for SQL, whose sentence stays (D6). */
   readonly shapeAdvice?: string;
+  /**
+   * The check of an admitted statement against the run's captured inventory, for a language whose engine answers a
+   * mistake the inventory already shows with an empty result instead of an error: the model's sentence, or null when
+   * the inventory sees nothing wrong or cannot tell. Absent for SQL and kubectl, whose engines refuse such a statement
+   * themselves. See `mongo-inventory-check.ts`.
+   */
+  readonly inventoryProblem?: (text: string, inventory: AgentInventory | null) => string | null;
 }
 
 const SQL_ROW_CAP_ADVICE = (_statement: string, allowed: string) =>
@@ -177,6 +186,17 @@ export function mongoRowCapAdvice(statement: string, allowed: string): string {
     : advice(allowed);
 }
 
+/** `mongoInventoryProblem` over the canonical text, which the admission has already read as one JSON object. */
+function mongoTextInventoryProblem(text: string, inventory: AgentInventory | null): string | null {
+  let command: unknown;
+  try {
+    command = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  return mongoInventoryProblem(command, inventory);
+}
+
 const AGENT_LANGUAGE_SERVER: Readonly<Record<AgentStatementLanguageId, AgentLanguageServerAdapter>> = Object.freeze({
   sql: Object.freeze({
     readOperation: "sql.query.read",
@@ -202,6 +222,7 @@ const AGENT_LANGUAGE_SERVER: Readonly<Record<AgentStatementLanguageId, AgentLang
     admit: admitMongoStatement,
     shapeAdvice:
       "The command's shape falls outside the envelope a bounded read-only inspection may be, which is a decision about the contract rather than about a valid MongoDB read; a differently shaped command may still be admitted.",
+    inventoryProblem: mongoTextInventoryProblem,
   }),
 } satisfies Record<AgentStatementLanguageId, AgentLanguageServerAdapter>);
 

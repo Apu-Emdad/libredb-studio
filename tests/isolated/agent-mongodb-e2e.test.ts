@@ -330,7 +330,7 @@ describe("agent runs on a MongoDB connection, scored by their own verifiers", ()
     });
     expect(finishedOf(run.events)).toMatchObject({
       status: "succeeded",
-      goalVerdict: { outcome: "answered", verifier: "agent-query-optimization.3" },
+      goalVerdict: { outcome: "answered", verifier: "agent-query-optimization-mongo.1" },
     });
   });
 
