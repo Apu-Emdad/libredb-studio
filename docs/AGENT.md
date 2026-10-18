@@ -2417,8 +2417,10 @@ own.
 | `widened` | *Reads only, and one statement in your editor* | `AGENT_HANDOVER_BUDGET`'s row cap, *no time limit, same read-only session* | The same, with the hand-over consented for the run being opened |
 | `blocked` | *Cannot execute on `<engine>`* | *plan mode drafts here, and the operations workflow still runs* | Agent mode on any other engine |
 | `blocked` | *Cannot execute yet* | *no connection is resolved, so no engine has been established* | Agent mode with no connection resolved |
+| `blocked` | *Refused on this connection* | *plan mode drafts here, and the operations workflow still runs* | Agent mode on an engine it executes on, after a run on this connection was refused for the connection itself (principal too broad or too narrow, authorization off, unsupported target, unusable credential); the popover carries the refusal's own sentence, and a connection the shell has moved to since goes back to its engine's reading |
 
-Four levels, one reading per row above: `blocked` covers both arms that execute nothing and have no bound to state, and they stay separate arms because "has no read-only statement path" is a claim about an engine, which a panel that has resolved no connection has not seen.
+Four levels, one reading per row above: `blocked` covers the three arms that execute nothing and have no bound to state.
+They stay separate arms because "has no read-only statement path" is a claim about an engine, which a panel that has resolved no connection has not seen, and "refused on this connection" is a claim about one connection's user, which says nothing about the engine.
 Not one engine name and not one
 figure is typed in the module — the names come from `AGENT_EXECUTION_ENGINES` through
 `getDBConfig().label` and the figures from the policy rows, which is the rule `hero-proof.tsx`

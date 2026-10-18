@@ -1056,8 +1056,12 @@ describe("recommend_change on mongo", () => {
       expect(same.kind === "unavailable" && same.reasonCode).toBe("INDEX_ALREADY_EXISTS");
       expect(same.kind === "unavailable" && same.modelText).toContain("nothing needs to change");
     }
-    // A different order, a prefix and another collection are new indexes.
-    for (const keys of [{ status: 1, customer: 1 }, { customer: 1 }] as Record<string, number>[]) {
+    // A different order, a prefix, a longer key that begins with the existing one and another collection are new indexes.
+    for (const keys of [
+      { status: 1, customer: 1 },
+      { customer: 1 },
+      { customer: 1, status: 1, created_at: 1 },
+    ] as Record<string, number>[]) {
       expect(recommendChangeTool(h.context, { runId: "run-1", events: indexed }, card(keys)).kind).toBe("recommended");
     }
     expect(

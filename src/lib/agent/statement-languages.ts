@@ -17,7 +17,8 @@ import { admitKubectlStatement } from "@/lib/db/operations/kubectl-admission";
 import { admitMongoStatement } from "@/lib/db/operations/mongo-admission";
 import { readKubectlRun } from "@/lib/db/providers/platform/kubernetes/console/paging";
 import type { AgentStatementLanguageId } from "./agent-manifest";
-import { mongoInventoryProblem } from "./mongo-inventory-check";
+import { collectionsNotListed, mongoInventoryProblem } from "./mongo-inventory-check";
+import type { PlanStatementIdentifiers } from "./plan-statement";
 import { fingerprintStatement } from "./repair-ledger";
 import type { AgentInventory } from "./types";
 
@@ -45,6 +46,12 @@ export interface AgentLanguageServerAdapter {
    * themselves. See `mongo-inventory-check.ts`.
    */
   readonly inventoryProblem?: (text: string, inventory: AgentInventory | null) => string | null;
+  /**
+   * The names a plan-mode draft in this language uses, read against the inventory, for a language whose drafts this
+   * server can read for names although the SQL guard cannot read them. Absent for SQL, whose drafts the SQL reader in
+   * `plan-statement.ts` checks, and for kubectl.
+   */
+  readonly planDraftIdentifiers?: (text: string, inventory: AgentInventory | null) => PlanStatementIdentifiers;
 }
 
 const SQL_ROW_CAP_ADVICE = (_statement: string, allowed: string) =>
@@ -186,15 +193,33 @@ export function mongoRowCapAdvice(statement: string, allowed: string): string {
     : advice(allowed);
 }
 
+/** A MongoDB command's text as one JSON value, or undefined when it is not JSON. */
+function parseMongoCommand(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
 /** `mongoInventoryProblem` over the canonical text, which the admission has already read as one JSON object. */
 function mongoTextInventoryProblem(text: string, inventory: AgentInventory | null): string | null {
-  let command: unknown;
-  try {
-    command = JSON.parse(text);
-  } catch {
-    return null;
-  }
-  return mongoInventoryProblem(command, inventory);
+  const command = parseMongoCommand(text);
+  return command === undefined ? null : mongoInventoryProblem(command, inventory);
+}
+
+/**
+ * A MongoDB plan draft's collections against the inventory. A draft is one JSON command whose collections sit in
+ * known keys, so its names are readable; a draft that is not JSON is one no reader here can open, which is the
+ * not-applicable answer. Matching is on the collection's own name and case, never on the inventory's qualified
+ * spelling: `shop.orders` written into a command is a collection that does not exist, which three of ten live drafts
+ * did on 2026-10-17 and the editor answered with no rows.
+ */
+function mongoPlanDraftIdentifiers(text: string, inventory: AgentInventory | null): PlanStatementIdentifiers {
+  const command = parseMongoCommand(text);
+  if (command === undefined) return { kind: "not-applicable" };
+  if (inventory === null) return { kind: "no-inventory" };
+  return { kind: "checked", unknownTables: collectionsNotListed(command, inventory) };
 }
 
 const AGENT_LANGUAGE_SERVER: Readonly<Record<AgentStatementLanguageId, AgentLanguageServerAdapter>> = Object.freeze({
@@ -223,6 +248,7 @@ const AGENT_LANGUAGE_SERVER: Readonly<Record<AgentStatementLanguageId, AgentLang
     shapeAdvice:
       "The command's shape falls outside the envelope a bounded read-only inspection may be, which is a decision about the contract rather than about a valid MongoDB read; a differently shaped command may still be admitted.",
     inventoryProblem: mongoTextInventoryProblem,
+    planDraftIdentifiers: mongoPlanDraftIdentifiers,
   }),
 } satisfies Record<AgentStatementLanguageId, AgentLanguageServerAdapter>);
 

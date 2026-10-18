@@ -624,6 +624,8 @@ describe("a fresh run drives the investigation arc", () => {
     expect(messages.filter((message) => message.role === "user").map((message) => message.content)).toContain(
       OBJECTIVE,
     );
+    // A SQL inventory is declared, not sampled, so it carries no sampling note.
+    expect(JSON.stringify(messages)).not.toContain("inferred from sampled documents");
   });
 });
 

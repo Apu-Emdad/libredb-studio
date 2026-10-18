@@ -424,10 +424,10 @@ interface PlanningEngine {
    */
   readonly statementLanguage?: string;
   /**
-   * The run's own statement language, where it has one. A MongoDB plan draft names a collection the way a command
-   * does, so plan mode is told the collection rule agent mode is told (`MONGO_COLLECTION_RULE`): without it, three
-   * of ten live plan drafts on 2026-10-17 named `"collection": "shop.orders"`, which the editor reads as a collection
-   * that does not exist and answers with no rows.
+   * The run's own statement language, where it has one, whose `GROUNDING_COPY` entry may carry planning rules. A
+   * MongoDB plan draft names a collection the way a command does, so plan mode is told the collection rule agent mode
+   * is told (`MONGO_COLLECTION_RULE`): without it, three of ten live plan drafts on 2026-10-17 named
+   * `"collection": "shop.orders"`, which the editor reads as a collection that does not exist and answers with no rows.
    */
   readonly agentLanguage?: AgentStatementLanguageId;
 }
@@ -1311,7 +1311,7 @@ const planningStatementContract = (deliverable: { readonly noun: string }, engin
     // message is the #350 failure — and it names what the language is NOT, because
     // naming only what it is did not survive contact with the model's prior.
     ...(engine.statementLanguage === undefined ? [] : [`Write it in ${engine.statementLanguage}.`]),
-    ...(engine.agentLanguage === "mongo" ? [MONGO_COLLECTION_RULE] : []),
+    ...(engine.agentLanguage === undefined ? [] : (GROUNDING_COPY[engine.agentLanguage].planningRules ?? [])),
     `Put it in a single fenced block tagged \`${engine.type}\` — three backticks, that tag, the statement, three backticks — and put nothing else inside that block.`,
     `Put the rationale AFTER the statement, and keep it brief: which ${engine.noun.plural} it reads, which joins it makes, and why that answers the objective.`,
     engine.language === "sql"
@@ -2085,6 +2085,8 @@ const GROUNDING_COPY: Readonly<
        * every sample held is no constraint: the packing then states no NOT NULL (`packContextForTask`).
        */
       readonly sampledFields?: boolean;
+      /** What a plan-mode draft in this language is told on top of the shared contract (`planningStatementContract`). */
+      readonly planningRules?: readonly string[];
     }
   >
 > = Object.freeze({
@@ -2104,6 +2106,7 @@ const GROUNDING_COPY: Readonly<
     omissionAdvice: "Ask inspect_schema for the collection to list its fields.",
     relations: false,
     sampledFields: true,
+    planningRules: [MONGO_COLLECTION_RULE],
   },
 });
 
@@ -3992,7 +3995,9 @@ export async function runInvestigation(
           draft.sql,
           planningInventory,
           context.capabilities.queryLanguage,
-          context.statementLanguage,
+          context.statementLanguage === undefined
+            ? undefined
+            : languageServer(context.statementLanguage).planDraftIdentifiers,
         ),
       });
     };

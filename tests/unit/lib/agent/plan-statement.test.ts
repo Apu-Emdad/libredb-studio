@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { PLAN_NO_STATEMENT_MARKER, readPlanStatement } from "@/lib/agent/plan-draft";
 import { readStatementTables, validatePlanStatement } from "@/lib/agent/plan-statement";
+import { languageServer } from "@/lib/agent/statement-languages";
 import type { AgentInventory } from "@/lib/agent/types";
 
 /**
@@ -861,6 +862,7 @@ describe("an unfenced statement ends where the SQL ends, not where the prose lea
   that does not exist and answers with no rows, under a card that said the names were "not checked".
 */
 describe("a MongoDB draft's collections are checked against the inventory by their own names", () => {
+  const MONGO_DRAFT_IDENTIFIERS = languageServer("mongo").planDraftIdentifiers;
   const MONGO_INVENTORY: AgentInventory = {
     objects: [
       { name: "shop.orders", path: ["shop", "orders"], kind: "collection", columns: [], indexes: [] },
@@ -875,22 +877,30 @@ describe("a MongoDB draft's collections are checked against the inventory by the
       operation: "aggregate",
       pipeline: [{ $lookup: { from: "customers" } }, { $unionWith: "invoices" }],
     });
-    expect(validatePlanStatement(draft, MONGO_INVENTORY, "json", "mongo")).toEqual({
+    expect(validatePlanStatement(draft, MONGO_INVENTORY, "json", MONGO_DRAFT_IDENTIFIERS)).toEqual({
       readOnly: false,
       guardApplicable: false,
       identifiers: { kind: "checked", unknownTables: ["shop.orders", "invoices"] },
     });
     expect(
-      validatePlanStatement('{"collection": "orders", "operation": "count"}', MONGO_INVENTORY, "json", "mongo")
-        .identifiers,
+      validatePlanStatement(
+        '{"collection": "orders", "operation": "count"}',
+        MONGO_INVENTORY,
+        "json",
+        MONGO_DRAFT_IDENTIFIERS,
+      ).identifiers,
     ).toEqual({ kind: "checked", unknownTables: [] });
   });
 
   test("with no inventory nothing is checked, and a draft that is not JSON is one no reader here can open", () => {
-    expect(validatePlanStatement('{"collection": "orders"}', null, "json", "mongo").identifiers).toEqual({
+    expect(
+      validatePlanStatement('{"collection": "orders"}', null, "json", MONGO_DRAFT_IDENTIFIERS).identifiers,
+    ).toEqual({
       kind: "no-inventory",
     });
-    expect(validatePlanStatement("db.orders.find({})", MONGO_INVENTORY, "json", "mongo").identifiers).toEqual({
+    expect(
+      validatePlanStatement("db.orders.find({})", MONGO_INVENTORY, "json", MONGO_DRAFT_IDENTIFIERS).identifiers,
+    ).toEqual({
       kind: "not-applicable",
     });
   });
